@@ -129,7 +129,7 @@ describe("remote workspace connect telemetry IPC", () => {
       activeSessionCount: 2,
       activeTargetCount: 1,
     }));
-    const { options } = await registerHarness({ getRemoteConnectionStats });
+    await registerHarness({ getRemoteConnectionStats });
 
     expect(h.configureRemoteUsageArmsTelemetry).toHaveBeenCalledOnce();
     expect(h.configureRemoteUsageArmsTelemetry).toHaveBeenCalledWith(
