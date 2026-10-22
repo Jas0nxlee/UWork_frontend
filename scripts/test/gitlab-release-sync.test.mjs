@@ -46,29 +46,14 @@ test("发布配置固定为附件上传和独立元数据分支，不接受旧�
   assert.equal(c.cleanupSource, false);
   assert.equal(c.pushUrl, "http://g.ucas.com.cn:8088/lijingping/uwork.git");
   assert.equal(c.packageVersion, "0.1.0");
-  assert.throws(
-    () => resolveSyncConfig({ RELEASE_TAG: "v0.1.0" }),
-    /GITLAB_TOKEN/,
-  );
-  assert.throws(
-    () => resolveSyncConfig({ ...baseEnv, RELEASE_TAG: "-bad" }),
-    /非法/,
-  );
-  assert.throws(
-    () => resolveSyncConfig({ ...baseEnv, GITLAB_PROJECT_PATH: "a/../b" }),
-    /非法/,
-  );
+  assert.throws(() => resolveSyncConfig({ RELEASE_TAG: "v0.1.0" }), /GITLAB_TOKEN/);
+  assert.throws(() => resolveSyncConfig({ ...baseEnv, RELEASE_TAG: "-bad" }), /非法/);
+  assert.throws(() => resolveSyncConfig({ ...baseEnv, GITLAB_PROJECT_PATH: "a/../b" }), /非法/);
 });
 
 test("草稿、无附件或标签不一致不能同步", () => {
-  assert.throws(
-    () => validateRelease({ ...release, draft: true }, "v0.1.0"),
-    /草稿/,
-  );
-  assert.throws(
-    () => validateRelease({ ...release, assets: [] }, "v0.1.0"),
-    /附件/,
-  );
+  assert.throws(() => validateRelease({ ...release, draft: true }, "v0.1.0"), /草稿/);
+  assert.throws(() => validateRelease({ ...release, assets: [] }, "v0.1.0"), /附件/);
   assert.throws(() => validateRelease(release, "v0.2.0"), /不一致/);
 });
 
@@ -147,10 +132,7 @@ test("远端包文件必须大小、SHA256 全部匹配；同名损坏文件不�
   };
   await verifyPackageFiles({ client, config: config(), release });
   fileSha = "0".repeat(64);
-  await assert.rejects(
-    verifyPackageFiles({ client, config: config(), release }),
-    /摘要/,
-  );
+  await assert.rejects(verifyPackageFiles({ client, config: config(), release }), /摘要/);
 });
 
 test("Release 已存在按名称更新链接，保留手工链接", async () => {
@@ -158,12 +140,9 @@ test("Release 已存在按名称更新链接，保留手工链接", async () => 
   const client = {
     request: async (method, path, body) => {
       calls.push({ method, path, body });
-      if (path === "/releases" && method === "POST")
-        return { ok: false, status: 409, data: {} };
+      if (path === "/releases" && method === "POST") return { ok: false, status: 409, data: {} };
       if (method === "GET")
-        return ok([
-          { id: 7, name: "SHA256SUMS", url: "https://old.example/file" },
-        ]);
+        return ok([{ id: 7, name: "SHA256SUMS", url: "https://old.example/file" }]);
       return ok();
     },
   };
@@ -183,9 +162,7 @@ test("Release 已存在按名称更新链接，保留手工链接", async () => 
     ],
     log: () => {},
   });
-  assert.ok(
-    calls.some((x) => x.method === "PUT" && x.path.endsWith("/links/7")),
-  );
+  assert.ok(calls.some((x) => x.method === "PUT" && x.path.endsWith("/links/7")));
   assert.ok(!calls.some((x) => x.method === "DELETE"));
 });
 

@@ -39,14 +39,13 @@ export function resolveSyncConfig(env = process.env) {
   const parsed = new URL(baseUrl);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
     throw new Error(`GITLAB_BASE_URL 必须是 http(s) 地址：${baseUrl}`);
-  const projectPath = stripSlashes(
-    env.GITLAB_PROJECT_PATH || defaults.projectPath,
-  ).replace(/\.git$/i, "");
+  const projectPath = stripSlashes(env.GITLAB_PROJECT_PATH || defaults.projectPath).replace(
+    /\.git$/i,
+    "",
+  );
   if (
     !projectPathPattern.test(projectPath) ||
-    projectPath
-      .split("/")
-      .some((segment) => segment === "." || segment === "..")
+    projectPath.split("/").some((segment) => segment === "." || segment === "..")
   )
     throw new Error(`非法 GitLab 项目路径：${projectPath}`);
   const tag = validateTag(requireValue(env.RELEASE_TAG, "RELEASE_TAG"));
@@ -57,9 +56,7 @@ export function resolveSyncConfig(env = process.env) {
     projectPath,
     projectId,
     apiUrl: `${baseUrl}/api/v4/projects/${projectId}`,
-    pushUrl: stripSlashes(
-      env.GITLAB_PUSH_URL?.trim() || `${baseUrl}/${projectPath}.git`,
-    ),
+    pushUrl: stripSlashes(env.GITLAB_PUSH_URL?.trim() || `${baseUrl}/${projectPath}.git`),
     webUrl: `${baseUrl}/${projectPath}`,
     metadataBranch: defaults.metadataBranch,
     tag,
@@ -108,8 +105,7 @@ export function createGitLabClient({ config, fetchImpl = fetch }) {
 }
 
 export function apiError(method, path, result) {
-  const detail =
-    typeof result.data === "string" ? result.data : JSON.stringify(result.data);
+  const detail = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
   return new Error(
     `GitLab API ${method} ${path} 返回 ${result.status}：${String(detail).slice(0, 500)}`,
   );

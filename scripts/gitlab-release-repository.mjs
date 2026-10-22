@@ -88,17 +88,9 @@ export async function verifyMetadataCommit({ client, sha }) {
   if (!Array.isArray(commit.parent_ids) || commit.parent_ids.length)
     throw new Error("发布元数据必须是无父历史的根提交");
   const tree = await listAll(client, `/repository/tree?ref=${sha}`);
-  if (
-    tree.length !== 1 ||
-    tree[0].path !== "README.md" ||
-    tree[0].type !== "blob"
-  )
+  if (tree.length !== 1 || tree[0].path !== "README.md" || tree[0].type !== "blob")
     throw new Error("元数据提交包含源码或其它文件");
-  const file = await checked(
-    client,
-    "GET",
-    `/repository/files/README.md?ref=${sha}`,
-  );
+  const file = await checked(client, "GET", `/repository/files/README.md?ref=${sha}`);
   if (Buffer.from(file.content, "base64").toString("utf8") !== metadataReadme)
     throw new Error("元数据 README 内容不匹配");
 }
@@ -154,12 +146,8 @@ export async function ensureReleaseTag({
   const current = await client.request("GET", path);
   if (current.ok && current.data.commit.id === metadataSha) return;
   if (current.ok) {
-    if (!config.cleanupSource)
-      throw new Error("旧标签包含源码，需要显式 cleanup_source 迁移");
-    if (
-      expectedTagSha !== undefined &&
-      current.data.commit.id !== expectedTagSha
-    )
+    if (!config.cleanupSource) throw new Error("旧标签包含源码，需要显式 cleanup_source 迁移");
+    if (expectedTagSha !== undefined && current.data.commit.id !== expectedTagSha)
       throw new Error("源码标签发生并发更新，停止迁移");
     await checked(client, "DELETE", path);
     log(`已移除旧源码标签 ${config.tag}，重建对应发布元数据标签和 Release`);
@@ -170,12 +158,7 @@ export async function ensureReleaseTag({
   });
 }
 
-export async function cleanupSourceBranches({
-  client,
-  config,
-  snapshot,
-  log = console.log,
-}) {
+export async function cleanupSourceBranches({ client, config, snapshot, log = console.log }) {
   if (!config.cleanupSource) throw new Error("未授权清理源码分支");
   await checked(client, "PUT", "", { default_branch: config.metadataBranch });
   for (const branch of snapshot.branches) {
@@ -196,11 +179,7 @@ export async function cleanupSourceBranches({
       );
       if (protection.name !== branch.name)
         throw new Error(`源码分支 ${branch.name} 使用通配保护规则，停止清理`);
-      await checked(
-        client,
-        "DELETE",
-        `/protected_branches/${encodeURIComponent(branch.name)}`,
-      );
+      await checked(client, "DELETE", `/protected_branches/${encodeURIComponent(branch.name)}`);
     }
     try {
       await checked(client, "DELETE", path);
@@ -224,9 +203,7 @@ export async function cleanupSourceBranches({
           allowed_to_merge: access(protection.merge_access_levels),
           ...(protection.unprotect_access_levels
             ? {
-                allowed_to_unprotect: access(
-                  protection.unprotect_access_levels,
-                ),
+                allowed_to_unprotect: access(protection.unprotect_access_levels),
               }
             : {}),
         });

@@ -34,27 +34,16 @@ export function releaseDescription(release, tag) {
 export function validateRelease(release, tag) {
   if (!release || typeof release !== "object" || Array.isArray(release))
     throw new Error("Release 元数据为空或格式错误");
-  if (!Array.isArray(release.assets) || !release.assets.length)
-    throw new Error("Release 缺少附件");
-  if (release.draft === true)
-    throw new Error(`Release ${tag} 仍是草稿，先公开再同步`);
+  if (!Array.isArray(release.assets) || !release.assets.length) throw new Error("Release 缺少附件");
+  if (release.draft === true) throw new Error(`Release ${tag} 仍是草稿，先公开再同步`);
   if (release.tag_name && release.tag_name !== tag)
-    throw new Error(
-      `Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`,
-    );
+    throw new Error(`Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`);
 }
 
-export async function upsertRelease({
-  client,
-  config,
-  release,
-  log = console.log,
-}) {
+export async function upsertRelease({ client, config, release, log = console.log }) {
   const payload = {
     name:
-      typeof release.name === "string" && release.name.trim()
-        ? release.name.trim()
-        : config.tag,
+      typeof release.name === "string" && release.name.trim() ? release.name.trim() : config.tag,
     tag_name: config.tag,
     description: releaseDescription(release, config.tag),
   };
@@ -65,8 +54,7 @@ export async function upsertRelease({
   }
   const exists =
     created.status === 409 ||
-    (created.status === 400 &&
-      /already exists/i.test(JSON.stringify(created.data)));
+    (created.status === 400 && /already exists/i.test(JSON.stringify(created.data)));
   if (!exists) throw apiError("POST", "/releases", created);
   const path = `/releases/${encodeURIComponent(config.tag)}`;
   const updated = await client.request("PUT", path, {
@@ -95,13 +83,8 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
           : {}),
       };
     })
-    .filter(
-      (link) => typeof link.url === "string" && /^https?:\/\//.test(link.url),
-    );
-  if (
-    typeof release.html_url === "string" &&
-    /^https?:\/\//.test(release.html_url)
-  )
+    .filter((link) => typeof link.url === "string" && /^https?:\/\//.test(link.url));
+  if (typeof release.html_url === "string" && /^https?:\/\//.test(release.html_url))
     links.push({
       name: "GitHub Release 页面",
       url: release.html_url,
@@ -110,20 +93,12 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
   return links;
 }
 
-export async function syncAssetLinks({
-  client,
-  config,
-  links,
-  log = console.log,
-}) {
+export async function syncAssetLinks({ client, config, links, log = console.log }) {
   const path = `/releases/${encodeURIComponent(config.tag)}/assets/links`;
   const listed = await client.request("GET", path);
   if (!listed.ok) throw apiError("GET", path, listed);
   const existing = new Map(
-    (Array.isArray(listed.data) ? listed.data : []).map((link) => [
-      link.name,
-      link,
-    ]),
+    (Array.isArray(listed.data) ? listed.data : []).map((link) => [link.name, link]),
   );
   for (const link of links) {
     const current = existing.get(link.name);
@@ -157,8 +132,7 @@ async function packageFileExists({ fetchImpl, config, url }) {
   }
   if (response.ok) {
     // 只探测状态码，不下载已有包内容。
-    if (typeof response.body?.cancel === "function")
-      await response.body.cancel().catch(() => {});
+    if (typeof response.body?.cancel === "function") await response.body.cancel().catch(() => {});
     return true;
   }
   if (response.status === 404) return false;
@@ -182,19 +156,12 @@ export async function uploadReleaseAssets({
     return uploaded;
   }
   if (!config.assetDir) throw new Error("缺少发布附件目录 ASSET_DIR");
-  for (const asset of [...assets].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    if (basename(asset.name) !== asset.name)
-      throw new Error(`非法资产名：${asset.name}`);
+  for (const asset of [...assets].sort((a, b) => a.name.localeCompare(b.name))) {
+    if (basename(asset.name) !== asset.name) throw new Error(`非法资产名：${asset.name}`);
     const file = join(config.assetDir, asset.name);
     const info = await stat(file).catch(() => null);
     if (!info?.isFile()) throw new Error(`缺少发布资产文件：${asset.name}`);
-    if (
-      Number.isInteger(asset.size) &&
-      asset.size > 0 &&
-      info.size !== asset.size
-    )
+    if (Number.isInteger(asset.size) && asset.size > 0 && info.size !== asset.size)
       throw new Error(
         `发布资产大小不一致：${asset.name}（本地 ${info.size} 字节，GitHub ${asset.size} 字节）`,
       );
@@ -239,8 +206,7 @@ export async function validateLocalAssets({ config, release }) {
     const path = join(config.assetDir, asset.name);
     const info = await stat(path).catch(() => null);
     if (!info?.isFile()) throw new Error(`缺少发布附件：${asset.name}`);
-    if (info.size !== asset.size)
-      throw new Error(`附件大小不一致：${asset.name}`);
+    if (info.size !== asset.size) throw new Error(`附件大小不一致：${asset.name}`);
     const hash = createHash("sha256");
     for await (const chunk of createReadStream(path)) hash.update(chunk);
     if (asset.digest !== `sha256:${hash.digest("hex")}`)
@@ -262,10 +228,7 @@ export async function verifyPackageFiles({ client, config, release }) {
     const matches = files.filter((f) => f.file_name === asset.name);
     if (
       !matches.length ||
-      matches.some(
-        (f) =>
-          f.size !== asset.size || `sha256:${f.file_sha256}` !== asset.digest,
-      )
+      matches.some((f) => f.size !== asset.size || `sha256:${f.file_sha256}` !== asset.digest)
     )
       throw new Error(`GitLab 包文件大小或摘要不一致：${asset.name}`);
   }
@@ -282,10 +245,7 @@ export async function syncGitLabRelease({
   const client = createGitLabClient({ config, fetchImpl });
   const snapshot = await inspectGitLab({ client });
   if (config.reportPath)
-    await writeFile(
-      config.reportPath,
-      JSON.stringify({ before: snapshot }, null, 2) + "\n",
-    );
+    await writeFile(config.reportPath, JSON.stringify({ before: snapshot }, null, 2) + "\n");
   log(
     JSON.stringify({
       defaultBranch: snapshot.project.default_branch,
@@ -299,10 +259,7 @@ export async function syncGitLabRelease({
   );
   if (config.inspectOnly) return { inspected: true };
   const metadata =
-    release ??
-    JSON.parse(
-      await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8"),
-    );
+    release ?? JSON.parse(await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8"));
   validateRelease(metadata, config.tag);
   // 删除旧源码标签会同时影响 Release，迁移前先阻止未知其它版本被误处理。
   if (
@@ -336,28 +293,18 @@ export async function syncGitLabRelease({
   });
   const links = buildAssetLinks({ release: metadata, uploaded });
   await syncAssetLinks({ client, config, links, log });
-  const actual = await checked(
-    client,
-    "GET",
-    `/releases/${encodeURIComponent(config.tag)}`,
-  );
+  const actual = await checked(client, "GET", `/releases/${encodeURIComponent(config.tag)}`);
   if (
     actual.commit?.id !== metadataSha ||
     links.some(
-      (link) =>
-        !actual.assets?.links?.some(
-          (a) => a.name === link.name && a.url === link.url,
-        ),
+      (link) => !actual.assets?.links?.some((a) => a.name === link.name && a.url === link.url),
     )
   )
     throw new Error("GitLab Release 回读校验失败");
-  if (config.cleanupSource)
-    await cleanupSourceBranches({ client, config, snapshot, log });
+  if (config.cleanupSource) await cleanupSourceBranches({ client, config, snapshot, log });
   const after = await inspectGitLab({ client });
   if (
-    after.branches.some(
-      (b) => b.name !== config.metadataBranch || b.commit.id !== metadataSha,
-    ) ||
+    after.branches.some((b) => b.name !== config.metadataBranch || b.commit.id !== metadataSha) ||
     after.tags.some((t) => t.commit.id !== metadataSha)
   )
     throw new Error("GitLab 仍存在源码引用，发布未完成");
@@ -385,10 +332,7 @@ export async function syncGitLabRelease({
   return { outcome, tag: config.tag, uploaded: uploaded.size };
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await syncGitLabRelease();
   } catch (error) {

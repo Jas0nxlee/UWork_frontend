@@ -15,8 +15,7 @@ import {
   verifyMetadataCommit,
 } from "../gitlab-release-repository.mjs";
 const exec = promisify(execFile);
-const config = () =>
-  resolveSyncConfig({ GITLAB_TOKEN: "test-token", RELEASE_TAG: "v0.1.0" });
+const config = () => resolveSyncConfig({ GITLAB_TOKEN: "test-token", RELEASE_TAG: "v0.1.0" });
 const ok = (data = {}, status = 200) => ({ ok: true, status, data });
 
 test("实际元数据提交只有 README、没有源码父提交且不读取调用目录历史", async () => {
@@ -33,18 +32,9 @@ test("实际元数据提交只有 README、没有源码父提交且不读取调�
       sha,
     ]);
     assert.equal(parents.trim(), sha);
-    const { stdout: files } = await exec("git", [
-      "-C",
-      directory,
-      "ls-tree",
-      "--name-only",
-      sha,
-    ]);
+    const { stdout: files } = await exec("git", ["-C", directory, "ls-tree", "--name-only", sha]);
     assert.equal(files.trim(), "README.md");
-    assert.equal(
-      await readFile(join(directory, "README.md"), "utf8"),
-      metadataReadme,
-    );
+    assert.equal(await readFile(join(directory, "README.md"), "utf8"), metadataReadme);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -55,10 +45,7 @@ test("元数据检查拒绝含源码或父历史的提交", async () => {
     request: async (_method, path) =>
       ok(path.includes("/commits/") ? { parent_ids: ["old-source"] } : []),
   };
-  await assert.rejects(
-    verifyMetadataCommit({ client, sha: "metadata" }),
-    /根提交/,
-  );
+  await assert.rejects(verifyMetadataCommit({ client, sha: "metadata" }), /根提交/);
 });
 
 test("普通发布拒绝源码标签，不隐式删除 Release", async () => {
@@ -121,11 +108,7 @@ test("只读 inspect 分页读取全部引用，不发送写请求", async () =>
     request: async (method, path) => {
       methods.push(method);
       if (!path) return ok({ default_branch: "main" });
-      return ok(
-        path.includes("page=1")
-          ? [{ name: "main", commit: { id: "source" } }]
-          : [],
-      );
+      return ok(path.includes("page=1") ? [{ name: "main", commit: { id: "source" } }] : []);
     },
   };
   const snapshot = await inspectGitLab({ client });
@@ -151,8 +134,7 @@ test("清理先切换默认分支，再删除源码分支；引用并发变化�
   assert.equal(calls[0].method, "PUT");
   assert.equal(calls[0].body.default_branch, "release-metadata");
   assert.equal(calls.at(-1).method, "DELETE");
-  client.request = async (method) =>
-    ok(method === "GET" ? { commit: { id: "newer" } } : {});
+  client.request = async (method) => ok(method === "GET" ? { commit: { id: "newer" } } : {});
   await assert.rejects(
     cleanupSourceBranches({
       client,
@@ -162,10 +144,7 @@ test("清理先切换默认分支，再删除源码分支；引用并发变化�
     }),
     /并发/,
   );
-  await assert.rejects(
-    cleanupSourceBranches({ client, config: config(), snapshot }),
-    /未授权/,
-  );
+  await assert.rejects(cleanupSourceBranches({ client, config: config(), snapshot }), /未授权/);
 });
 
 test("删除受保护源码分支时只移除对应精确规则，删除失败则恢复保护", async () => {
@@ -196,11 +175,7 @@ test("删除受保护源码分支时只移除对应精确规则，删除失败�
     }),
     /500/,
   );
-  assert.ok(
-    calls.some(
-      (x) => x.method === "DELETE" && x.path === "/protected_branches/main",
-    ),
-  );
+  assert.ok(calls.some((x) => x.method === "DELETE" && x.path === "/protected_branches/main"));
   assert.equal(calls.at(-1).method, "POST");
   assert.equal(calls.at(-1).body.name, "main");
   assert.equal(calls.at(-1).body.allow_force_push, false);
