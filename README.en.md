@@ -68,13 +68,12 @@ Unauthenticated desktop users can scan inside the login card or skip login and c
 
 Enterprise identity provides a name label and enterprise gateway access. It does not add account-based data isolation, cloud sync, or extra local permissions. Gateway provisioning is driven by the same sign-in: the service address comes from `apiBaseUrl` in the WeCom configuration, and after sign-in the client writes the UCAS gateway endpoint, reuses or creates an enterprise API key, appends models allowed by the plan, and reads plan and usage data. An existing local API key is never overwritten automatically; use the Enterprise gateway panel to replace it explicitly. Signing in or out does not migrate, claim, or delete existing workspaces, conversations, or model settings. Sign-out clears the device identity session; the current integration does not promise server-side token revocation.
 
-Official GitHub installers include the default public WeCom login parameters. Windows, macOS, and Linux users can scan after installation without copying a configuration file. A verified scan also provisions the gateway configuration automatically; the skippable UCAS API key dialog appears only when the enterprise backend returns no usable key. The client includes no WeCom Secret, user Token, or UCAS API key. Administrators can override the defaults with a local configuration; see [WeCom integration](docs/enterprise-identity-integration.md) for its location, interface requirements, and provisioning rules. The native scan adapter is loaded by the Desktop Local Host; ordinary Web does not enable it automatically, and mobile remote control only displays the identity of the existing desktop Host.
+Official GitHub installers include the default public WeCom login parameters. Windows, macOS, and Linux users can scan after installation without copying a configuration file. A verified scan also provisions the gateway configuration automatically; the skippable UCAS API key dialog appears only when the enterprise backend returns no usable key. The client includes no WeCom Secret, user Token, or UCAS API key. Administrators can override the defaults with a local configuration; see [WeCom integration](docs/enterprise-identity-integration.md) for its location, interface requirements, and provisioning rules. The native scan adapter is loaded by the Desktop Local Host; the standalone share page does not enable it automatically.
 
-## Office and mobile remote control
+## Office
 
 - Built-in Office tools handle supported Word, Excel, and PPT files. Format and size guards determine editing or read-only access; saves check file revisions and create backups. Arbitrary complex documents are not guaranteed a lossless round trip. See [Office preview and editing](specs/office-editors-triad.md).
 - The [office-editor plugin](plugins/office-editor/README.md) provides Word revision and comment review. Without an external editor engine configured, it uses a read-only preview. Full engine editing requires separate configuration; the plugin docs and third-party inventory record bundled-component license obligations.
-- Mobile remote control requires trusted relay and mobile-page addresses configured by an administrator. It reuses the desktop Host, sessions, and tasks. Self-hosted HMAC pairing is preserved; missing configuration never sends pairing credentials to the official relay. See [self-hosted relay](specs/web-remote-control-relay.md) and [UWork remote assembly](specs/web-remote-uwork-integration.md).
 
 ## Data directory
 
@@ -82,7 +81,7 @@ UWork keeps its own user data root at `~/.uwork` (config in `~/.uwork/v2`), full
 
 ## Run from source
 
-Local build and installation validation for this customized version primarily targets **macOS Apple Silicon**. Windows, Linux, Web, and CLI entry points remain in the repository; this does not imply equivalent release validation on every platform.
+Local build and installation validation for this customized version primarily targets **macOS Apple Silicon**. Windows, Linux, CLI, and standalone share-page entry points remain in the repository; this does not imply equivalent release validation on every platform.
 
 Install Git, Node.js **24.14.0**, and pnpm **10.33.2**. [mise.toml](mise.toml) defines the tool versions. Building native components on macOS also requires Xcode Command Line Tools. Run the following commands from the repository root.
 
@@ -107,7 +106,7 @@ UWORK_DATA_BASE_DIR="$HOME/.uwork-dev" pnpm dev:desktop
 | --------------------------------------- | ------------------------------ |
 | Desktop development                     | `pnpm dev:desktop`             |
 | Desktop with test service configuration | `pnpm dev:desktop:test`        |
-| Web and backend development             | `pnpm dev:web`                 |
+| HTTP service development                | `pnpm dev:server`              |
 | CLI source development                  | `pnpm --filter @zcode/cli dev` |
 | Remote workspace asset preparation      | `pnpm bootstrap:with-remote`   |
 
@@ -153,12 +152,12 @@ To change the app icon, edit the [SVG source](packages/desktop/build/uwork.svg),
 pnpm exec electron packages/desktop/scripts/build-uwork-icons.cjs
 ```
 
-## Web and CLI
+## HTTP service and CLI
 
-`pnpm dev:web` starts the frontend and backend. The default browser address is `http://localhost:5173`; the backend defaults to port `3030`. To choose a workspace:
+`pnpm dev:server` starts the HTTP / WebSocket service on port `3030` by default. Use `pnpm dev:web-share:test` for the standalone share page. The mobile/browser remote-control page has been removed. To choose a server workspace:
 
 ```bash
-ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
+ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:server
 ```
 
 The unified CLI distribution builder remains available. Replace this placeholder download URL with your own hosting location:
@@ -167,7 +166,7 @@ The unified CLI distribution builder remains available. Replace this placeholder
 pnpm build:zcode --base-url https://downloads.example.com/uwork/
 ```
 
-Output defaults to `dist/zcode/`. The distribution command is still `zcode`: no arguments start the TUI, and `zcode --web` starts Web mode. Building does not install or replace a system CLI. Run `pnpm build:zcode --help` for options.
+Output defaults to `dist/zcode/`. The distribution command is still `zcode`: no arguments start the TUI; the distribution no longer bundles a browser page. Building does not install or replace a system CLI. Run `pnpm build:zcode --help` for options.
 
 See the [CLI usage guide (Chinese)](apps/zcode-cli/docs/usage/README.md) for model configuration, non-interactive runs, tools and extensions, batch evaluation, and trajectory capture.
 

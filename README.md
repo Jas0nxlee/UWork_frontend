@@ -66,13 +66,12 @@ UWork 是定制的 AI 工作台。提供 UCAS 与自定义模型服务、办公 
 
 企业身份用于姓名展示与企业网关接入，不引入账号数据隔离、云同步或额外本地操作权限。企业网关自动配置由身份登录驱动：服务地址取自企微配置的 `apiBaseUrl`，登录后自动写入 UCAS 供应商的网关地址、复用或生成企业内部 API Key、按套餐补齐模型，并读取套餐与用量。已有本地 API Key 不会被自动覆盖，可在「企业网关」面板显式替换。登录或退出不会迁移、认领或删除已有工作区、会话与模型配置；退出清除设备上的身份会话，当前接入不承诺吊销认证服务端的 Token。
 
-GitHub 正式安装包已携带默认企业微信公开登录参数，Windows、macOS 和 Linux 安装后可直接扫码，无需复制配置文件。扫码认证成功后会自动完成网关配置；只有企业后台没有返回可用 Key 时才弹出可跳过的输入对话框。客户端不内置企业微信 Secret、用户 Token 或 UCAS Key；管理员可使用本机配置覆盖默认参数，位置、接口与自动配置规则见 [企业微信登录对接](docs/enterprise-identity-integration.md)。该原生扫码适配器由 Desktop Local Host 加载；普通 Web 不自动启用，手机远控只展示桌面已有 Host 的身份。
+GitHub 正式安装包已携带默认企业微信公开登录参数，Windows、macOS 和 Linux 安装后可直接扫码，无需复制配置文件。扫码认证成功后会自动完成网关配置；只有企业后台没有返回可用 Key 时才弹出可跳过的输入对话框。客户端不内置企业微信 Secret、用户 Token 或 UCAS Key；管理员可使用本机配置覆盖默认参数，位置、接口与自动配置规则见 [企业微信登录对接](docs/enterprise-identity-integration.md)。该原生扫码适配器由 Desktop Local Host 加载；独立分享页不自动启用该适配器。
 
-## Office 与手机远控
+## Office
 
 - 应用内 Office 功能处理支持的 Word、Excel、PPT 文件，按格式保真范围与大小限制决定可编辑或只读；保存有版本冲突检查及备份，不承诺任意复杂文档完整往返保真。范围见 [Office 预览与编辑](specs/office-editors-triad.md)。
 - [office-editor 插件](plugins/office-editor/README.md)提供 Word 修订与批注审阅。默认未配置外部编辑引擎时显示只读预览；完整引擎编辑需要单独配置，复制组件的许可义务见插件文档与第三方清单。
-- 手机远控需管理员配置可信 relay 和手机页面地址，复用桌面已有 Host、会话与任务；仓库保留自建 HMAC 配对协议，配置缺失时不会向官方 relay 发送配对凭据。配置及协议见 [自建 relay](specs/web-remote-control-relay.md) 与 [UWork 远控装配](specs/web-remote-uwork-integration.md)。
 
 ## 数据目录
 
@@ -80,7 +79,7 @@ UWork 使用自己的用户级数据根 `~/.uwork`（配置目录 `~/.uwork/v2`�
 
 ## 从源码运行
 
-当前定制版的本机构建与安装验证以 **macOS Apple Silicon** 为主。仓库仍包含 Windows、Linux、Web 与 CLI 入口；这些平台不等于已经完成相同范围的发布验收。
+当前定制版的本机构建与安装验证以 **macOS Apple Silicon** 为主。仓库仍包含 Windows、Linux、CLI 与独立分享页入口；这些平台不等于已经完成相同范围的发布验收。
 
 准备 Git、Node.js **24.14.0** 和 pnpm **10.33.2**。工具版本以 [mise.toml](mise.toml) 为准；macOS 编译原生组件还需要 Xcode Command Line Tools。以下命令从仓库根目录执行。
 
@@ -105,7 +104,7 @@ UWORK_DATA_BASE_DIR="$HOME/.uwork-dev" pnpm dev:desktop
 | ------------------ | ------------------------------ |
 | 桌面开发           | `pnpm dev:desktop`             |
 | 测试环境桌面开发   | `pnpm dev:desktop:test`        |
-| Web 与后端开发     | `pnpm dev:web`                 |
+| HTTP 服务开发      | `pnpm dev:server`              |
 | CLI 源码开发       | `pnpm --filter @zcode/cli dev` |
 | 准备远程工作区资源 | `pnpm bootstrap:with-remote`   |
 
@@ -151,12 +150,12 @@ ZCODE_ENV=production ZCODE_SKIP_REMOTE_ASSETS=1 \
 pnpm exec electron packages/desktop/scripts/build-uwork-icons.cjs
 ```
 
-## Web 与 CLI
+## HTTP 服务与 CLI
 
-`pnpm dev:web` 同时启动前端和后端，默认访问 `http://localhost:5173`；后端默认监听 `3030`。需要指定工作区时：
+`pnpm dev:server` 启动 HTTP / WebSocket 服务，默认监听 `3030`。独立分享页通过 `pnpm dev:web-share:test` 开发；当前客户端已移除手机/浏览器远控页。需要指定服务工作区时：
 
 ```bash
-ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
+ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:server
 ```
 
 仓库还保留统一 CLI 发行包构建入口。下面的下载地址是占位地址，打包时替换为自己的托管地址：
@@ -165,7 +164,7 @@ ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
 pnpm build:zcode --base-url https://downloads.example.com/uwork/
 ```
 
-产物默认写入 `dist/zcode/`。发行包命令仍为 `zcode`：无参数进入 TUI，`zcode --web` 启动 Web。构建本身不会安装或替换系统中的 CLI。查看参数可运行 `pnpm build:zcode --help`。
+产物默认写入 `dist/zcode/`。发行包命令仍为 `zcode`：无参数进入 TUI；发行包不再携带浏览器页面。构建本身不会安装或替换系统中的 CLI。查看参数可运行 `pnpm build:zcode --help`。
 
 CLI 的模型配置、非交互调用、工具与扩展、批量评测和轨迹记录见 [CLI 使用指南](apps/zcode-cli/docs/usage/README.md)。
 

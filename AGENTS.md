@@ -17,7 +17,7 @@
 | Lint             | `pnpm lint` / `pnpm lint:fix`                        |
 | 格式检查         | `pnpm fmt:check`                                     |
 | 桌面开发         | `pnpm dev:desktop`                                   |
-| Web 开发         | `pnpm dev:web`                                       |
+| HTTP 服务开发    | `pnpm dev:server`                                    |
 | 提交前检查       | `pnpm verify:pre-push`（Lint、架构检查与受影响单测） |
 | 架构检查         | `pnpm architecture:check --changed`                  |
 | 模块阅读包       | `pnpm architecture:context <module-id>`              |
@@ -29,7 +29,7 @@ affected 使用 Vitest 官方选择，只运行选中的根 UT；选中整个套
 测试入口以目标包当前的 `package.json` 和实际测试文件为准，不假定存在统一的单测或 E2E 命令。
 
 - `packages/desktop`：Electron main、host、renderer。
-- `packages/server`：HTTP / WebSocket 服务与 Source Server 运行入口；发布分支不包含浏览器/手机远控页。
+- `packages/server`：HTTP / WebSocket 服务与 Source Server 运行入口；当前客户端不包含浏览器/手机远控页。
 - `packages/ui`：共享 React 组件、hooks 与 Zustand store。
 - `packages/services`：业务服务；`packages/rpc`：RPC 框架。
 - `packages/shared`：共享协议与类型；`packages/client`：Agent 客户端 SDK。
@@ -51,7 +51,7 @@ affected 使用 Vitest 官方选择，只运行选中的根 UT；选中整个套
 
 ## UI 与平台边界
 
-- 遵守 `DESIGN.md`，复用已有组件，兼顾桌面与手机 Web 的布局、交互、主题和国际化。
+- 遵守 `DESIGN.md`，复用已有组件，兼顾桌面与独立分享页的布局、交互、主题和国际化。
 - 组件通过 `packages/ui/src/hooks/` 访问服务；平台操作通过 `IPlatformService`（`packages/shared/src/platform.ts`），不直接调用 `window.zcode`。
 - 通过依赖注入处理 Desktop、Web、本地和远程环境的差异，并兼顾 Windows、macOS 和 Linux。
 - Zustand 状态位于 `packages/ui/src/store/`。广播同步的主题、语言等字段需要防止回环；UI 局部状态不应被误当作服务端事实。
@@ -59,13 +59,12 @@ affected 使用 Vitest 官方选择，只运行选中的根 UT；选中整个套
 
 ## 进程、协议与远程控制
 
-发布分支 `release/no-mobile-remote-control` 已删除手机远控客户端（手机页、Android 壳、桌面远控宿主与入口）；本节关于手机远控的规则只约束主线，分支上保留的 `web-remote-replayable` 参数没有置真来源。
+当前客户端已移除手机远控页、Android 壳、桌面远控宿主与入口；保留的 relay 服务端和共享协议不代表客户端仍有远控能力，边界见 `specs/release-branch-without-mobile-remote-control.md`。
 
 - Desktop app 通过 stdio 与 Agent 通信。协议改动同步更新 `packages/shared/src/zcode-protocol/index.ts`，提供严格类型与运行时校验。
 - Main 负责窗口、原生操作、进程调度和消息转发，不承载 task/session 业务状态。
 - 每个窗口使用一个 window-scoped Local Host；本地 workspace 共享该 Host。远程 workspace 由窗口内的连接注册表管理，不另建 Desktop Remote Host。
-- 手机远控连接桌面已有 Host attachment，复用会话运行时；不为手机另起 Agent、Local Host 或远程会话。
-- Desktop 的 `desktop-continuous` 实时链路与手机的 `web-remote-replayable` 恢复链路必须明确区分。修改 stream、snapshot、queue 或重连时，同时验证两种语义。
+- 修改 stream、snapshot、queue 或重连时验证现有 Desktop 的 `desktop-continuous` 链路。保留协议中的 `web-remote-replayable` 与中继服务合同仍须区分；当前客户端没有手机入口，不把协议测试写成手机端到端验收。
 - 外部 relay 与 Main 只做鉴权、配对、心跳、转发及 attachment 调度，不保存任务队列、快照等业务状态。
 - 已接受的 busy/running 输入由 CLI/runtime `CommandInbox` 串行 admission；Renderer 只保留未提交草稿与 pending optimistic overlay，Host owner/lease 负责路由。
 - 保留 owner/lease、跨 Host 路由和 stale run 防护，不能仅根据单一路径删除边界判断。
