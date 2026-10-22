@@ -1,13 +1,17 @@
 import { spawn } from "node:child_process";
 import { chromium } from "playwright-core";
-import { terminateProcessTreeAndWait } from "@zcode/services/process/processTreeTerminator";
+import {
+  captureProcessTreeSnapshotAsync,
+  terminateProcessTreeAndWait,
+} from "@zcode/services/process/processTreeTerminator";
 
 const CDP_START_TIMEOUT_MS = 90_000;
 
 /** 复用进程树 owner 的身份校验和回收边界，包括另建进程组的 Agent；不按名称扫描。 */
-export async function stopOwnedDesktopProcess(child) {
+export async function stopOwnedDesktopProcess(child, snapshot = undefined) {
   if (!child?.pid) return;
   const result = await terminateProcessTreeAndWait(child, {
+    snapshot,
     forceAfterMs: 1000,
     waitAfterForceMs: 5000,
   });
@@ -61,10 +65,12 @@ export async function launchPackagedDesktopCdp({ executablePath, env, platform }
     return {
       browser,
       async close() {
+        // CDP 关闭可能先终止根进程；此后 detached Host 已被 reparent，必须用生前身份快照回收。
+        const snapshot = await captureProcessTreeSnapshotAsync(child);
         try {
           await browser.close();
         } finally {
-          await stopOwnedDesktopProcess(child);
+          await stopOwnedDesktopProcess(child, snapshot);
         }
       },
     };

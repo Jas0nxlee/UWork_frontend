@@ -31,6 +31,7 @@
 - Electron runtime 版本唯一读取 `packages/desktop/package.json` 的固定版本，开发、测试、安装包及 Windows Helper 校验不得另行硬编码。打包配置必须能在未暂存企业身份配置时正常加载；配置存在时从 `.release-config/enterprise-identity.json` 复制到 `resources/config/enterprise-identity.json`，设置 `UWORK_REQUIRE_ENTERPRISE_IDENTITY_CONFIG=1` 而配置缺失时在打包开始前拒绝构建。
 - Gen UI 的固定哈希资源（visualize assets 与受 runtime manifest 引用的 tweak runtime）按原始字节检出；Windows `core.autocrlf=true` 不能改写换行。完整性校验仍比较原始 SHA256，不归一化内容、不更新哈希去适配损坏资源。回归通过真实临时 Git index 和 Windows 换行配置检出全部受清单约束的文件，再逐一校验哈希。
 - 隔离安装包启动检查输出阶段标签，首次功能断言失败必须在清理前记录，不能由 Electron 关闭等待遮住原错误。校验步骤最多运行 10 分钟，到期失败；不以强杀后继续通过代替正常退出或功能验收。CI 启用 Playwright API 诊断以定位启动/页面/原生视图边界，不输出企业配置或凭据。
+- 安装包测试在断开 CDP、关闭 Electron 根进程之前抓取所属进程树的创建身份快照；关闭后按该快照复核并回收 detached 后代，不能在根进程退出、后代 reparent 后才首次发现归属。清理失败仍阻断验收，不按进程名或裸 PID 扩大回收范围。
 - 正式 Windows 包保持 `enableNodeCliInspectArguments=false`。安装包测试用子进程启动未改写的产物，经 Chromium CDP 连接真实 Renderer，不依赖 Playwright Electron 的 Node Inspector 通道。隔离目录同时覆盖应用数据、userData 与 sessionData；清理仅终止该测试自己启动的进程树，清理不是产品正常退出验收。真实安装包验证登录按钮、内嵌二维码 surface、新建与取消的授权 WebContents target、唯一 UWork 主页面；窗口归属与不新建 BrowserWindow 继续由同版本 Electron 的原生 view fixture 验证。测试不启用正式包 fuse、不增加产品调试接口，也不删除功能断言。
 - 非特权 Linux CI 的原生 view fixture 与安装包验收使用相同的 `--no-sandbox` 测试参数，避免未配置 root-owned SUID helper 时在断言前退出；该参数不写入正式安装包或用户启动配置。其他平台不追加此参数。
 - 测试进程树回收成功后，Windows 临时 Cookie 文件可能短暂返回 EBUSY。私有测试目录删除使用 `fs.rm` 的有限重试（10 次、200ms 线性退避），耗尽仍失败；不以固定等待或吞掉清理错误替代进程归属验证及功能验收。
@@ -90,3 +91,19 @@ flowchart LR
 5. 从其它分支手工 publish、缺失 tag、tag 指向另一提交或版本不一致均在创建 Release 前失败。
 6. 打包配置在企业身份配置缺失且非必需时正常加载；配置存在时正确映射随包路径，必需但缺失时立即失败。Electron runtime 版本始终等于 desktop manifest 固定版本。
 7. 开源占位 CUA 的 Windows `afterPack` 仍生成包含实际安装文件的 `.zcode-install-manifest`；真实 producer 完成 Helper 校验后也生成同一清单。
+
+## 安装包验收的进程收尾顺序
+
+```mermaid
+sequenceDiagram
+    participant Test as 安装包验收 owner
+    participant CDP as CDP / Electron 根进程
+    participant Tree as 进程树身份与回收服务
+    Test->>Tree: 根进程存活时捕获创建身份快照
+    Test->>CDP: browser.close()
+    CDP-->>Test: 根进程退出，后代可能 reparent
+    Test->>Tree: 按原快照复核并回收所属后代
+    Tree-->>Test: remainingPids 为空或明确失败
+```
+
+回归用例让 CDP 关闭在根进程退出后返回，同时保留另建进程组、继承管道的后代；清理后后代必须退出，独立无关进程必须继续存活。该修复不改写安装包、生产 fuse 或功能断言，也不延长超时。
