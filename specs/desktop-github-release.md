@@ -2,7 +2,7 @@
 
 ## 发布规则
 
-- 发布目标为用户 fork `Jas0nxlee/UWork`，默认分支 `uwork`；正式客户端身份为 `UWork` / `dev.zcode.app`，构建显式使用 `ZCODE_ENV=production` 和 `ZCODE_PREVIEW_IDENTITY=0`。
+- 发布目标为用户 fork `Jas0nxlee/UWork_frontend`，默认分支 `main`；正式客户端身份为 `UWork` / `dev.zcode.app`，构建显式使用 `ZCODE_ENV=production` 和 `ZCODE_PREVIEW_IDENTITY=0`。
 - 首次配置以 `v3.14.4` 发布，版本由根 `package.json` 提供。已有标签不移动，不覆盖其他版本的 Release。
 - 本轮修复以 `v3.14.5` 发布：登录恢复与取消、子进程崩溃归类、Linux 历史桌面项、UCAS 验收地址及发布 tag 门禁。Release 说明列出用户可见修复与仍需每台设备单独放置的企业身份公开配置。
 - 下一版 `v3.14.7` 修复新设备企业微信按钮禁用：五个平台构建均从 GitHub Actions 加密配置注入默认公开参数，随包资源必须通过严格字段校验和内容一致性校验。安装后无需复制配置文件；保留本机覆盖与用户凭据隔离，并发布本次 UCAS Key 引导。`v3.14.6` 构建因新增 Linux 启动测试误用可执行文件名而未发布，标签保留。
@@ -24,7 +24,7 @@
 - 打包身份配置兼容现有单组织公开配置，不凭客户端支持多组织宣称三个组织已经启用。stage 成功后仅记录规范化配置的组织数量，不输出组织标识、地址、配置内容或凭据。数量证据来自当前构建的日志。
 - 发布说明须明确公开 SkillHub 使用匿名下载，不能代表组织私有技能授权；多租户生产启用仍依赖服务端组织绑定唯一约束、空 Host 拒绝和 review 组织归属校验等前置项。客户端发布不是生产企业验收，本次不实施独立后端仓库的改造。
 - 隔离启动测试与正式打包共用 `resolveDesktopProductIdentity` 的程序名；Linux 的兼容内部程序名保留，不依据可见 UWork 品牌猜测路径。
-- `uwork` push / PR 执行 lint、typecheck、架构与相关服务测试；版本标签或手工工作流执行五个原生构建：macOS arm64/x64、Windows x64、Linux x64/arm64。Node/pnpm 分别遵循 `mise.toml` 和 `packageManager`，Actions 固定完整提交 SHA。
+- `main` push / PR 执行 lint、typecheck、架构与相关服务测试；版本标签或手工工作流执行五个原生构建：macOS arm64/x64、Windows x64、Linux x64/arm64。Node/pnpm 分别遵循 `mise.toml` 和 `packageManager`，Actions 固定完整提交 SHA。
 - 构建复用现有 `bundle.mjs`。桌面安装包不依赖远程 mock CDN，CI 使用 `ZCODE_SKIP_REMOTE_ASSETS=1`，保留本地 Agent、插件、原生搜索工具、依赖闭包和平台校验。依赖和 Electron 从公开官方来源获取；随包企业身份配置仅接受公开字段，个人凭据不进入产物。
 - Electron runtime 版本唯一读取 `packages/desktop/package.json` 的固定版本，开发、测试、安装包及 Windows Helper 校验不得另行硬编码。打包配置必须能在未暂存企业身份配置时正常加载；配置存在时从 `.release-config/enterprise-identity.json` 复制到 `resources/config/enterprise-identity.json`，设置 `UWORK_REQUIRE_ENTERPRISE_IDENTITY_CONFIG=1` 而配置缺失时在打包开始前拒绝构建。
 - Gen UI 的固定哈希资源（visualize assets 与受 runtime manifest 引用的 tweak runtime）按原始字节检出；Windows `core.autocrlf=true` 不能改写换行。完整性校验仍比较原始 SHA256，不归一化内容、不更新哈希去适配损坏资源。回归通过真实临时 Git index 和 Windows 换行配置检出全部受清单约束的文件，再逐一校验哈希。
@@ -60,7 +60,7 @@ sequenceDiagram
 - publish 必须等待检查、审计策略和全部五个平台构建完成。汇总时重新验证版本、提交、平台矩阵、必需文件和校验和；任一目标失败不发布完整 Release。
 - 构建 job 仅有 contents read；publish job 才有 contents write。输入先校验，再通过环境变量和独立脚本传递，不把用户输入插入 shell 代码。
 - 发布先创建 draft，再上传全部已核验文件，最后公开；重跑只能补齐同一版本、同一提交的 draft。已公开 Release 不自动覆盖。保留旧版本和本机替换前的 `.app` 备份作为回退路径。
-- 手工 publish 只允许从 `uwork` 分支的当前提交执行。版本 tag 必须在发布前存在且精确指向当前提交；publish job 不创建或移动 tag。tag push 也必须满足 tag 与根版本一致、指向当前提交。
+- 手工 publish 只允许从 `main` 分支的当前提交执行。版本 tag 必须在发布前存在且精确指向当前提交；publish job 不创建或移动 tag。tag push 也必须满足 tag 与根版本一致、指向当前提交。
 
 ```mermaid
 flowchart LR

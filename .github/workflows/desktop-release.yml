@@ -2,10 +2,10 @@ name: UWork desktop release
 
 on:
   push:
-    branches: [uwork]
+    branches: [main]
     tags: ["v*"]
   pull_request:
-    branches: [uwork]
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
@@ -170,12 +170,12 @@ jobs:
           retention-days: 14
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/uwork')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main')
     needs: [checks, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      actions: read
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -202,8 +202,8 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
             echo 'Tag does not match package version'; exit 1
           fi
-          if [[ "$GITHUB_REF" != refs/tags/* && "$GITHUB_REF" != refs/heads/uwork ]]; then
-            echo 'Manual publish requires the uwork branch'; exit 1
+          if [[ "$GITHUB_REF" != refs/tags/* && "$GITHUB_REF" != refs/heads/main ]]; then
+            echo 'Manual publish requires the main branch'; exit 1
           fi
           # Tag 必须预先存在且指向本次已检查的提交；禁止 release create 隐式创建 tag。
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq '.sha')" = "$GITHUB_SHA"
@@ -215,3 +215,10 @@ jobs:
           fi
           gh release upload "$tag" release-assets/UWork-* release-assets/uwork-*.json release-assets/SHA256SUMS release-assets/dependency-audit.json --repo "$GITHUB_REPOSITORY" --clobber
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      # GITHUB_TOKEN 创建的 Release 不会触发 release 事件，显式派发同步工作流。
+      - name: Dispatch the GitLab release sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          gh workflow run gitlab-release-sync.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f tag="v${version}"

@@ -3,14 +3,14 @@
   <h1>UWork</h1>
   <p>Connect your own model service for coding, document work, and everyday tasks.</p>
   <p><a href="README.md">简体中文</a> · English</p>
-  <p><a href="https://github.com/Jas0nxlee/UWork/tree/uwork">Source</a> · <a href="https://github.com/Jas0nxlee/UWork/releases">Downloads</a> · <a href="LICENSE">Apache-2.0</a></p>
+  <p><a href="https://github.com/Jas0nxlee/UWork_frontend">Source</a> · <a href="https://github.com/Jas0nxlee/UWork_frontend/releases">Downloads</a> · <a href="LICENSE">Apache-2.0</a></p>
 </div>
 
 UWork is an AI workspace customized from [zai-org/ZCode](https://github.com/zai-org/ZCode). It offers UCAS and custom model providers, Office / Coding modes, optional multi-organization WeCom sign-in and gateway usage stats, plus files, terminal, Git, MCP, skills, and subagents. It also supports Office files and mobile remote control through a relay you configure. The original Zhipu / Z.ai model accounts and built-in subscription entries have been removed.
 
-This fork is maintained independently and is not an official upstream distribution. **The default branch is `uwork`**. The `main` branch retains upstream code for comparison and future synchronization. The current code base tracks the upstream ZCode v3.16.2 snapshot (2026-10-19).
+This fork is maintained independently and is not an official upstream distribution. **The default branch and release line is `main`.** The current code base tracks the upstream ZCode v3.16.2 snapshot (2026-10-19).
 
-The sign-in page footer shows the current client build version. See [package.json](package.json) for the source version and [GitHub Releases](https://github.com/Jas0nxlee/UWork/releases) for published installers and versions.
+The sign-in page footer shows the current client build version. See [package.json](package.json) for the source version and [GitHub Releases](https://github.com/Jas0nxlee/UWork_frontend/releases) for published installers and versions.
 
 ## Features
 
@@ -87,8 +87,8 @@ Local build and installation validation for this customized version primarily ta
 Install Git, Node.js **24.14.0**, and pnpm **10.33.2**. [mise.toml](mise.toml) defines the tool versions. Building native components on macOS also requires Xcode Command Line Tools. Run the following commands from the repository root.
 
 ```bash
-git clone --branch uwork https://github.com/Jas0nxlee/UWork.git
-cd UWork
+git clone https://github.com/Jas0nxlee/UWork_frontend.git
+cd UWork_frontend
 pnpm bootstrap
 UWORK_DATA_BASE_DIR="$HOME/.uwork-dev" ZCODE_SKIP_REMOTE_ASSETS=1 pnpm dev:desktop:test
 ```
@@ -219,8 +219,19 @@ The [enterprise identity Electron E2E script](packages/desktop/test/enterpriseId
 
 For troubleshooting, record your operating system, commit version, API format, redacted endpoint path, and reproduction steps. Do not include real credentials.
 
+## GitHub Actions build and release
+
+The [desktop release workflow](https://github.com/Jas0nxlee/UWork_frontend/actions/workflows/desktop-release.yml) uses Node 24.14.0 / pnpm 10.33.2. It runs code and dependency-audit checks first, then builds macOS arm64/x64, Windows x64, and Linux x64/arm64 on native runners.
+
+- macOS: DMG, ZIP; Windows: NSIS EXE; Linux: AppImage, DEB, RPM, and Arch packages.
+- Pushes and pull requests to `main` run the checks. Pushing a `vX.Y.Z` tag that matches the root version builds and publishes; you can also choose `main` in the Actions Run workflow and enable `publish` to release the current version. Without it, only build artifacts are kept.
+- A release is assembled and published only when every platform succeeds and the production dependency audit reports no high/critical findings. Every installer has a SHA256; the full report and source commit ship with the release.
+- macOS currently uses ad-hoc signing without Apple notarization; Windows has no publisher signing configured. Linux AppImage downloads need the executable bit set.
+
+Installers are published to [GitHub Releases](https://github.com/Jas0nxlee/UWork_frontend/releases); see the [multi-platform release spec](specs/desktop-github-release.md) and [dependency security fixes](specs/release-dependency-hardening.md).
+
 ## Upstream and license
 
-Thanks to [ZCode](https://github.com/zai-org/ZCode) and its contributors for the foundation. UWork customizations are maintained on this fork's `uwork` branch and do not represent upstream product features, services, or support commitments.
+Thanks to [ZCode](https://github.com/zai-org/ZCode) and its contributors for the foundation. UWork customizations are maintained on this fork's `main` branch and do not represent upstream product features, services, or support commitments.
 
 First-party code is licensed under [Apache License 2.0](LICENSE). Original attribution and third-party license notices are retained in [NOTICE.md](NOTICE.md), [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), and the [third-party materials guide](third-party/).

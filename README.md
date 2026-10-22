@@ -3,12 +3,12 @@
   <h1>UWork</h1>
   <p>连接自己的模型服务，在同一个工作区中完成代码开发、文档处理与日常任务。</p>
   <p>简体中文 · <a href="README.en.md">English</a></p>
-  <p><a href="https://github.com/Jas0nxlee/UWork/tree/uwork">源码</a> · <a href="https://github.com/Jas0nxlee/UWork/releases">下载安装</a> · <a href="LICENSE">Apache-2.0</a></p>
+  <p><a href="https://github.com/Jas0nxlee/UWork_frontend">源码</a> · <a href="https://github.com/Jas0nxlee/UWork_frontend/releases">下载安装</a> · <a href="LICENSE">Apache-2.0</a></p>
 </div>
 
 UWork 是定制的 AI 工作台。提供 UCAS 与自定义模型服务、办公 / 编程模式、可跳过的多企业微信登录与网关用量统计，并保留文件、终端、Git、MCP、技能和子智能体。支持 Office 文件处理，以及需自行配置 relay 的手机远程控制。原智谱 / Z.ai 模型账号与内置套餐入口已移除。
 
-客户端登录页底部显示当前构建的版本号。源码版本见 [package.json](package.json)，已发布安装包及其对应版本见 [GitHub Releases](https://github.com/Jas0nxlee/UWork/releases)。
+客户端登录页底部显示当前构建的版本号。源码版本见 [package.json](package.json)，已发布安装包及其对应版本见 [GitHub Releases](https://github.com/Jas0nxlee/UWork_frontend/releases)。
 
 ## 当前功能
 
@@ -85,8 +85,8 @@ UWork 使用自己的用户级数据根 `~/.uwork`（配置目录 `~/.uwork/v2`�
 准备 Git、Node.js **24.14.0** 和 pnpm **10.33.2**。工具版本以 [mise.toml](mise.toml) 为准；macOS 编译原生组件还需要 Xcode Command Line Tools。以下命令从仓库根目录执行。
 
 ```bash
-git clone --branch uwork https://github.com/Jas0nxlee/UWork.git
-cd UWork
+git clone https://github.com/Jas0nxlee/UWork_frontend.git
+cd UWork_frontend
 pnpm bootstrap
 UWORK_DATA_BASE_DIR="$HOME/.uwork-dev" ZCODE_SKIP_REMOTE_ASSETS=1 pnpm dev:desktop:test
 ```
@@ -207,7 +207,7 @@ pnpm exec tsx --test packages/services/test/ucasGateway*.test.ts
 | `packages/shared`、`packages/rpc`、`packages/client` | 协议、RPC 与 Agent 客户端                |
 | `apps/zcode-cli`                                     | Agent、TUI、工具与执行运行时             |
 
-- [整体架构（以 UWork 客户端为入口）](docs/architecture/uwork-overall-architecture.md)
+- [代码架构总览（进程与分层）](docs/architecture/zcode-code-architecture-overview.md)
 - [自定义供应商与账号入口调整](specs/custom-providers-only.md)
 - [模型自动获取与参数编辑](specs/provider-model-discovery.md)
 - [UCAS 默认供应商与添加入口规则](specs/ucas-default-provider.md)
@@ -221,17 +221,17 @@ pnpm exec tsx --test packages/services/test/ucasGateway*.test.ts
 
 ## GitHub Actions 构建与发布
 
-[桌面发布工作流](https://github.com/Jas0nxlee/UWork/actions/workflows/desktop-release.yml)使用 Node 24.14.0 / pnpm 10.33.2，先执行代码与依赖审计检查，再在原生 runner 上构建 macOS arm64/x64、Windows x64、Linux x64/arm64。
+[桌面发布工作流](https://github.com/Jas0nxlee/UWork_frontend/actions/workflows/desktop-release.yml)使用 Node 24.14.0 / pnpm 10.33.2，先执行代码与依赖审计检查，再在原生 runner 上构建 macOS arm64/x64、Windows x64、Linux x64/arm64。
 
 - macOS：DMG、ZIP；Windows：NSIS EXE；Linux：AppImage、DEB、RPM、Arch 包。
-- `uwork` 的 push / PR 执行检查。推送与根版本一致的 `vX.Y.Z` 标签会构建并发布；也可在 Actions 的 Run workflow 中选择 `uwork`，开启 `publish` 后发布当前版本。未开启时只保留构建产物。
+- `main` 的 push / PR 执行检查。推送与根版本一致的 `vX.Y.Z` 标签会构建并发布；也可在 Actions 的 Run workflow 中选择 `main`，开启 `publish` 后发布当前版本。未开启时只保留构建产物。
 - 必须全部平台成功，且生产依赖审计没有 high/critical，才会汇总并公开 Release。每个安装包都有 SHA256，完整报告和源码提交随发布提供。
 - macOS 当前使用 ad-hoc 签名，未经过 Apple 公证；Windows 当前未配置发布者签名。Linux AppImage 下载后需要添加执行权限。
 
-安装包发布到 [GitHub Releases](https://github.com/Jas0nxlee/UWork/releases)，规则详见 [多平台发布 spec](specs/desktop-github-release.md) 和 [依赖安全修复](specs/release-dependency-hardening.md)。
+安装包发布到 [GitHub Releases](https://github.com/Jas0nxlee/UWork_frontend/releases)，规则详见 [多平台发布 spec](specs/desktop-github-release.md) 和 [依赖安全修复](specs/release-dependency-hardening.md)。
 
 ## 上游与许可
 
-感谢 [ZCode](https://github.com/zai-org/ZCode) 及其贡献者提供基础实现。UWork 的定制功能在本 fork 的 `uwork` 分支维护，不代表上游产品的功能、服务或支持承诺。
+感谢 [ZCode](https://github.com/zai-org/ZCode) 及其贡献者提供基础实现。UWork 的定制功能在本 fork 的 `main` 分支维护，不代表上游产品的功能、服务或支持承诺。
 
 第一方代码采用 [Apache License 2.0](LICENSE)。原项目归属和第三方许可继续保留，参见 [NOTICE.md](NOTICE.md)、[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) 与 [第三方材料说明](third-party/)。
