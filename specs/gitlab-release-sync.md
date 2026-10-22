@@ -1,52 +1,48 @@
-# UWork GitHub Release 同步到 GitLab
+# UWork GitLab Release 附件发布
 
-## 同步规则
+## 产品规则
 
-- 触发条件：GitHub 侧 `release` 事件的 `published` 动作，以及手工 `workflow_dispatch`（可选指定 tag、是否上传资产、是否强制更新分支）。
-- 同步目标固定为 `http://g.ucas.com.cn:8088/lijingping/uwork`，可用仓库变量覆盖；路径、分支和开关不写进提交的脚本常量以外的地方。
-- 一次同步交付四类内容：创建 Release 的 Git 标签、更新目标分支、创建或更新 GitLab Release（标题与说明取自 GitHub Release）、创建资产链接。启用 `upload_assets` 时，先上传资产文件再写链接。
-- GitLab 是只写对端：同步过程不删除分支、标签、Release 与既有链接，也不改写 GitHub 侧数据。标签不可变，GitLab 上同名标签指向其它提交时立即失败，不移动标签。
-- 目标分支默认快进推送。非快进（GitLab 分支领先或历史无关）时失败并保留其它已完成的同步结果，手工确认后可用 `force_branch` 以 `--force-with-lease` 覆盖。
-- 重复执行必须幂等：标签已存在且指向同一对象时跳过推送；Release 已存在时改用更新接口；链接按名称对比，允许新增与更新，不删除其它链接。
-- 资产上传使用 GitLab Generic Package Registry，包名 `uwork-release`，版本取标签去掉前导 `v`。上传前逐个比对本地文件大小与 GitHub Release 元数据，不一致立即失败；已存在的包文件先用 `GET` 探测状态码（不下载内容），命中即跳过重复上传。
-- `workflow_dispatch` 未指定 tag 时取最新已发布 Release；草稿（`draft`）不同步。
-- 手工派发只用于重跑同一版本的同步，不用于跨版本回填；历史版本回填由发布负责人逐个人工执行。
+- GitHub Release 是版本、说明、附件和 SHA-256 的事实来源。GitLab 仅用于分发发布附件，不同步应用源码、源码标签或源码分支。
+- 每次 GitHub Release published（以及发布 job 的显式派发）必须下载全部附件，校验大小和 SHA-256，上传到 GitLab Generic Package Registry 的 `uwork-release/<版本>/`，再创建或更新同名 Release。取消可选 upload_assets 和 force_branch 入口，不能退化为 GitHub 下载链接。
+- GitLab Release 必须关联 Git 标签；所有发布标签关联独立的 `release-metadata` 根提交。该提交只有固定 README.md、无父提交，与 GitHub 源码历史无关。实际源码 SHA 保留在发布 manifest 中。
+- Release 附件链接指向 GitLab 包文件；允许额外保留一个 GitHub Release 来源页面链接。按名称更新链接，重复运行不新增重复包文件或链接。
+- 上传前校验所有本地附件（文件名、大小、GitHub digest）；上传后读取 GitLab package_files 的大小和 file_sha256 逐项比对。已有同版本包只有内容一致才能视为成功；冲突失败，不覆盖已发布文件。
+- 正常发布不得删除分支、移动既有标签。遇到已有源码标签必须提示显式迁移。
 
-## 凭据与可达性
+## 一次性源码清理
 
-- 只读取 `GITLAB_TOKEN` secret：项目访问令牌或个人访问令牌，需同时具备 `api`（创建 Release、上传包）与 `write_repository`（推送 Git 引用）。
-- 令牌只通过环境变量进入脚本；Git 推送使用临时凭据文件，推送 URL 与命令参数中不出现令牌，脚本和日志不打印令牌内容。
-- `g.ucas.com.cn` 校内解析为内网地址 `10.1.180.113`，公网解析为 `114.255.110.138`。托管 runner 只能走公网入口；公网入口不可用时通过仓库变量指定可访问该校内地址的自托管 runner，不用超时重试掩盖不可达。
-- 网络不可达、令牌无效、无权限、标签冲突、资产校验失败都直接失败并输出原因，不降级为“部分成功”的静默通过。
+- 用户于 2026-10-22 明确要求清理 GitLab 源码，保留打包内容并改为 Release 发布。手工输入 cleanup_source 仅用于这次迁移，自动发布默认关闭。
+- 先以 inspect 模式读取项目、所有分支、标签和 Release；保留引用 SHA 及 Release 元数据审计记录，不打印凭据或源码。
+- 迁移先上传并校验全部附件，再准备独立元数据提交。只允许重建本次 Release 的旧源码标签；发现其它源码标签或其它 Release 时停止，先调查，不隐式删除。
+- 旧标签迁移可能删除对应 GitLab Release，因此保留说明和附件清单并重新创建同版本 Release。GitHub 标签与 Release 不做任何改写。
+- Release 完整落地并回读成功后，将默认分支改为 release-metadata，再通过 API 删除其余源码分支；按初始清单检查 SHA，出现并发更新停止。清理后回读所有分支/标签，必须只剩元数据引用。
+- 清理指移除用户可达的源码引用；服务端不可达对象回收由 GitLab 管理，不声称完成物理擦除。
 
-## 所有者和事件顺序
+## 所有者、接口和顺序
 
-- GitHub 的 `publish` job 是 Release 的唯一创建者；本工作流是下游消费者，只读取 GitHub Release，不创建、不修改、不公开 Release，也不依赖发布流水线的中间产物。
-- 同步工作流唯一拥有 GitLab 侧的写入：标签、分支、Release、资产链接和包文件。
-- 工作流检出默认分支以获得最新同步脚本，标签通过 `fetch-tags` 取回；分支推送使用标签对应的提交，不使用检出点，避免把标签之后的提交带到 GitLab。
-- 手工 `upload_assets`、`force_branch` 输入优先于仓库变量；仓库变量优先于脚本默认值。
-- 同步在 GitLab 全部成功后输出 Release 地址；任一阶段失败都返回非零退出码，后续阶段不再执行。
+同步脚本唯一负责 GitLab 写入，GitHub publish job 只派发标签。工作流只浅检出脚本；创建元数据提交使用全新临时 Git 仓库，不读取当前源码 Git 对象。令牌使用 GITLAB_TOKEN，具有 api 及创建独立元数据引用的 write_repository 权限。网络和文件 IO 使用异步接口。项目级 concurrency 串行化所有版本，避免元数据分支初始化及迁移竞态。
 
 ```mermaid
 sequenceDiagram
-    participant GH as GitHub Release(published)
-    participant WF as gitlab-release-sync
-    participant GL as GitLab(lijingping/uwork)
-    GH-->>WF: tag / 标题 / 说明 / 资产清单
-    WF->>GL: 推送标签（不存在时）
-    WF->>GL: 快进推送分支
-    WF->>WF: 可选：下载资产并校验大小
-    WF->>GL: 上传资产到 Generic Package Registry
-    WF->>GL: 创建或更新 Release（标题 / 说明）
-    WF->>GL: 新增或更新资产链接
-    GL-->>WF: Release 地址
+  participant GH as GitHub Release
+  participant WF as 附件同步脚本
+  participant GL as GitLab
+  GH->>WF: 已公开版本、说明、附件和摘要
+  WF->>WF: 下载全部附件并校验大小及 SHA256
+  WF->>GL: 上传包文件，回读 package_files 校验
+  WF->>GL: 准备独立 README 根提交和发布标签
+  WF->>GL: 创建或更新 Release 与 GitLab 附件链接
+  GL-->>WF: 回读 Release 和全部链接
+  opt 已明确授权的一次性迁移
+    WF->>GL: 切换默认元数据分支、删除源码分支
+    GL-->>WF: 仅元数据分支和元数据标签
+  end
 ```
 
-## 验收
+## 验收场景
 
-1. 发布新 Release 后工作流自动运行，GitLab 上出现同一标签的 Release，标题与说明和 GitHub 一致。
-2. 同一标签重复运行不报错、不重复创建标签或 Release，链接未变化时不产生多余写请求。
-3. GitLab 已有标签指向其它提交、Release 为草稿、`GITLAB_TOKEN` 缺失或权限不足时，工作流在对应阶段失败且错误信息指出原因。
-4. 目标分支非快进时默认失败，使用 `force_branch` 后按 `--force-with-lease` 更新，GitLab 上其它分支与标签不受影响。
-5. `upload_assets` 关闭时只写链接，指向 GitHub 资产地址；开启时资产文件进入 GitLab 包注册表，链接指向 GitLab 包地址，且不会同时保留两套链接。
-6. 脚本与工作流契约由 `scripts/test/gitlab-release-sync.test.mjs` 覆盖，工作流在同步前执行该测试。
+1. 自动发布始终上传全部附件，GitLab 下载链接指向本机包注册表，大小与摘要和 GitHub 一致。
+2. 发布后 GitLab 标签只引用单 README、无父提交的元数据根，源码提交不被推送。
+3. 同版本重跑幂等；本地附件缺失/摘要错误、远端摘要冲突、令牌无效、网络不可达时失败，不输出成功。
+4. 普通重跑拒绝旧源码标签；显式迁移在附件完整后重建标签及 Release，删除源码分支；未知其它标签/Release 或引用并发变化时停止。
+5. inspect 模式只读；测试覆盖包文件验证、标签隔离、清理保护和工作流默认上传合同。验证运行 node --test scripts/test/gitlab-release-sync.test.mjs，加根 typecheck、lint、架构检查。

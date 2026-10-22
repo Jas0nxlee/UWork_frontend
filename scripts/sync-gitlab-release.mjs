@@ -1,104 +1,28 @@
 #!/usr/bin/env node
-// 把已发布的 GitHub Release 同步到 GitLab：推送标签/分支，创建或更新 Release，并同步资产链接。
-import { execFile } from "node:child_process";
+// GitLab 仅保存发布附件；标签引用独立元数据根提交，绝不推送应用源码历史。
 import { createReadStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
-const execFileAsync = promisify(execFile);
-const defaults = {
-  baseUrl: "http://g.ucas.com.cn:8088",
-  projectPath: "lijingping/uwork",
-  branch: "main",
-  packageName: "uwork-release",
-};
-const tagPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const branchPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const projectPathPattern = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+import {
+  resolveSyncConfig,
+  createGitLabClient,
+  apiError,
+  messageOf,
+  requireValue,
+} from "./gitlab-release-client.mjs";
+export { resolveSyncConfig } from "./gitlab-release-client.mjs";
 
-export async function runGitCommand(args) {
-  return execFileAsync("git", args, {
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    maxBuffer: 10 * 1024 * 1024,
-  });
-}
-
-function requireValue(value, name) {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  if (!normalized) throw new Error(`缺少必需的环境变量 ${name}`);
-  return normalized;
-}
-
-function stripSlashes(value) {
-  return value.replace(/^\/+|\/+$/g, "");
-}
-
-export function parseBoolean(value, name) {
-  const normalized = (value ?? "").trim().toLowerCase();
-  if (!normalized || normalized === "false") return false;
-  if (normalized === "true") return true;
-  throw new Error(`${name} 必须是 true 或 false，实际为 ${normalized}`);
-}
-
-export function validateTag(tag) {
-  // 标签会进入 URL 与 Git ref，限制字符集避免注入和非法引用。
-  if (!tagPattern.test(tag)) throw new Error(`非法 Release tag：${tag}`);
-  return tag;
-}
-
-export function resolveSyncConfig(env = process.env) {
-  const token = requireValue(env.GITLAB_TOKEN, "GITLAB_TOKEN");
-  const baseUrl = stripSlashes(
-    requireValue(env.GITLAB_BASE_URL || defaults.baseUrl, "GITLAB_BASE_URL"),
-  );
-  const parsed = new URL(baseUrl);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-    throw new Error(`GITLAB_BASE_URL 必须是 http(s) 地址：${baseUrl}`);
-  const projectPath = stripSlashes(env.GITLAB_PROJECT_PATH || defaults.projectPath).replace(
-    /\.git$/i,
-    "",
-  );
-  if (
-    !projectPathPattern.test(projectPath) ||
-    projectPath.split("/").some((segment) => segment === "." || segment === "..")
-  )
-    throw new Error(`非法 GitLab 项目路径：${projectPath}`);
-  const branch = env.SYNC_BRANCH?.trim() || defaults.branch;
-  if (!branchPattern.test(branch) || branch.includes("..") || branch.includes("//"))
-    throw new Error(`非法同步分支：${branch}`);
-  const tag = validateTag(requireValue(env.RELEASE_TAG, "RELEASE_TAG"));
-  const projectId = encodeURIComponent(projectPath);
-  return {
-    token,
-    baseUrl,
-    projectPath,
-    projectId,
-    apiUrl: `${baseUrl}/api/v4/projects/${projectId}`,
-    pushUrl: stripSlashes(env.GITLAB_PUSH_URL?.trim() || `${baseUrl}/${projectPath}.git`),
-    webUrl: `${baseUrl}/${projectPath}`,
-    branch,
-    tag,
-    uploadAssets: parseBoolean(env.UPLOAD_ASSETS, "UPLOAD_ASSETS"),
-    forceBranch: parseBoolean(env.FORCE_BRANCH, "FORCE_BRANCH"),
-    assetDir: env.ASSET_DIR?.trim() || "",
-    packageName: defaults.packageName,
-    packageVersion: tag.replace(/^v(?=\d)/, ""),
-  };
-}
-
-function displayUrl(value) {
-  try {
-    const url = new URL(value);
-    url.username = "";
-    url.password = "";
-    return url.toString();
-  } catch {
-    return "<invalid-url>";
-  }
-}
+import {
+  checked,
+  listAll,
+  inspectGitLab,
+  ensureMetadataBranch,
+  ensureReleaseTag,
+  cleanupSourceBranches,
+} from "./gitlab-release-repository.mjs";
 
 export function releaseDescription(release, tag) {
   const body = typeof release?.body === "string" ? release.body.trim() : "";
@@ -110,139 +34,27 @@ export function releaseDescription(release, tag) {
 export function validateRelease(release, tag) {
   if (!release || typeof release !== "object" || Array.isArray(release))
     throw new Error("Release 元数据为空或格式错误");
-  if (release.draft === true) throw new Error(`Release ${tag} 仍是草稿，先公开再同步`);
+  if (!Array.isArray(release.assets) || !release.assets.length)
+    throw new Error("Release 缺少附件");
+  if (release.draft === true)
+    throw new Error(`Release ${tag} 仍是草稿，先公开再同步`);
   if (release.tag_name && release.tag_name !== tag)
-    throw new Error(`Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`);
-}
-
-export function parseRemoteRef(stdout, ref) {
-  for (const line of String(stdout).split("\n")) {
-    const [sha, name] = line.trim().split(/\s+/);
-    if (name === ref && /^[0-9a-f]{40,64}$/.test(sha ?? "")) return sha;
-  }
-  return "";
-}
-
-function messageOf(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-export async function pushSourceRefs({ config, runGit = runGitCommand, log = console.log }) {
-  const directory = await mkdtemp(join(tmpdir(), "gitlab-sync-"));
-  const credentials = join(directory, "credentials");
-  const url = new URL(config.pushUrl);
-  // 令牌只写入 600 权限的临时凭据文件；推送 URL 与命令参数保持无凭据，日志不会泄露。
-  if (url.host)
-    await writeFile(
-      credentials,
-      `${url.protocol}//oauth2:${encodeURIComponent(config.token)}@${url.host}\n`,
-      { mode: 0o600 },
+    throw new Error(
+      `Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`,
     );
-  const git = (args) => runGit(["-c", `credential.helper=store --file=${credentials}`, ...args]);
-  try {
-    const tagRef = `refs/tags/${config.tag}`;
-    const localTagResult = await git(["rev-parse", "--verify", tagRef]).catch(() => null);
-    if (!localTagResult)
-      throw new Error(
-        `工作区缺少标签 ${config.tag}，请用 fetch-depth: 0 与 fetch-tags 检出后再同步`,
-      );
-    const localTag = localTagResult.stdout.trim();
-    const remoteTag = parseRemoteRef(
-      (await git(["ls-remote", config.pushUrl, tagRef])).stdout,
-      tagRef,
-    );
-    if (remoteTag && remoteTag !== localTag)
-      throw new Error(
-        `GitLab 已存在指向其它提交的标签 ${config.tag}（本地 ${localTag}，远端 ${remoteTag}）；标签不可变，请人工确认`,
-      );
-    if (remoteTag) log(`标签 ${config.tag} 已存在且指向同一提交，跳过推送`);
-    else {
-      log(`推送标签 ${config.tag} 到 ${displayUrl(config.pushUrl)}`);
-      await git(["push", config.pushUrl, `${tagRef}:${tagRef}`]);
-    }
-
-    const branchRef = `refs/heads/${config.branch}`;
-    // 分支推进到 Release 对应提交，而不是当前检出点，避免把标签之后的提交带到 GitLab。
-    const head = (await git(["rev-parse", `${tagRef}^{commit}`])).stdout.trim();
-    const remoteHead = parseRemoteRef(
-      (await git(["ls-remote", config.pushUrl, branchRef])).stdout,
-      branchRef,
-    );
-    if (remoteHead === head) {
-      log(`分支 ${config.branch} 已指向 ${head}，跳过推送`);
-      return;
-    }
-    let lease = [];
-    if (config.forceBranch) {
-      const tracking = `refs/remotes/gitlab-sync/${config.branch}`;
-      try {
-        await git(["fetch", "--no-tags", config.pushUrl, `+${branchRef}:${tracking}`]);
-        const expected = (await git(["rev-parse", "--verify", tracking])).stdout.trim();
-        lease = [`--force-with-lease=${branchRef}:${expected}`];
-      } catch {
-        // 远端分支尚不存在时 fetch 无引用可抓，普通推送会创建分支。
-      }
-    }
-    log(`推送分支 ${config.branch}（${head.slice(0, 12)}）`);
-    try {
-      await git(["push", ...lease, config.pushUrl, `${head}:${branchRef}`]);
-    } catch (error) {
-      if (
-        !config.forceBranch &&
-        /non-fast-forward|fetch first|\[rejected\]/i.test(messageOf(error))
-      )
-        throw new Error(
-          `GitLab 分支 ${config.branch} 无法快进到 ${head}；确认后可手工派发并勾选 force_branch 覆盖`,
-        );
-      throw error;
-    }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
 }
 
-export function createGitLabClient({ config, fetchImpl = fetch }) {
-  async function request(method, path, body) {
-    let response;
-    try {
-      response = await fetchImpl(`${config.apiUrl}${path}`, {
-        method,
-        headers: {
-          "PRIVATE-TOKEN": config.token,
-          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-    } catch (error) {
-      throw new Error(
-        `无法连接 GitLab ${config.baseUrl}（${messageOf(error)}）；请确认 runner 能访问该地址，校内地址需使用自托管 runner`,
-      );
-    }
-    const text = await response.text();
-    let data = text;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        // 非 JSON 响应保留原文用于报错。
-      }
-    }
-    return { ok: response.ok, status: response.status, data };
-  }
-  return { request };
-}
-
-function apiError(method, path, result) {
-  const detail = typeof result.data === "string" ? result.data : JSON.stringify(result.data);
-  return new Error(
-    `GitLab API ${method} ${path} 返回 ${result.status}：${String(detail).slice(0, 500)}`,
-  );
-}
-
-export async function upsertRelease({ client, config, release, log = console.log }) {
+export async function upsertRelease({
+  client,
+  config,
+  release,
+  log = console.log,
+}) {
   const payload = {
     name:
-      typeof release.name === "string" && release.name.trim() ? release.name.trim() : config.tag,
+      typeof release.name === "string" && release.name.trim()
+        ? release.name.trim()
+        : config.tag,
     tag_name: config.tag,
     description: releaseDescription(release, config.tag),
   };
@@ -253,7 +65,8 @@ export async function upsertRelease({ client, config, release, log = console.log
   }
   const exists =
     created.status === 409 ||
-    (created.status === 400 && /already exists/i.test(JSON.stringify(created.data)));
+    (created.status === 400 &&
+      /already exists/i.test(JSON.stringify(created.data)));
   if (!exists) throw apiError("POST", "/releases", created);
   const path = `/releases/${encodeURIComponent(config.tag)}`;
   const updated = await client.request("PUT", path, {
@@ -271,8 +84,7 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((asset) => {
       const packageUrl = uploaded.get(asset.name);
-      if (!packageUrl)
-        return { name: asset.name, url: asset.browser_download_url, link_type: "other" };
+      if (!packageUrl) throw new Error(`附件未上传到 GitLab：${asset.name}`);
       return {
         name: asset.name,
         url: packageUrl,
@@ -283,18 +95,35 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
           : {}),
       };
     })
-    .filter((link) => typeof link.url === "string" && /^https?:\/\//.test(link.url));
-  if (typeof release.html_url === "string" && /^https?:\/\//.test(release.html_url))
-    links.push({ name: "GitHub Release 页面", url: release.html_url, link_type: "other" });
+    .filter(
+      (link) => typeof link.url === "string" && /^https?:\/\//.test(link.url),
+    );
+  if (
+    typeof release.html_url === "string" &&
+    /^https?:\/\//.test(release.html_url)
+  )
+    links.push({
+      name: "GitHub Release 页面",
+      url: release.html_url,
+      link_type: "other",
+    });
   return links;
 }
 
-export async function syncAssetLinks({ client, config, links, log = console.log }) {
+export async function syncAssetLinks({
+  client,
+  config,
+  links,
+  log = console.log,
+}) {
   const path = `/releases/${encodeURIComponent(config.tag)}/assets/links`;
   const listed = await client.request("GET", path);
   if (!listed.ok) throw apiError("GET", path, listed);
   const existing = new Map(
-    (Array.isArray(listed.data) ? listed.data : []).map((link) => [link.name, link]),
+    (Array.isArray(listed.data) ? listed.data : []).map((link) => [
+      link.name,
+      link,
+    ]),
   );
   for (const link of links) {
     const current = existing.get(link.name);
@@ -319,13 +148,17 @@ export async function syncAssetLinks({ client, config, links, log = console.log 
 async function packageFileExists({ fetchImpl, config, url }) {
   let response;
   try {
-    response = await fetchImpl(url, { method: "GET", headers: { "PRIVATE-TOKEN": config.token } });
+    response = await fetchImpl(url, {
+      method: "GET",
+      headers: { "PRIVATE-TOKEN": config.token },
+    });
   } catch (error) {
     throw new Error(`检查 GitLab 包文件失败：${messageOf(error)}`);
   }
   if (response.ok) {
     // 只探测状态码，不下载已有包内容。
-    if (typeof response.body?.cancel === "function") await response.body.cancel().catch(() => {});
+    if (typeof response.body?.cancel === "function")
+      await response.body.cancel().catch(() => {});
     return true;
   }
   if (response.status === 404) return false;
@@ -348,13 +181,20 @@ export async function uploadReleaseAssets({
     log("Release 没有资产，跳过上传");
     return uploaded;
   }
-  if (!config.assetDir) throw new Error("已启用 upload_assets，但没有提供资产目录 ASSET_DIR");
-  for (const asset of [...assets].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (basename(asset.name) !== asset.name) throw new Error(`非法资产名：${asset.name}`);
+  if (!config.assetDir) throw new Error("缺少发布附件目录 ASSET_DIR");
+  for (const asset of [...assets].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    if (basename(asset.name) !== asset.name)
+      throw new Error(`非法资产名：${asset.name}`);
     const file = join(config.assetDir, asset.name);
     const info = await stat(file).catch(() => null);
     if (!info?.isFile()) throw new Error(`缺少发布资产文件：${asset.name}`);
-    if (Number.isInteger(asset.size) && asset.size > 0 && info.size !== asset.size)
+    if (
+      Number.isInteger(asset.size) &&
+      asset.size > 0 &&
+      info.size !== asset.size
+    )
       throw new Error(
         `发布资产大小不一致：${asset.name}（本地 ${info.size} 字节，GitHub ${asset.size} 字节）`,
       );
@@ -369,7 +209,10 @@ export async function uploadReleaseAssets({
     try {
       response = await fetchImpl(url, {
         method: "PUT",
-        headers: { "PRIVATE-TOKEN": config.token, "Content-Length": String(info.size) },
+        headers: {
+          "PRIVATE-TOKEN": config.token,
+          "Content-Length": String(info.size),
+        },
         body: createReadStream(file),
         duplex: "half",
       });
@@ -386,41 +229,162 @@ export async function uploadReleaseAssets({
   return uploaded;
 }
 
+export async function validateLocalAssets({ config, release }) {
+  if (!config.assetDir) throw new Error("缺少发布附件目录 ASSET_DIR");
+  const seen = new Set();
+  for (const asset of release.assets) {
+    if (basename(asset.name) !== asset.name || seen.has(asset.name))
+      throw new Error(`非法或重复附件名：${asset.name}`);
+    seen.add(asset.name);
+    const path = join(config.assetDir, asset.name);
+    const info = await stat(path).catch(() => null);
+    if (!info?.isFile()) throw new Error(`缺少发布附件：${asset.name}`);
+    if (info.size !== asset.size)
+      throw new Error(`附件大小不一致：${asset.name}`);
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(path)) hash.update(chunk);
+    if (asset.digest !== `sha256:${hash.digest("hex")}`)
+      throw new Error(`附件摘要不一致：${asset.name}`);
+  }
+}
+
+export async function verifyPackageFiles({ client, config, release }) {
+  const packages = await listAll(
+    client,
+    `/packages?package_type=generic&package_name=${config.packageName}&package_version=${encodeURIComponent(config.packageVersion)}`,
+  );
+  const files = [];
+  for (const pkg of packages.filter(
+    (p) => p.name === config.packageName && p.version === config.packageVersion,
+  ))
+    files.push(...(await listAll(client, `/packages/${pkg.id}/package_files`)));
+  for (const asset of release.assets) {
+    const matches = files.filter((f) => f.file_name === asset.name);
+    if (
+      !matches.length ||
+      matches.some(
+        (f) =>
+          f.size !== asset.size || `sha256:${f.file_sha256}` !== asset.digest,
+      )
+    )
+      throw new Error(`GitLab 包文件大小或摘要不一致：${asset.name}`);
+  }
+  return files;
+}
+
 export async function syncGitLabRelease({
   env = process.env,
   release,
   fetchImpl = fetch,
-  runGit = runGitCommand,
   log = console.log,
 } = {}) {
   const config = resolveSyncConfig(env);
-  const metadata =
-    release ?? JSON.parse(await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8"));
-  validateRelease(metadata, config.tag);
-  log(`同步 ${config.tag} 到 ${config.webUrl}`);
-  await pushSourceRefs({ config, runGit, log });
-  const uploaded = config.uploadAssets
-    ? await uploadReleaseAssets({ config, release: metadata, fetchImpl, log })
-    : new Map();
   const client = createGitLabClient({ config, fetchImpl });
-  const outcome = await upsertRelease({ client, config, release: metadata, log });
-  await syncAssetLinks({
-    client,
+  const snapshot = await inspectGitLab({ client });
+  if (config.reportPath)
+    await writeFile(
+      config.reportPath,
+      JSON.stringify({ before: snapshot }, null, 2) + "\n",
+    );
+  log(
+    JSON.stringify({
+      defaultBranch: snapshot.project.default_branch,
+      branches: snapshot.branches.map((b) => ({
+        name: b.name,
+        sha: b.commit.id,
+      })),
+      tags: snapshot.tags.map((t) => ({ name: t.name, sha: t.commit.id })),
+      releases: snapshot.releases.map((r) => r.tag_name),
+    }),
+  );
+  if (config.inspectOnly) return { inspected: true };
+  const metadata =
+    release ??
+    JSON.parse(
+      await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8"),
+    );
+  validateRelease(metadata, config.tag);
+  // 删除旧源码标签会同时影响 Release，迁移前先阻止未知其它版本被误处理。
+  if (
+    config.cleanupSource &&
+    (snapshot.tags.some((t) => t.name !== config.tag) ||
+      snapshot.releases.some((r) => r.tag_name !== config.tag))
+  )
+    throw new Error("发现其它标签或 Release，停止源码迁移并先调查");
+  await validateLocalAssets({ config, release: metadata });
+  const uploaded = await uploadReleaseAssets({
     config,
-    links: buildAssetLinks({ release: metadata, uploaded }),
+    release: metadata,
+    fetchImpl,
     log,
   });
-  log(`GitLab Release 已同步：${config.webUrl}/-/releases/${encodeURIComponent(config.tag)}`);
+  await verifyPackageFiles({ client, config, release: metadata });
+  log(`GitLab 已校验全部 ${metadata.assets.length} 个包文件大小与 SHA256`);
+  const metadataSha = await ensureMetadataBranch({ client, config });
+  await ensureReleaseTag({ client, config, metadataSha, log });
+  const outcome = await upsertRelease({
+    client,
+    config,
+    release: metadata,
+    log,
+  });
+  const links = buildAssetLinks({ release: metadata, uploaded });
+  await syncAssetLinks({ client, config, links, log });
+  const actual = await checked(
+    client,
+    "GET",
+    `/releases/${encodeURIComponent(config.tag)}`,
+  );
+  if (
+    actual.commit?.id !== metadataSha ||
+    links.some(
+      (link) =>
+        !actual.assets?.links?.some(
+          (a) => a.name === link.name && a.url === link.url,
+        ),
+    )
+  )
+    throw new Error("GitLab Release 回读校验失败");
+  if (config.cleanupSource)
+    await cleanupSourceBranches({ client, config, snapshot, log });
+  const after = await inspectGitLab({ client });
+  if (
+    after.branches.some(
+      (b) => b.name !== config.metadataBranch || b.commit.id !== metadataSha,
+    ) ||
+    after.tags.some((t) => t.commit.id !== metadataSha)
+  )
+    throw new Error("GitLab 仍存在源码引用，发布未完成");
+  if (config.reportPath)
+    await writeFile(
+      config.reportPath,
+      JSON.stringify(
+        {
+          before: snapshot,
+          after,
+          files: metadata.assets.map((a) => ({
+            name: a.name,
+            size: a.size,
+            digest: a.digest,
+          })),
+          metadataSha,
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+  log(
+    `GitLab Release 已同步：${config.webUrl}/-/releases/${encodeURIComponent(config.tag)}；全部附件存储在 GitLab，源码引用为零`,
+  );
   return { outcome, tag: config.tag, uploaded: uploaded.size };
 }
 
-async function main() {
-  await syncGitLabRelease();
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   try {
-    await main();
+    await syncGitLabRelease();
   } catch (error) {
     console.error(`[gitlab-sync] ${messageOf(error)}`);
     process.exitCode = 1;
