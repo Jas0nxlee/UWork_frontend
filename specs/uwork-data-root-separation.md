@@ -1,0 +1,111 @@
+# UWork 独立数据根（与 ZCode 分离）
+
+## 决策（2026-10-05）
+
+UWork 使用自己的用户级数据根，**不迁移**上游 ZCode 的任何既有数据：首次启动即为空目录，用户按需重新登录与配置。
+
+- 数据根：`{dataBaseDir}/.uwork`（`getUWorkDataRootDir()`）。app 配置目录为 `{dataBaseDir}/.uwork/v2`，包含 setting.json、credentials.json、provider_config.json、sessions、tasks-index、logs、crash、certs、enterprise-identity.json、ucas-gateway.json、checkpoints、feedback 等。
+- 覆盖变量：`UWORK_DATA_BASE_DIR` 优先；`ZCODE_DATA_BASE_DIR` 仅作旧脚本兼容回退。
+- 设置启动目录：`{用户主目录}/.uwork/v2/setting.json`（`settingService.getSettingsDir()` 与数据根同名）。设置在数据根覆盖生效前读取，因此必须落在同一命名空间。
+- Electron 运行时身份：应用名与 userData 目录统一为 `UWork` / `UWork Dev` / `UWork Preview`；不再复用 `ZCode*` 目录，浏览器 profile 与单实例锁与上游分离。
+- Agent/CLI 用户级存储：Host 下发 `ZCODE_STORAGE_DIR={dataBaseDir}/.uwork`（用户显式设置时不覆盖）。**所有用户级路径都必须经 `@zcode/shared` 的 `resolveUserStorageRoot()` / `resolveUserCliRoot()` / `resolveUserCliConfigPath()` 解析**（2026-10-08 补），包括 CLI 用户配置 `config.json`（插件启用、MCP、技能开关）、`db`、`log`、`debug`/`rollout`、`workflows`、用户技能根与桌面侧插件同步根；未下发 storage root 时回落上游 `~/.zcode`。
+- 用户内容的归属规则：两个产品共享的约定（`~/.agents/skills`、`~/.agents/mcp.json` 等）留在原处；UWork 自己读写的用户级内容（原生技能根、用户命令、全局 workflow、插件镜像、MCP 用户配置）落 `{dataRoot}` 下，不再读写 `~/.zcode` 对应目录。
+- **桌面主进程**（启动早于设置服务，不能 import 服务侧 helper）：统一走新增的 `packages/desktop/src/main/desktopHomePath.ts`（`resolveDesktopHomePath` / `resolveDesktopDataRootDir` / `resolveDesktopCliDir` / `resolveDesktopSettingsFile` / `resolveDesktopPluginsDir`，基准优先级 `UWORK_DATA_BASE_DIR` > `ZCODE_DATA_BASE_DIR` > `ZCODE_DESKTOP_HOME_DIR` > `HOME`）。已改用的点：**MCP 用户目录**（`mcpUserDirectory`，`<dataRoot>/cli/config.json` —— 这是真正持久化 MCP 服务的路径）、硬件加速与数据根 bootstrap 读的 setting.json、`index.ts` 的窗口设置文件、诊断导出（`exportLogs` 的 CLI 目录与日志包内标签、Computer Use run 目录）。
+
+## 边界
+
+- 不做任何复制或迁移：`~/.zcode` 与 `~/.uwork` 互不影响；升级 UWork 不读取旧根，也不删除旧根。
+- 仓库内的工作区级 `.zcode/` 约定（`AGENTS.md`、`config.json`、`agents/`、`workflow-runs/` 等）属于项目内容，不是用户级数据根，保持不变。
+- 已知未覆盖：远端 SSH 主机上的 `~/.zcode/tmp/prompt-attachments` 等路径仍保持上游默认，待远端 Agent env 一并下发后切换。
+- ~~CLI 用户配置文件不跟随数据根~~ **已于 2026-10-08 修复**：此前 `plugins.enabledPlugins`（插件启用）与 `mcp.servers`（MCP 服务）写在 `~/.zcode/cli/config.json`，而插件缓存/市场状态在 `~/.uwork/cli/plugins/`。现在两侧统一走 storage root：CLI 侧 `file-config.adapter.getDefaultConfigPath()`、会话 DB、日志目录、debug/rollout、用户技能根（`adapters/src/skills/roots.ts`）、全局 workflow（`saved-workflows`、`script-workflow-*`）、debug server 的默认源；桌面侧 `skillsService`、`pluginSyncService`、`settingsSyncService`、`commandsService`、`subagentsService`/`subagentStorage`、`node.ts#hasGlobalCliZCodeCuaServer` 全部改用 `services/src/paths.ts` 的 `getUworkUserCliConfigPath()` / `getUworkUserPluginsRoot()` / `getUWorkDataRootDir()`。存量已迁移（UWork 拥有的两个键搬入 `~/.uwork/cli/config.json`，ZCode 自己的条目原样留在原文件，原文件留 `.bak-*` 备份）。
+
+## 验收
+
+### 2026-10-18 测试装配约束
+
+主进程测试通过受控环境变量为 `resolveDesktopHomePath` 提供临时基准目录；服务测试同时使用 `setDataBaseDir`，清理时恢复全部覆盖。bootstrap 不再接受废弃的 home 参数。用户级 fixture 与断言均使用 `.uwork`，项目级 `.zcode` 保留。手动导出归档标签使用 `.uwork`，反馈归档既有 `.zcode/cli`、`.zcode/computer-use/run` 标签暂保留兼容；两者均从 UWork 源目录提供数据。手动导出的 3 天 CLI 日志窗口同时识别当前与历史归档前缀，继续验证脱敏、凭据排除和时间窗口，不能通过跳过验证或恢复上游目录使测试变绿。
+
+- 自动化验收入口为 `scripts/test/uworkBranding.test.ts`，由桌面发布 CI 的行为测试步骤执行。Desktop Main 的 `desktopRuntimeEnv` 唯一负责 Electron 应用名、userData 与 sessionData；服务路径 API 唯一负责用户级数据根；测试不增加目录写入或迁移逻辑。
+- Node 测试执行源码中的运行时身份与路径初始化声明，以 Electron appData 为受控边界：正式、开发、预览模式分别返回 `UWork`、`UWork Dev`、`UWork Preview`，默认 sessionData 为对应 userData 下的 `session`，均不落入 `ZCode*` 目录。
+- 保留既有显式覆盖接口：`ZCODE_DESKTOP_APPLICATION_NAME`、`ZCODE_DESKTOP_USER_DATA_DIR`、`ZCODE_DESKTOP_SESSION_DATA_DIR` 优先于默认值；启用 `ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA` 时不覆盖 Electron 默认目录，显式 userData 仍优先。
+- 每个独立子进程通过服务公开路径 API 验证默认根、`UWORK_DATA_BASE_DIR` 优先级、空值回退与 `ZCODE_DATA_BASE_DIR` 兼容回退，配置目录必须为所选数据根下的 `.uwork/v2`。辅助程序安装文件名和工作区内 `.zcode/AGENTS.md` 的兼容性断言继续保留。
+- 全新环境启动 UWork 后只创建 `~/.uwork`（或 `UWORK_DATA_BASE_DIR` 指向的目录）与 `~/Library/Application Support/UWork*`；`~/.zcode`、`~/Library/Application Support/ZCode*` 的 mtime 不因 UWork 运行而变化。
+- 设置、凭据、供应商配置、会话、日志、企业身份与网关状态全部落在 UWork 根内；重启后仍从新根读取。
+- 本机实测（2026-10-05）：以产品默认根启动 dev 实例，`~/.uwork/v2` 首次创建（setting.json `recentProjects: []`），扫码登录后 credentials/provider_config/ucas-gateway 均写入新根；同一时段 `~/.zcode/v2/setting.json` 的写入来自同时运行的上游 ZCode.app，UWork 日志中的设置写入路径只有 `~/.uwork/v2/setting.json`。
+- 本机实测（2026-10-08，用户配置文件迁移后重启）：迁移前把 UWork 拥有的两个键搬进 `~/.uwork/cli/config.json` 并记录 `~/.zcode/cli/config.json` 的 mtime 与 sha256；重启 dev 实例并打开插件商店/管理已安装后，
+  - `~/.zcode/cli/config.json` 的 mtime 与 sha256 **保持迁移时刻不变**，`~/.zcode/cli/` 下近 3 分钟的新文件只有本机 ZCode 会话自己的 db/log/rollout/artifacts；
+  - 新实例读到的是 UWork 根：`kb-search@ucas-aihub` 在「管理已安装」里显示为启用（该键已从 ZCode 配置里删除，只能来自新根）；
+  - 应用日志出现 `[mcpStore] loadMcpFromUserDirectory`（MCP 用户目录读取路径已走新根），`ucas-rag` 服务器条目位于 `~/.uwork/cli/config.json`；
+  - `~/.uwork/cli/` 下出现 `config.json`、`log`、`debug`、`exec`、`plugins`，即日志目录等也已随 storage root 落位。
+- 迁移带来的行为变化（有意为之）：UWork 的用户技能根从 `~/.zcode/skills` 变为 `~/.uwork/skills`（`.agents/skills` 仍共享）。迁移当时 UWork 可见 `~/.agents/skills` 的 9 个技能，`~/.zcode/skills` 的 10 个不再出现在 UWork；需要的话把它们拷进 `~/.uwork/skills/` 或从公司技能市场重新安装。
+- **全新环境实测（2026-10-08）**：用临时基准目录起全新实例 —— `UWORK_DATA_BASE_DIR=/tmp/uwork-fresh/home`、`ZCODE_DESKTOP_HOME_DIR=/tmp/uwork-fresh/home`、`ZCODE_DESKTOP_USER_DATA_DIR=/tmp/uwork-fresh/userdata`（dev 运行时还需 `scripts/desktop-enterprise-identity.ts stage` 那份公开企微配置，否则登录页显示「暂未配置」）。结果：
+  - `{临时 home}/.uwork/v2` 与 `.uwork/cli` 从零创建；**`{临时 home}/.zcode` 未被创建**；登录后自动配置的密钥、装的 `kb-search@ucas-aihub`（启用状态写在 `.uwork/cli/config.json`）都在临时根内。
+  - 真实侧 `~/.uwork`、`~/.zcode` 的 mtime 与 sha256 全程不变。
+  - **这一轮抓到了第一版迁移的漏项**：桌面主进程的 MCP 用户目录仍按 `homedir()/.zcode` 解析，导致在「HOME 未变、仅数据根被重定向」的环境里，MCP 被写进真实 `~/.zcode/cli/config.json`（按名字审计 `packages/desktop/src/main/*.ts` 时漏了子目录）。补上 `desktopHomePath.ts` 后复测：MCP 写入落 `<临时数据根>/cli/config.json`，真实两份配置的 hash/mtime 不变。
+- 仍保留的 dev 专属例外：`desktopRuntimeEnv.ts` 里「未签名 CUA helper」的默认查找路径仍指 legacy home（仅当开发者显式打開 `ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL` 时生效，且可用 `ZCODE_CUA_BUNDLED_HELPER_APP_PATH` 覆盖；不落盘任何状态）。
+
+## 审查修复契约（2026-10-09）
+
+运行时数据根由 services 的 bootstrap 初始化持有；Desktop MCP 在初始化后通过公开路径 API 读取该根。启动 setting.json 仍固定在 bootstrap home，不使用运行时根反推。CLI storage root 独立于 v2：显式 ZCODE_STORAGE_DIR 优先，否则为有效 dataBaseDir/.uwork；cli 兼容形式保留。服务技能、命令、子代理、插件同步、MCP 与 Agent 使用相同 storage root。
+
+更换 dataBaseDir 复制整个 UWork 自有根（v2、cli 配置/启停状态/缓存、skills、commands、agents、plugins、workflows、workspace 等），不读取 .zcode 或共享 .agents。仅排除 v2/setting.json 及其原子写入临时文件、符号链接；迁移 JSON 中指向旧 UWork 根的绝对路径重定位到新根。显式外部 CLI storage root 不移动。
+
+旧根 → 临时目标 → 校验文件内容 → 重定位元数据 → 原子激活目标 → 保存 bootstrap 设置 → 重启读者。旧根始终保留；复制/校验失败不切换设置。非空目标拒绝并提示选空目录，不默默丢弃目标或旧数据。源/目标嵌套拒绝。验收覆盖目标冲突、复制失败、MCP 增改删与重启、所有路径优先级。
+
+路径键迁移仅适用于 cli/config.json 的 skills（规范化 SKILL.md 绝对路径 → enable）和 command（命令文件绝对路径 → enable）两个受控映射。普通对象键、工作区路径和共享 .agents 路径保持原样；UWork 根内键重定位后原禁用状态必须保持。技能配置读写在调用时解析有效 CLI 根，避免 bootstrap 前导入缓存旧路径。
+
+## Subagent 显式用户目录隔离（2026-10-18）
+
+- `SubagentsService({ homeDir })` 的显式目录是实例级隔离边界：用户 agents、state、CLI 配置与插件启停全部从 `homeDir/.uwork` 解析，不能读取进程真实用户目录或另一实例的配置。无显式目录时继续使用服务公开路径 API，保留运行时数据根与显式 CLI storage root 的优先级。
+- CLI 配置中的 `storage.dir` 继续决定 agents/state/plugin cache 的存储根，`~/` 相对于实例的 homeDir 展开；插件启停仍从该实例的 CLI 配置读取。工作区 `.zcode/agents` 保持项目约定。
+- 路径解析器唯一拥有目录选择；Settings 写入与 Host watcher 复用同一解析结果，不增加模型回退或配置写入路径。父轮读取完整快照后固定 definitions，修改配置在下一父轮生效；已启动子任务保留原选择。
+- 回归覆盖：两个显式 homeDir 的配置、内置模型覆盖、用户 profile、插件启停互相隔离；未指定 homeDir 使用运行时路径；测试样例不能出现在真实用户目录。无效显式 provider 仍返回 `provider-not-found`。
+
+```mermaid
+sequenceDiagram
+    participant Caller as Settings / 测试实例
+    participant Paths as Subagent 路径解析器
+    participant Disk as 实例目录
+    participant Host as Host snapshot
+    participant Parent as CLI 父轮
+    Caller->>Paths: 显式 homeDir / 默认运行时根
+    Paths-->>Caller: 同一实例的 config、agents、state 路径
+    Caller->>Disk: 保存 profile / 模型覆盖
+    Disk-->>Host: watcher 发布完整快照
+    Parent->>Host: 新父轮 readRuntimeConfig
+    Host-->>Parent: 固定本轮 definitions
+```
+
+## 上游同步回归修复（2026-10-14）
+
+`paths.copyDataDirectory` 继续作为公开入口，唯一实现委托 `dataDirectoryMigration.ts`。上游的 `.zcode/v2` 复制实现不能替换 UWork 的整根迁移，否则没有旧 ZCode 数据的用户会收到 ENOENT，同时安装过 ZCode 的用户会复制另一应用的数据后切换到空的 UWork 根。
+
+迁移事务只拥有目标文件树；SettingService 仍唯一拥有 bootstrap 设置的提交。验收同时构造 `.uwork` 和 `.zcode/v2`：迁移完整的 UWork 状态、保留源目录、不向目标复制任何 ZCode 数据；不存在 `.zcode` 时同样成功。非空目标与嵌套目录继续拒绝，软链接和 bootstrap 中间文件继续排除。
+
+```mermaid
+sequenceDiagram
+    participant Settings as SettingService
+    participant Paths as 公开 paths API
+    participant Migration as UWork 迁移事务
+    participant Disk as 文件系统
+    Settings->>Paths: copyDataDirectory(oldBase, newBase)
+    Paths->>Migration: 委托唯一迁移实现
+    Migration->>Disk: .uwork 整根复制到临时目标
+    Migration->>Disk: 校验、重定位、原子激活
+    Migration-->>Settings: 成功；失败抛错且旧根保留
+    Settings->>Disk: 成功后保存 bootstrap dataBaseDir
+```
+
+## 技能面板的插件缓存读取（2026-10-21）
+
+技能面板读取的 CLI 配置、插件缓存与安装记录必须使用同一 UWork 用户级存储根。`storage.dir` 未显式配置时，`SkillsService` 使用既有 `getUworkUserStorageRoot()` 解析器，不再独立回退 `~/.zcode`；显式 `storage.dir` 与 `~/` 展开仍按现有规则生效。用户级 `.uwork/skills` 与共享 `.agents/skills` 保留原来源语义，项目级 `.zcode/skills` 不改名。
+
+验收同时布置 `.uwork` 与 `.zcode` 插件缓存：只展示已配置产品根内的插件，不能读取上游插件；显式存储根只展示该根的安装。技能启停仍由同一 CLI 配置拥有，不新增持久化状态。
+
+## 命令与显式导入的用户根（2026-10-21）
+
+CommandsService 的用户命令读取、写入、目录定位和默认插件缓存统一使用现有 `getUworkUserStorageRoot()`；描述符只决定项目目录与共享 `.agents` 来源，不能绕过解析器另拼用户 `.zcode`。显式 `storage.dir` 继续优先，项目 `.zcode/commands` 不变。
+
+SettingsSyncService 的用户技能导入和 Claude `CLAUDE.md`→`AGENTS.md` 目标也从同一公开解析器派生为 `.uwork/skills` 与 `.uwork/AGENTS.md`。外部 Claude/Codex 路径仍为来源；用户的 `.zcode` 内容既不参与目标重名判断，也不能被覆盖或新建。项目级导入继续使用项目 `.zcode`，不自动迁移任何上游用户数据。
+
+验收同时构造上游与产品根：命令列表/新建只使用产品根，插件默认缓存不读上游；技能同名导入不会因上游文件被误判已存在；Claude 文档在 overwrite=false/true 下均仅写产品目标，上游原文不变，空环境不创建 `.zcode`。

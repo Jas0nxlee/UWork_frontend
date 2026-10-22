@@ -1,0 +1,276 @@
+/* path 规则集中维护：旧 task 快照与 provider 配置路径仍在这里收口。 */
+import { createHash } from "node:crypto";
+import { join, win32 } from "node:path";
+import { homedir } from "node:os";
+import {
+  DATA_BASE_DIR_FORBIDDEN_WINDOWS_INSTALL_DIR_ERROR_CODE,
+  LEGACY_DATA_BASE_DIR_ENV,
+  UWORK_DATA_BASE_DIR_ENV,
+  UWORK_DATA_ROOT_DIR_NAME,
+  ZCODE_AGENT_RUNTIME,
+  resolveUserCliRoot,
+  resolveUserStorageRoot,
+} from "@zcode/shared";
+
+let _dataBaseDir: string | null = null;
+export const ZCODE_WINDOWS_APP_INSTALL_DIR_ENV = "ZCODE_WINDOWS_APP_INSTALL_DIR";
+const envDataBaseDir =
+  process.env[UWORK_DATA_BASE_DIR_ENV]?.trim() ||
+  process.env[LEGACY_DATA_BASE_DIR_ENV]?.trim() ||
+  null;
+const defaultDataBaseDir = process.env.HOME?.trim() || homedir();
+
+export interface DataBaseDirTargetValidationOptions {
+  platform?: NodeJS.Platform | string;
+  env?: Record<string, string | undefined>;
+  appInstallDir?: string | null;
+}
+
+export type DataBaseDirTargetValidationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      code: typeof DATA_BASE_DIR_FORBIDDEN_WINDOWS_INSTALL_DIR_ERROR_CODE;
+      forbiddenDir: string;
+    };
+
+/** Set the base directory for app data (replaces homedir() prefix). */
+export function setDataBaseDir(dir: string | null): void {
+  _dataBaseDir = dir?.trim() || null;
+}
+
+/** Get the current base directory. Priority: setDataBaseDir() > env UWORK_DATA_BASE_DIR > env ZCODE_DATA_BASE_DIR（兼容） > homedir(). */
+export function getDataBaseDir(): string {
+  if (_dataBaseDir) return _dataBaseDir;
+  if (envDataBaseDir) return envDataBaseDir;
+  // 服务实例会启动后台刷新任务；若每次调用都动态读取 HOME，
+  // 测试或宿主切换环境变量后，旧实例可能把数据写到新实例目录。
+  return defaultDataBaseDir;
+}
+
+/** {dataBaseDir}/.uwork —— UWork 自己的用户级数据根，与上游 ZCode 的 ~/.zcode 分离。 */
+export function getUWorkDataRootDir(): string {
+  return join(getDataBaseDir(), UWORK_DATA_ROOT_DIR_NAME);
+}
+
+/** 兼容既有调用名；返回的是 UWork 数据根（不再是 .zcode）。 */
+export const getZCodeDataRootDir = getUWorkDataRootDir;
+
+/** 非项目对话共享的真实工作目录；默认 ~/.zcode/workspace/default。 */
+export function getConversationWorkspaceDir(): string {
+  return join(getZCodeDataRootDir(), "workspace", "default");
+}
+
+/** {dataBaseDir}/.uwork/v2 */
+export function getAppConfigDir(): string {
+  return join(getUWorkDataRootDir(), "v2");
+}
+
+/** CLI storage root 独立于应用 v2，复用 Agent 的覆盖优先级。 */
+export function getUworkUserStorageRoot(): string {
+  return resolveUserStorageRoot({
+    ...process.env,
+    ZCODE_STORAGE_DIR: process.env.ZCODE_STORAGE_DIR?.trim() || getUWorkDataRootDir(),
+  });
+}
+
+/** Agent/CLI 用户级目录 `<dataRoot>/cli`：与 Host 下发给 Agent 的 ZCODE_STORAGE_DIR 同根。 */
+export function getUworkUserCliRootDir(): string {
+  return resolveUserCliRoot({ ZCODE_STORAGE_DIR: getUworkUserStorageRoot() });
+}
+
+/**
+ * CLI 用户配置文件 `<dataRoot>/cli/config.json`：插件启用状态、MCP 服务、技能开关都在这里。
+ * 桌面侧读写必须与 Agent 同路径，否则两边各认一份（见 specs/uwork-data-root-separation.md）。
+ */
+export function getUworkUserCliConfigPath(): string {
+  return join(getUworkUserCliRootDir(), "config.json");
+}
+
+/** 桌面侧插件同步根 `<dataRoot>/plugins`（区别于 CLI 缓存 `<dataRoot>/cli/plugins`）。 */
+export function getUworkUserPluginsRoot(): string {
+  return join(getUworkUserStorageRoot(), "plugins");
+}
+
+function readEnvValue(env: Record<string, string | undefined>, key: string): string | undefined {
+  const direct = env[key]?.trim();
+  if (direct) {
+    return direct;
+  }
+
+  const lowerKey = key.toLowerCase();
+  for (const [candidateKey, value] of Object.entries(env)) {
+    if (candidateKey.toLowerCase() !== lowerKey) {
+      continue;
+    }
+    const trimmed = value?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizeWindowsComparablePath(pathValue: string): string | null {
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = win32.normalize(trimmed).replace(/[\\/]+$/, "");
+  if (!normalized) {
+    return null;
+  }
+
+  return win32
+    .resolve(normalized)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase();
+}
+
+function isWindowsPathEqualOrInside(pathValue: string, rootValue: string): boolean {
+  const normalizedPath = normalizeWindowsComparablePath(pathValue);
+  const normalizedRoot = normalizeWindowsComparablePath(rootValue);
+  if (!normalizedPath || !normalizedRoot) {
+    return false;
+  }
+
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}\\`);
+}
+
+function collectWindowsForbiddenAppInstallDirs(
+  options: Required<Pick<DataBaseDirTargetValidationOptions, "env">> &
+    Pick<DataBaseDirTargetValidationOptions, "appInstallDir">,
+): string[] {
+  const env = options.env;
+  const programFiles = readEnvValue(env, "ProgramFiles");
+  const programFilesX86 = readEnvValue(env, "ProgramFiles(x86)");
+  const programW6432 = readEnvValue(env, "ProgramW6432");
+  const localAppData = readEnvValue(env, "LOCALAPPDATA");
+  const candidates = [
+    options.appInstallDir,
+    readEnvValue(env, ZCODE_WINDOWS_APP_INSTALL_DIR_ENV),
+    programFiles ? win32.join(programFiles, "ZCode") : null,
+    programFilesX86 ? win32.join(programFilesX86, "ZCode") : null,
+    programW6432 ? win32.join(programW6432, "ZCode") : null,
+    localAppData ? win32.join(localAppData, "Programs", "ZCode") : null,
+  ];
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const candidate of candidates) {
+    const normalized =
+      typeof candidate === "string" ? normalizeWindowsComparablePath(candidate) : null;
+    if (!candidate || !normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(candidate);
+  }
+
+  return result;
+}
+
+export function validateDataBaseDirTarget(
+  targetBaseDir: string,
+  options: DataBaseDirTargetValidationOptions = {},
+): DataBaseDirTargetValidationResult {
+  if ((options.platform ?? process.platform) !== "win32") {
+    return { ok: true };
+  }
+
+  for (const forbiddenDir of collectWindowsForbiddenAppInstallDirs({
+    env: options.env ?? process.env,
+    appInstallDir: options.appInstallDir ?? null,
+  })) {
+    if (isWindowsPathEqualOrInside(targetBaseDir, forbiddenDir)) {
+      return {
+        ok: false,
+        code: DATA_BASE_DIR_FORBIDDEN_WINDOWS_INSTALL_DIR_ERROR_CODE,
+        forbiddenDir,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function getExportLogStageDir(): string {
+  return join(getZCodeDataRootDir(), "export-log-stage");
+}
+
+export function getExportLogDir(): string {
+  return join(getZCodeDataRootDir(), "export-log");
+}
+
+export function getFeedbackRootDir(): string {
+  return join(getZCodeDataRootDir(), "feedback");
+}
+
+export function getFeedbackAttachmentDir(): string {
+  return join(getFeedbackRootDir(), "attachments");
+}
+
+export function getFeedbackLogArchiveDir(): string {
+  return join(getFeedbackRootDir(), "logs");
+}
+
+export function getGitCheckpointIndexRootDir(): string {
+  return join(getZCodeDataRootDir(), "git-checkpoint-index");
+}
+
+/** ~/.zcode/v2/tasks-index.sqlite */
+export function getTasksIndexDatabasePath(): string {
+  return join(getAppConfigDir(), "tasks-index.sqlite");
+}
+
+/** workspace 级身份键：远程优先使用 workspaceIdentity，本地回退 workspacePath。 */
+function getWorkspaceKey(workspacePath: string, workspaceIdentity?: string): string {
+  return workspaceIdentity?.trim() || workspacePath;
+}
+
+/** 与 ZCode session 持久化一致：使用 workspaceKey 的 SHA-256 前 12 位 */
+export function getWorkspaceHash(workspacePath: string, workspaceIdentity?: string): string {
+  return createHash("sha256")
+    .update(getWorkspaceKey(workspacePath, workspaceIdentity))
+    .digest("hex")
+    .slice(0, 12);
+}
+
+/** ~/.zcode/v2/sessions/{workspaceHash} */
+function getTaskSessionDir(workspacePath: string, workspaceIdentity?: string): string {
+  return join(getAppConfigDir(), "sessions", getWorkspaceHash(workspacePath, workspaceIdentity));
+}
+
+/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.json */
+export function getLegacyTaskSessionSnapshotPath(
+  workspacePath: string,
+  taskId: string,
+  workspaceIdentity?: string,
+): string {
+  return join(getTaskSessionDir(workspacePath, workspaceIdentity), `${taskId}.json`);
+}
+
+/** ~/.zcode/v2/sessions/{workspaceHash}/{taskId}.deleted.json */
+export function getLegacyDeletedTaskSessionSnapshotPath(
+  workspacePath: string,
+  taskId: string,
+  workspaceIdentity?: string,
+): string {
+  return join(getTaskSessionDir(workspacePath, workspaceIdentity), `${taskId}.deleted.json`);
+}
+
+/**
+ * GLM（唯一 agent provider）的配置目录：~/.zcode/cli。
+ * Bugfix：GLM 配置改为直接读写新版 zcode-cli 的全局配置目录，不做 workspace 隔离，
+ * 避免同机不同工作区配置漂移。
+ */
+export function getProviderWorkspaceConfigDir(): string {
+  return ZCODE_AGENT_RUNTIME.nativeConfigDir
+    ? join(getDataBaseDir(), ZCODE_AGENT_RUNTIME.nativeConfigDir)
+    : join(getDataBaseDir(), ".zcode", "cli");
+}
+
+// 上游只复制 .zcode/v2 会遗漏 UWork 自有状态甚至复制另一应用的数据；统一委托整根原子迁移。
+export { copyDataDirectory } from "./dataDirectoryMigration.js";
