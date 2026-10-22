@@ -11,7 +11,6 @@ const h = vi.hoisted(() => ({
   handlers: new Map<string, IpcHandler>(),
   listeners: new Map<string, IpcHandler>(),
   fromWebContents: vi.fn(),
-  registerWebRemoteControlIpcHandlers: vi.fn(),
   shellOpenExternal: vi.fn(),
   shellOpenPath: vi.fn(),
   configureRemoteUsageArmsTelemetry: vi.fn(),
@@ -51,9 +50,6 @@ vi.mock("../src/main/desktopArmsCustomEvent.js", () => ({
   dispatchFinalArmsCustomEvent: vi.fn(),
 }));
 
-vi.mock("../src/main/desktopWebRemoteControlIpc.js", () => ({
-  registerWebRemoteControlIpcHandlers: h.registerWebRemoteControlIpcHandlers,
-}));
 
 vi.mock("../src/main/desktopRemoteUsageArmsTelemetry.js", () => ({
   configureRemoteUsageArmsTelemetry: h.configureRemoteUsageArmsTelemetry,
@@ -81,13 +77,6 @@ function createOptions(overrides?: Partial<RemoteIpcOptions>): RemoteIpcOptions 
       platform: "darwin",
       appVersion: "1.0.0",
       armsEnv: "test",
-    },
-    webRemoteControlManager: {
-      notifyAuthStateChanged: vi.fn(),
-      authorizeStart: vi.fn(),
-      startAuthorized: vi.fn(),
-      stop: vi.fn(),
-      getStatus: vi.fn(),
     },
     createRemoteWorkspaceSession: vi.fn(async () => "remote-session-1"),
     disposeRemoteWorkspaceSession: vi.fn(),
@@ -129,7 +118,6 @@ describe("remote workspace connect telemetry IPC", () => {
     h.listeners.clear();
     h.fromWebContents.mockReset();
     h.fromWebContents.mockReturnValue({ id: 17 });
-    h.registerWebRemoteControlIpcHandlers.mockReset();
     h.shellOpenExternal.mockReset().mockResolvedValue(undefined);
     h.shellOpenPath.mockReset().mockResolvedValue("");
     h.configureRemoteUsageArmsTelemetry.mockReset();
@@ -157,10 +145,6 @@ describe("remote workspace connect telemetry IPC", () => {
         logger: expect.any(Object),
       }),
     );
-    expect(h.registerWebRemoteControlIpcHandlers).toHaveBeenCalledWith({
-      reportRemoteUsageEvent: expect.any(Function),
-      webRemoteControlManager: options.webRemoteControlManager,
-    });
   });
 
   it("只允许 main 进程打开 http/https/file URL", async () => {

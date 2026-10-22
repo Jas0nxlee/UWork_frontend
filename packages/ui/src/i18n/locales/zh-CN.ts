@@ -470,6 +470,7 @@ const zhCN: Record<string, string> = {
   "bots.privateDelivery.retryHint": "将以文本重新发送完整回复，可能重复已收到的内容。",
   "bots.privateDelivery.retryFailed": "发送失败，请查看错误详情后重试。",
   "bots.boundGroups.title": "已绑定群聊",
+  "bots.manage.open": "机器人通道",
   "bots.boundGroups.count": "{count} 个话题",
   "bots.boundGroups.countOne": "{count} 个话题",
   "bots.boundGroups.toggle": "启用群聊：{name}",

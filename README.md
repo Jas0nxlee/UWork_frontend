@@ -203,7 +203,7 @@ pnpm exec tsx --test packages/services/test/ucasGateway*.test.ts
 | `packages/ui`                                        | 共享 React 界面、hooks 和状态            |
 | `packages/services`                                  | 业务服务与持久化                         |
 | `packages/provider`、`packages/provider-node`        | 供应商配置、模型注册与 Node 实现         |
-| `packages/web`、`packages/server`                    | Web 客户端及 HTTP / WebSocket 服务       |
+| `packages/server`                                    | HTTP / WebSocket 服务                    |
 | `packages/shared`、`packages/rpc`、`packages/client` | 协议、RPC 与 Agent 客户端                |
 | `apps/zcode-cli`                                     | Agent、TUI、工具与执行运行时             |
 

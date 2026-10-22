@@ -39,7 +39,7 @@ describe("resolveFileDisplayDescriptor", () => {
         "utf8",
       );
       const webIcon = await readFile(
-        new URL(`packages/web/public/material-icons/${iconName}.svg`, repoRoot),
+        new URL(`packages/web-share/public/material-icons/${iconName}.svg`, repoRoot),
         "utf8",
       );
 

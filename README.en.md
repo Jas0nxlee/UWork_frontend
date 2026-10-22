@@ -205,7 +205,7 @@ The [enterprise identity Electron E2E script](packages/desktop/test/enterpriseId
 | `packages/ui`                                        | Shared React UI, hooks, and state                                |
 | `packages/services`                                  | Business services and persistence                                |
 | `packages/provider`, `packages/provider-node`        | Provider configuration, model registry, and Node implementations |
-| `packages/web`, `packages/server`                    | Web client and HTTP / WebSocket services                         |
+| `packages/server`                                    | HTTP / WebSocket services                                        |
 | `packages/shared`, `packages/rpc`, `packages/client` | Protocols, RPC, and Agent client                                 |
 | `apps/zcode-cli`                                     | Agent, TUI, tools, and execution runtime                         |
 

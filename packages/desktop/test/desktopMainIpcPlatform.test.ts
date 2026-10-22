@@ -121,7 +121,6 @@ describe("registerPlatformIpcHandlers", () => {
       acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
       syncTaskRealtimeWorkspaceKeys: vi.fn(),
       getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces: vi.fn(),
       deviceMid: "test-device-mid",
     });
 
@@ -152,7 +151,6 @@ describe("registerPlatformIpcHandlers", () => {
       acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
       syncTaskRealtimeWorkspaceKeys: vi.fn(),
       getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces: vi.fn(),
       deviceMid: "test-device-mid",
     });
     const handler = electronMocks.handlers.get(PlatformChannels.SelectDirectories);
@@ -190,7 +188,6 @@ describe("registerPlatformIpcHandlers", () => {
       acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
       syncTaskRealtimeWorkspaceKeys: vi.fn(),
       getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces: vi.fn(),
       deviceMid: "test-device-mid",
     });
 
@@ -205,50 +202,6 @@ describe("registerPlatformIpcHandlers", () => {
     );
 
     expect(syncWindowControlsOverlayForZoomLevel).toHaveBeenCalledWith(targetWindow, 2);
-  });
-
-  it("keeps local window tabs separate from the complete remote control workspace snapshot", async () => {
-    const { registerPlatformIpcHandlers } = await import("../src/main/desktopMainIpcPlatform.js");
-    const syncWebRemoteControlWorkspaces = vi.fn();
-    const targetWindow = { id: 7 };
-    electronMocks.browserWindowFromWebContents.mockReturnValue(targetWindow);
-
-    registerPlatformIpcHandlers({
-      logger: { info: vi.fn(), warn: vi.fn() },
-      applyApplicationLocale: vi.fn(async () => {}),
-      focusWorkspaceInExistingWindow: vi.fn(() => ({ activated: false })),
-      windowWorkspaceMap: new Map(),
-      windowUnreadCountMap: new Map(),
-      currentApplicationLocale: () => "en-US",
-      executeDesktopCommand: vi.fn(async () => {}),
-      acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
-      syncTaskRealtimeWorkspaceKeys: vi.fn(),
-      getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces,
-      deviceMid: "test-device-mid",
-    });
-
-    electronMocks.handlers.get(PlatformChannels.SyncWindowTabs)?.({ sender: {} }, [
-      "/workspace/one",
-      "/workspace/two",
-    ]);
-
-    expect(syncWebRemoteControlWorkspaces).not.toHaveBeenCalled();
-    const workspaces = [
-      { kind: "local", label: "Local", workspacePath: "/workspace/one" },
-      {
-        kind: "remote",
-        label: "Remote",
-        workspacePath: "/remote",
-        workspaceIdentity: "ssh://host/remote",
-        remoteSessionId: "remote-1",
-      },
-    ];
-    electronMocks.handlers.get(PlatformChannels.SyncWebRemoteControlWorkspaces)?.(
-      { sender: {} },
-      workspaces,
-    );
-    expect(syncWebRemoteControlWorkspaces).toHaveBeenCalledWith(7, workspaces);
   });
 
   it("runs generalized CUA permission onboarding for Screen Recording", async () => {
@@ -270,7 +223,6 @@ describe("registerPlatformIpcHandlers", () => {
       acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
       syncTaskRealtimeWorkspaceKeys: vi.fn(),
       getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces: vi.fn(),
       deviceMid: "test-device-mid",
     });
 
@@ -326,7 +278,6 @@ describe("registerPlatformIpcHandlers", () => {
       acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
       syncTaskRealtimeWorkspaceKeys: vi.fn(),
       getUpdateState: vi.fn(() => ({ status: "idle" })),
-      syncWebRemoteControlWorkspaces: vi.fn(),
       deviceMid: "test-device-mid",
     });
 

@@ -59,7 +59,6 @@ jobs:
           scripts/test/desktop-release.test.mjs
           scripts/test/desktop-asar-runtime.test.mjs
           scripts/test/desktop-packaging-config.test.mjs
-          scripts/test/web-remote-uwork-integration.test.mjs
           scripts/test/arms-patch-install-contract.test.mjs
           scripts/test/generate-third-party-notices.test.mjs
           scripts/third-party-notices.test.mjs

@@ -148,7 +148,6 @@ modules:
       - ui
       - next-frame
       - conversation-workspace-target
-      - web-remote-control-ui
       - remote-connection-flow
     publicEntrypoints:
       - packages/ui/src/project-sidebar/index.tsx
@@ -475,32 +474,6 @@ modules:
       - app
       - adapters
       - ui
-  # desktop-web-remote-relay：由 architecture:adopt 登记
-  - id: desktop-web-remote-relay
-    roots:
-      - packages/desktop/src/main/web-remote-relay
-      - packages/desktop/src/main/desktopMobileRemoteControlConfig.ts
-    managed: true
-    requires:
-      - client
-      - desktop
-      - shared
-      - services
-      - web-remote-relay
-    publicEntrypoints:
-      - packages/desktop/src/main/web-remote-relay/index.ts
-      - packages/desktop/src/main/web-remote-relay/contract.ts
-      - packages/desktop/src/main/desktopMobileRemoteControlConfig.ts
-    layers:
-      contract: [contract.ts, contracts]
-      adapters: .
-    owner: remote
-    layerOrder:
-      - contract
-      - domain
-      - app
-      - adapters
-      - ui
   # mobile-ui：由 architecture:adopt 登记
   - id: mobile-ui
     roots:
@@ -517,63 +490,6 @@ modules:
     layers:
       contract: contract.ts
       ui: .
-    owner: remote
-    layerOrder:
-      - contract
-      - domain
-      - app
-      - adapters
-      - ui
-  # web-remote-control-ui：由 architecture:adopt 登记
-  - id: web-remote-control-ui
-    roots:
-      - packages/ui/src/web-remote-control
-    managed: true
-    requires:
-      - mobile-ui
-      - services
-      - shared
-      - ui
-    publicEntrypoints:
-      - packages/ui/src/web-remote-control/index.ts
-      - packages/ui/src/web-remote-control/contract.ts
-      - packages/ui/src/web-remote-control/WebRemoteControlDeviceHeader.tsx
-      - packages/ui/src/web-remote-control/app/useWebRemoteControlAuthSync.ts
-    layers:
-      contract: contract.ts
-      domain: domain
-      app: app
-      ui: .
-    owner: remote
-    layerOrder:
-      - contract
-      - domain
-      - app
-      - adapters
-      - ui
-  # web-remote-control：由 architecture:adopt 登记
-  - id: web-remote-control
-    roots:
-      - packages/web/src/web-remote-control
-    managed: true
-    requires:
-      - client
-      - mobile-ui
-      - shared
-      - ui
-      - web
-      - web-remote-relay
-    publicEntrypoints:
-      - packages/web/src/web-remote-control/index.ts
-      - packages/web/src/web-remote-control/contract.ts
-      - packages/web/src/web-remote-control/views.ts
-      - packages/web/src/web-remote-control/adapters/webRemoteControlThemeSeed.ts
-    layers:
-      contract: contracts
-      domain: domain
-      app: app
-      adapters: adapters
-      ui: ui
     owner: remote
     layerOrder:
       - contract

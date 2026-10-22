@@ -33,21 +33,14 @@ describe("desktop main logger", () => {
         ]),
       );
 
-      const { logger, webRemoteControlRelayLogger } = await import("../src/main/logger.js");
+      const { logger } = await import("../src/main/logger.js");
 
       expect(() => logger.info("main log append fault")).not.toThrow();
-      expect(() => webRemoteControlRelayLogger.warn("relay log append fault")).not.toThrow();
 
       const logDir = join(tempRoot, ".uwork", "v2", "logs");
-      await expect(readdir(logDir)).resolves.toEqual(["web-remote-control"]);
-      await expect(readdir(join(logDir, "web-remote-control"))).resolves.toEqual([]);
+      await expect(readdir(logDir)).resolves.toEqual([]);
 
       expect(services.getProcessFsFaultInjector().getHits()).toMatchObject([
-        {
-          code: "ENOSPC",
-          id: "D05-desktop-main-log-append-enospc",
-          operation: "appendFile",
-        },
         {
           code: "ENOSPC",
           id: "D05-desktop-main-log-append-enospc",
