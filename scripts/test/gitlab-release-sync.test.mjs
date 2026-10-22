@@ -196,3 +196,37 @@ test("工作流总是下载附件、不检出源码历史，自动入口不暴�
   assert.match(workflow, /cleanup_source:/);
   assert.match(workflow, /group: gitlab-release-sync\s/);
 });
+
+test("21 条资产链接重试读取完整列表，不把第 21 条误判为新增", async () => {
+  const links = Array.from({ length: 21 }, (_, index) => ({
+    name: `file-${index}`,
+    url: `https://gitlab.example/file-${index}`,
+    link_type: "other",
+  }));
+  const methods = [];
+  const client = {
+    request: async (method, path) => {
+      methods.push(method);
+      assert.equal(method, "GET", "已有链接不得重复创建或更新");
+      const params = new URL(path, "https://gitlab.example").searchParams;
+      const size = Number(params.get("per_page") || 20);
+      const page = Number(params.get("page") || 1);
+      return ok(links.slice((page - 1) * size, page * size).map((link, id) => ({ ...link, id })));
+    },
+  };
+  await syncAssetLinks({ client, config: config(), links, log: () => {} });
+  assert.ok(methods.every((method) => method === "GET"));
+});
+
+test("下载链接只管理 GitLab 包地址，不依赖目标未返回的自定义路径字段", async () => {
+  const url = `${config().apiUrl}/packages/generic/uwork-release/0.1.0/SHA256SUMS`;
+  const links = buildAssetLinks({ release, uploaded: new Map([["SHA256SUMS", url]]) }).slice(0, 1);
+  assert.equal(Object.hasOwn(links[0], "direct_asset_path"), false);
+  const client = {
+    request: async (method) => {
+      assert.equal(method, "GET", "相同包下载地址不得产生多余更新");
+      return ok([{ id: 1, name: "SHA256SUMS", url, link_type: "package", direct_asset_url: url }]);
+    },
+  };
+  await syncAssetLinks({ client, config: config(), links, log: () => {} });
+});

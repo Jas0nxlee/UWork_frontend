@@ -77,10 +77,6 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
         name: asset.name,
         url: packageUrl,
         link_type: "package",
-        // 直链下载路径只使用 URL 安全的文件名，避免 GitLab 对路径做二次编码。
-        ...(/^[A-Za-z0-9._-]+$/.test(asset.name)
-          ? { direct_asset_path: `/binaries/${asset.name}` }
-          : {}),
       };
     })
     .filter((link) => typeof link.url === "string" && /^https?:\/\//.test(link.url));
@@ -95,11 +91,8 @@ export function buildAssetLinks({ release, uploaded = new Map() }) {
 
 export async function syncAssetLinks({ client, config, links, log = console.log }) {
   const path = `/releases/${encodeURIComponent(config.tag)}/assets/links`;
-  const listed = await client.request("GET", path);
-  if (!listed.ok) throw apiError("GET", path, listed);
-  const existing = new Map(
-    (Array.isArray(listed.data) ? listed.data : []).map((link) => [link.name, link]),
-  );
+  // GitLab 默认只返回 20 条；本次 21 条链接重试时漏掉最早一条，导致重复 POST 报重名。
+  const existing = new Map((await listAll(client, path)).map((link) => [link.name, link]));
   for (const link of links) {
     const current = existing.get(link.name);
     if (!current) {
@@ -108,10 +101,8 @@ export async function syncAssetLinks({ client, config, links, log = console.log 
       log(`GitLab 新增资产链接 ${link.name}`);
       continue;
     }
-    const same =
-      current.url === link.url &&
-      (current.link_type ?? "other") === link.link_type &&
-      (current.direct_asset_path ?? "") === (link.direct_asset_path ?? "");
+    // 目标 GitLab 回读只保证实际下载 URL；自定义路径不是附件发布合同，不能据此反复更新。
+    const same = current.url === link.url && (current.link_type ?? "other") === link.link_type;
     if (same) continue;
     const updatePath = `${path}/${current.id}`;
     const updated = await client.request("PUT", updatePath, link);

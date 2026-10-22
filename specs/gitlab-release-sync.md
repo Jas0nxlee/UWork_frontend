@@ -5,7 +5,7 @@
 - GitHub Release 是版本、说明、附件和 SHA-256 的事实来源。GitLab 仅用于分发发布附件，不同步应用源码、源码标签或源码分支。
 - 每次 GitHub Release published（以及发布 job 的显式派发）必须下载全部附件，校验大小和 SHA-256，上传到 GitLab Generic Package Registry 的 `uwork-release/<版本>/`，再创建或更新同名 Release。取消可选 upload_assets 和 force_branch 入口，不能退化为 GitHub 下载链接。
 - GitLab Release 必须关联 Git 标签；所有发布标签关联独立的 `release-metadata` 根提交。该提交只有固定 README.md、无父提交，与 GitHub 源码历史无关。实际源码 SHA 保留在发布 manifest 中。
-- Release 附件链接指向 GitLab 包文件；允许额外保留一个 GitHub Release 来源页面链接。按名称更新链接，重复运行不新增重复包文件或链接。
+- Release 附件链接指向 GitLab 包文件；允许额外保留一个 GitHub Release 来源页面链接。按名称更新链接，分页读取全部现有链接（本次共 21 条，超过 API 默认的 20 条）。以实际包 URL 和链接类型判定一致性，不依赖目标未返回的自定义 direct_asset_path 字段；重复运行不新增重复包文件或链接，不改写已一致的链接。
 - 上传前校验所有本地附件（文件名、大小、GitHub digest）；上传后读取 GitLab package_files 的大小和 file_sha256 逐项比对。已有同版本包只有内容一致才能视为成功；冲突失败，不覆盖已发布文件。
 - 正常发布不得删除分支、移动既有标签。遇到已有源码标签必须提示显式迁移。
 
