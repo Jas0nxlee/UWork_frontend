@@ -28,9 +28,9 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(HERE),
     base: "/cn/share/",
-    // Share 复用 Web 的 material-icons 素材，但不复制完整 Web 源码/依赖。
-    // 这样 dev:web-share 与 Docker 生产构建都从同一份 public 资源读取图标。
-    publicDir: resolve(REPO_ROOT, "packages/web/public"),
+    // material-icons 原随手机远控页托管；发布分支把素材收进 Share 自己的 public，
+    // dev:web-share 与 Docker 生产构建仍从同一份资源读取图标。
+    publicDir: resolve(HERE, "public"),
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: [

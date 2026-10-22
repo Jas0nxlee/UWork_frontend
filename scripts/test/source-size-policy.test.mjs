@@ -20,8 +20,8 @@ test("400 行为新文件阻断阈值，精确存量路径保留 800 行边界",
     config.ignorePatterns = [];
     await writeFile(join(cwd, ".oxlintrc.json"), JSON.stringify(config));
     const regular = "packages/example/src/new.ts";
-    const retained = "packages/desktop/src/main/web-remote-relay/hmacTransport.ts";
-    const neighbor = "packages/desktop/src/main/web-remote-relay/new-helper.ts";
+    const retained = "packages/desktop/src/main/desktopWindowLifecycle.ts";
+    const neighbor = "packages/desktop/src/main/new-lifecycle-helper.ts";
     const accepted = "apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/v4-gateway.ts";
     async function lint(file, lines) {
       await mkdir(dirname(join(cwd, file)), { recursive: true });
@@ -48,7 +48,7 @@ test("400 行为新文件阻断阈值，精确存量路径保留 800 行边界",
       (await lint(regular, 401)).find((x) => x.code === "eslint(max-lines)")?.severity,
       "error",
     );
-    // 同目录的新文件不继承 HMAC 存量文件的精确 800 行例外。
+    // 同目录的新文件不继承存量文件的精确 800 行例外。
     assert.equal(
       (await lint(neighbor, 401)).find((x) => x.code === "eslint(max-lines)")?.severity,
       "error",

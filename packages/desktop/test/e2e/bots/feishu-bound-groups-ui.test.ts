@@ -52,10 +52,9 @@ describe("bound groups Desktop controls", () => {
     await seedSettings({ locale: "zh-CN", localePreference: "zh-CN" });
     await browser.refresh();
     await waitForDefaultWorkspaceReady(60000);
-    const remote = await $('button[aria-label="移动端远程控制"]');
-    await remote.waitForClickable({ timeout: 20000 });
-    await remote.click();
-    await $('[data-testid="web-remote-control-open-bots"]').click();
+    const botsButton = await $('[data-testid="sidebar-bots-button"]');
+    await botsButton.waitForClickable({ timeout: 20000 });
+    await botsButton.click();
     const row = await $('[data-testid="bot-bound-groups"] [data-group-id="group-a"]');
     await row.waitForDisplayed({ timeout: 20000 });
     expect(await row.getText()).toMatch(/2/);

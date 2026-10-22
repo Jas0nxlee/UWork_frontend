@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="UWork 0.10.0 图文使用手册：企业登录、项目开发、检查验证、Office 与手机远控。"
+      content="UWork 0.10.0 图文使用手册：企业登录、项目开发、检查验证、Office。"
     />
     <meta
       name="uwork-guide-source-sha256"
-      content="901fa13f56d2c83a689f952cc762311235981606668c4e8540d40d15c58bc496"
+      content="b926503fde105e75f1f6787a2c71e9d705f293d4d4ce69350f80fe8300b079e1"
     />
     <title>UWork 代码开发使用手册</title>
     <style>
@@ -433,7 +433,7 @@
           ><a href="#section-2">2. 创建一个新项目</a><a href="#section-3">3. 在已有项目上持续开发</a
           ><a href="#section-4">4. 改完之后，做三件事</a
           ><a href="#section-5">5. 保存进度，第二天接着做</a
-          ><a href="#section-6">6. 当前版本的 Office 与手机远控</a
+          ><a href="#section-6">6. 当前版本的 Office</a
           ><a href="#section-7">7. 遇到问题，先看这里</a>
         </nav>
         <button class="print" type="button">打印 / 保存 PDF</button>
@@ -948,7 +948,7 @@
         <pre><code class="language-text">继续这个项目。先核对当前文件、Git 状态和上次记录，再说明下一步。
 今天只处理“未完成”筛选入口，不扩展其他功能。
 </code></pre>
-        <h2 id="section-6">6. 当前版本的 Office 与手机远控</h2>
+        <h2 id="section-6">6. 当前版本的 Office</h2>
         <ul>
           <li>
             <strong>Office 文件</strong>：应用内可预览 Word、Excel 和
@@ -960,16 +960,6 @@
             <a
               href="https://github.com/Jas0nxlee/UWork_frontend/blob/main/plugins/office-editor/README.md"
               >插件说明</a
-            >。
-          </li>
-          <li>
-            <strong>手机远控</strong>：先由管理员配置可信的 relay
-            与手机页面地址，再从桌面配对。手机连接桌面已有的工作区和任务，不会自动创建第二套会话。自建
-            HMAC 配对与企业微信登录是两条独立链路；没有 relay
-            配置时，单靠扫码登录企业账号不会获得手机远控。见
-            <a
-              href="https://github.com/Jas0nxlee/UWork_frontend/blob/main/specs/web-remote-control-relay.md"
-              >远控配置与协议</a
             >。
           </li>
         </ul>

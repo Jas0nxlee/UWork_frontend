@@ -511,6 +511,7 @@ const enUS: Record<string, string> = {
     "Resends the full reply as text. Content already received may be duplicated.",
   "bots.privateDelivery.retryFailed": "Sending failed. Check the error details before retrying.",
   "bots.boundGroups.title": "Bound groups",
+  "bots.manage.open": "Bot channels",
   "bots.boundGroups.count": "{count} topics",
   "bots.boundGroups.countOne": "{count} topic",
   "bots.boundGroups.toggle": "Enable group: {name}",

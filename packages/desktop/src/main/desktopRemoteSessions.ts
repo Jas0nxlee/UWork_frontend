@@ -21,7 +21,6 @@ import {
   type ProviderProvisioningTrigger,
   type WindowHostRemoteWorkspaceDescriptor,
   type WorkspacePurpose,
-  type WebRemoteControlFailure,
   type HostPreparedProjectWorkspace,
   type HostProjectWorkspaceNavigationInput,
 } from "@zcode/shared";
@@ -194,17 +193,6 @@ export function createRemoteWorkspaceSessionManager(options: {
     durationMs: number;
   }) => void;
   monotonicNowMs?: () => number;
-  webRemoteControlManagerRef: {
-    current: {
-      failRemoteSession(sessionId: string, reason: string, failure: WebRemoteControlFailure): void;
-      replaceRemoteSession?(event: {
-        previousSessionId: string;
-        sessionId: string;
-        workspacePath: string;
-        workspaceIdentity: string;
-      }): Promise<void>;
-    } | null;
-  };
   providerProvisioningCoordinator?: ProviderProvisioningEnvironmentCoordinator;
 }) {
   const pendingByRequestKey = new Map<string, PendingConnect>();
@@ -676,20 +664,6 @@ export function createRemoteWorkspaceSessionManager(options: {
           level: "info",
           message: `远程 ${descriptor.target.kind} workspace 已自动重连`,
         });
-        void options.webRemoteControlManagerRef.current
-          ?.replaceRemoteSession?.({
-            previousSessionId: previousRemoteSessionId,
-            sessionId: descriptor.remoteSessionId,
-            workspacePath: descriptor.workspacePath,
-            workspaceIdentity: descriptor.workspaceIdentity,
-          })
-          .catch((error: unknown) => {
-            options.logger.warn("[window-host-remote] mobile bridge recovery failed", {
-              previousRemoteSessionId,
-              remoteSessionId: descriptor.remoteSessionId,
-              error,
-            });
-          });
       })
       .catch((error: unknown) => {
         route.providerProvisioningDispose?.();
@@ -838,16 +812,6 @@ export function createRemoteWorkspaceSessionManager(options: {
     const win = BrowserWindow.getAllWindows().find(
       (candidate) => candidate.webContents.id === webContentsId,
     );
-    if (event.recoverable !== true) {
-      options.webRemoteControlManagerRef.current?.failRemoteSession(
-        event.remoteSessionId,
-        "window-host:connection-offline",
-        {
-          reason: "workspace-closed",
-          message: "远程工作区连接已结束，请在桌面端重新连接。",
-        },
-      );
-    }
     if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
       win.webContents.send(PlatformChannels.RemoteSessionClosed, {
         sessionId: event.remoteSessionId,

@@ -38,10 +38,6 @@ import {
   reportRemoteConnectResultToArms,
   type RemoteConnectionStats,
 } from "./desktopRemoteUsageArmsTelemetry.js";
-import {
-  registerWebRemoteControlIpcHandlers,
-  type WebRemoteControlIpcManager,
-} from "./desktopWebRemoteControlIpc.js";
 import { openFileUrlInDefaultApp, openPathInDefaultApp } from "./desktopMainIpcHelpers.js";
 // on 回调的未定义引用会弹出阻塞 Main 的原生错误框；三个入口必须显式绑定同一 view owner。
 import {
@@ -205,7 +201,6 @@ export function registerRemoteIpcHandlers(options: {
   };
   /** 仅由 VITE_ZCODE_E2E_STORE_BRIDGE + test runner 双门禁打开。 */
   finalArmsCustomEventE2EEnabled?: boolean;
-  webRemoteControlManager: WebRemoteControlIpcManager;
   createRemoteWorkspaceSession: (
     win: BrowserWindow,
     target: RemoteTarget,
@@ -316,11 +311,6 @@ export function registerRemoteIpcHandlers(options: {
       },
     );
   }
-
-  registerWebRemoteControlIpcHandlers({
-    reportRemoteUsageEvent,
-    webRemoteControlManager: options.webRemoteControlManager,
-  });
 
   ipcMain.on(PlatformChannels.OAuthRegisterState, (event, payload: unknown) => {
     const registration = parseOAuthStateRegistration(payload);

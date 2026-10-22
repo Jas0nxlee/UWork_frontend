@@ -13,7 +13,7 @@ import {
   isConversationSharePath,
   resolveConversationShareCodeFromPath,
 } from "../../web/src/share/conversationShareRoute.js";
-import { resolveWebRemoteControlInitialTheme } from "../../web/src/web-remote-control/adapters/webRemoteControlThemeSeed.js";
+import { resolveWebInitialTheme } from "../../web/src/webThemeSeed.js";
 import { createWebAuthService } from "../../web/src/auth/webAuthService.js";
 import {
   WEB_ZAI_OAUTH_CONFIG,
@@ -27,7 +27,7 @@ const webAuthService = createWebAuthService();
 
 function resolveThemePreference(): Theme {
   const saved = localStorage.getItem("zcode-theme");
-  return resolveWebRemoteControlInitialTheme({ storedTheme: saved, defaultTheme: "zai-light" });
+  return resolveWebInitialTheme({ storedTheme: saved, defaultTheme: "zai-light" });
 }
 
 // Share 是独立入口，不会经过完整 Web 的 bootstrap；必须在渲染前同步根主题 class，
