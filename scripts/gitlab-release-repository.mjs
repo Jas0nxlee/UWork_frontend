@@ -147,6 +147,7 @@ export async function ensureReleaseTag({
   client,
   config,
   metadataSha,
+  expectedTagSha,
   log = console.log,
 }) {
   const path = `/repository/tags/${encodeURIComponent(config.tag)}`;
@@ -155,6 +156,11 @@ export async function ensureReleaseTag({
   if (current.ok) {
     if (!config.cleanupSource)
       throw new Error("旧标签包含源码，需要显式 cleanup_source 迁移");
+    if (
+      expectedTagSha !== undefined &&
+      current.data.commit.id !== expectedTagSha
+    )
+      throw new Error("源码标签发生并发更新，停止迁移");
     await checked(client, "DELETE", path);
     log(`已移除旧源码标签 ${config.tag}，重建对应发布元数据标签和 Release`);
   } else if (current.status !== 404) throw apiError("GET", path, current);
@@ -180,8 +186,53 @@ export async function cleanupSourceBranches({
     if (!current.ok) throw apiError("GET", path, current);
     if (current.data.commit.id !== branch.commit.id)
       throw new Error(`源码分支 ${branch.name} 发生并发更新，停止清理`);
-    // 默认分支已切换，使用项目 API 删除旧分支，包括受保护分支，不放宽保护规则。
-    await checked(client, "DELETE", path);
+    // GitLab 不允许直接删除受保护分支；只移除目标的精确规则，失败时恢复，不能放宽通配规则。
+    let protection;
+    if (current.data.protected) {
+      protection = await checked(
+        client,
+        "GET",
+        `/protected_branches/${encodeURIComponent(branch.name)}`,
+      );
+      if (protection.name !== branch.name)
+        throw new Error(`源码分支 ${branch.name} 使用通配保护规则，停止清理`);
+      await checked(
+        client,
+        "DELETE",
+        `/protected_branches/${encodeURIComponent(branch.name)}`,
+      );
+    }
+    try {
+      await checked(client, "DELETE", path);
+    } catch (error) {
+      if (protection) {
+        const access = (levels) =>
+          (levels ?? []).map((level) =>
+            level.user_id
+              ? { user_id: level.user_id }
+              : level.group_id
+                ? { group_id: level.group_id }
+                : level.deploy_key_id
+                  ? { deploy_key_id: level.deploy_key_id }
+                  : { access_level: level.access_level },
+          );
+        await checked(client, "POST", "/protected_branches", {
+          name: protection.name,
+          allow_force_push: protection.allow_force_push,
+          code_owner_approval_required: protection.code_owner_approval_required,
+          allowed_to_push: access(protection.push_access_levels),
+          allowed_to_merge: access(protection.merge_access_levels),
+          ...(protection.unprotect_access_levels
+            ? {
+                allowed_to_unprotect: access(
+                  protection.unprotect_access_levels,
+                ),
+              }
+            : {}),
+        });
+      }
+      throw error;
+    }
     log(`已删除源码分支 ${branch.name}（${branch.commit.id}）`);
   }
 }

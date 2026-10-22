@@ -40,7 +40,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - run: node --test scripts/test/gitlab-release-sync.test.mjs
+      - run: node --test scripts/test/gitlab-release-*.test.mjs
 
   sync:
     name: Publish packaged files to GitLab

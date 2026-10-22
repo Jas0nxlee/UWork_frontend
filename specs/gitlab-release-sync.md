@@ -15,7 +15,7 @@
 - 先以 inspect 模式读取项目、所有分支、标签和 Release；保留引用 SHA 及 Release 元数据审计记录，不打印凭据或源码。
 - 迁移先上传并校验全部附件，再准备独立元数据提交。只允许重建本次 Release 的旧源码标签；发现其它源码标签或其它 Release 时停止，先调查，不隐式删除。
 - 旧标签迁移可能删除对应 GitLab Release，因此保留说明和附件清单并重新创建同版本 Release。GitHub 标签与 Release 不做任何改写。
-- Release 完整落地并回读成功后，将默认分支改为 release-metadata，再通过 API 删除其余源码分支；按初始清单检查 SHA，出现并发更新停止。清理后回读所有分支/标签，必须只剩元数据引用。
+- Release 完整落地并回读成功后，将默认分支改为 release-metadata，再通过 API 删除其余源码分支；受保护分支只移除对应精确保护规则，删除失败时恢复保护，通配规则停止并调查；按初始清单检查 SHA，出现并发更新停止。清理后回读所有分支/标签，必须只剩元数据引用。
 - 清理指移除用户可达的源码引用；服务端不可达对象回收由 GitLab 管理，不声称完成物理擦除。
 
 ## 所有者、接口和顺序
@@ -45,4 +45,4 @@ sequenceDiagram
 2. 发布后 GitLab 标签只引用单 README、无父提交的元数据根，源码提交不被推送。
 3. 同版本重跑幂等；本地附件缺失/摘要错误、远端摘要冲突、令牌无效、网络不可达时失败，不输出成功。
 4. 普通重跑拒绝旧源码标签；显式迁移在附件完整后重建标签及 Release，删除源码分支；未知其它标签/Release 或引用并发变化时停止。
-5. inspect 模式只读；测试覆盖包文件验证、标签隔离、清理保护和工作流默认上传合同。验证运行 node --test scripts/test/gitlab-release-sync.test.mjs，加根 typecheck、lint、架构检查。
+5. inspect 模式只读；测试覆盖包文件验证、标签隔离、清理保护和工作流默认上传合同。验证运行 node --test scripts/test/gitlab-release-\*.test.mjs，加根 typecheck、lint、架构检查。

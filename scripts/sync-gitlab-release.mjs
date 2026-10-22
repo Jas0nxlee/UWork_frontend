@@ -321,7 +321,13 @@ export async function syncGitLabRelease({
   await verifyPackageFiles({ client, config, release: metadata });
   log(`GitLab 已校验全部 ${metadata.assets.length} 个包文件大小与 SHA256`);
   const metadataSha = await ensureMetadataBranch({ client, config });
-  await ensureReleaseTag({ client, config, metadataSha, log });
+  await ensureReleaseTag({
+    client,
+    config,
+    metadataSha,
+    expectedTagSha: snapshot.tags.find((t) => t.name === config.tag)?.commit.id,
+    log,
+  });
   const outcome = await upsertRelease({
     client,
     config,
