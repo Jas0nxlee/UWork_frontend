@@ -12,6 +12,21 @@
   `packages/desktop/src/main/desktopRemoteSessions.ts` 的远端会话注册表）与手机远控是两条链路，
   保持原样。`workspaceIdentity`、`remoteSessionId`、`desktop-continuous` /
   `web-remote-replayable` 的既有语义不因本分支改名或删除。
+- 本地窗口标签恢复、增加或关闭后，`SyncWindowTabs` 仍将完整路径清单交给 Main，更新
+  `windowWorkspaceMap` 与该窗口 Local Host 在 `TaskRealtimeBus` 的订阅范围；关闭全部工作区
+  时清空范围。该桌面同步不依赖已删除的手机远控 IPC 或特性开关。
+
+```mermaid
+sequenceDiagram
+    participant UI as Renderer 标签所有者
+    participant Main as Main 窗口路由
+    participant Bus as TaskRealtimeBus
+    UI->>Main: SyncWindowTabs(完整本地路径清单)
+    Main->>Main: 更新窗口路径映射
+    Main->>Bus: 更新所属 Local Host 的工作区范围
+    Bus-->>Bus: 后续事件按最新范围投递
+```
+
 - `packages/web` 不再是可部署的手机远控页：只保留被公开分享镜像（`packages/web-share`）复用的
   `src/auth`、`src/share`、`communityUrl`、`webThemeSeed` 与对应单测；页面入口、Vite 构建、
   relay 桥接、手机壳引导页全部删除。`material-icons` 素材随分享页迁到
@@ -24,20 +39,20 @@
 
 ## 已删除清单
 
-| 位置                                                              | 内容                                             |
-| ----------------------------------------------------------------- | ------------------------------------------------ |
-| `packages/web/src/main.tsx`、`index.html`、`vite.config.ts`        | 手机/浏览器远控页 SPA 入口（`/remote/v4` 启动壳） |
-| `packages/web/src/web-remote-control/**`                          | 手机页远控实现（relay 桥、配对、任务视图）       |
-| `packages/android/`                                               | Android WebView 壳                               |
-| `packages/desktop/src/main/web-remote-relay/**`                   | HMAC relay 客户端、鉴权、设备存储、V2 HTTP 客户端 |
-| `packages/desktop/src/main/webRemoteControl*.ts`                  | 远控会话管理、IPC、状态事件、重连、特性开关      |
-| `packages/desktop/src/main/desktopWebRemoteControlIpc.ts`         | 远控 IPC 注册与埋点                              |
-| `packages/desktop/src/main/desktopMobileRemoteControlConfig.ts`   | 随包手机页/中继地址配置加载                      |
-| `packages/ui/src/web-remote-control/**`、入口/弹层/MobileShell、开关组件 | 桌面弹层、二维码、手机壳、特性开关        |
-| `packages/client/src/webRemoteControl*.ts`                        | 远控 relay 协议客户端                            |
-| `config/mobile-remote-control.json`                               | 随包自建中继/手机页地址                          |
-| `scripts/dev-web-remote-control-desktop.mjs`、`build:web-remote-control:*` | 远控开发/构建入口                      |
-| `docs/web-remote-control/**`、远控相关 specs                      | 被删能力的文档与设计稿                           |
+| 位置                                                                       | 内容                                              |
+| -------------------------------------------------------------------------- | ------------------------------------------------- |
+| `packages/web/src/main.tsx`、`index.html`、`vite.config.ts`                | 手机/浏览器远控页 SPA 入口（`/remote/v4` 启动壳） |
+| `packages/web/src/web-remote-control/**`                                   | 手机页远控实现（relay 桥、配对、任务视图）        |
+| `packages/android/`                                                        | Android WebView 壳                                |
+| `packages/desktop/src/main/web-remote-relay/**`                            | HMAC relay 客户端、鉴权、设备存储、V2 HTTP 客户端 |
+| `packages/desktop/src/main/webRemoteControl*.ts`                           | 远控会话管理、IPC、状态事件、重连、特性开关       |
+| `packages/desktop/src/main/desktopWebRemoteControlIpc.ts`                  | 远控 IPC 注册与埋点                               |
+| `packages/desktop/src/main/desktopMobileRemoteControlConfig.ts`            | 随包手机页/中继地址配置加载                       |
+| `packages/ui/src/web-remote-control/**`、入口/弹层/MobileShell、开关组件   | 桌面弹层、二维码、手机壳、特性开关                |
+| `packages/client/src/webRemoteControl*.ts`                                 | 远控 relay 协议客户端                             |
+| `config/mobile-remote-control.json`                                        | 随包自建中继/手机页地址                           |
+| `scripts/dev-web-remote-control-desktop.mjs`、`build:web-remote-control:*` | 远控开发/构建入口                                 |
+| `docs/web-remote-control/**`、远控相关 specs                               | 被删能力的文档与设计稿                            |
 
 ## 保留清单
 

@@ -107,6 +107,41 @@ describe("registerPlatformIpcHandlers", () => {
     electronMocks.browserWindowFromWebContents.mockReturnValue(null);
   });
 
+  it("keeps desktop realtime scopes current when local tabs restore or close without mobile IPC", async () => {
+    const { registerPlatformIpcHandlers } = await import("../src/main/desktopMainIpcPlatform.js");
+    const syncTaskRealtimeWorkspaceKeys = vi.fn();
+    const windowWorkspaceMap = new Map<number, Set<string>>();
+    electronMocks.browserWindowFromWebContents.mockReturnValue({ id: 7 });
+    registerPlatformIpcHandlers({
+      logger: { info: vi.fn(), warn: vi.fn() },
+      applyApplicationLocale: vi.fn(async () => {}),
+      focusWorkspaceInExistingWindow: vi.fn(() => ({ activated: false })),
+      windowWorkspaceMap,
+      windowUnreadCountMap: new Map(),
+      currentApplicationLocale: () => "en-US",
+      executeDesktopCommand: vi.fn(async () => {}),
+      acknowledgePostUpdateReleaseNotes: vi.fn(async () => {}),
+      syncTaskRealtimeWorkspaceKeys,
+      getUpdateState: vi.fn(() => ({ status: "idle" })),
+      deviceMid: "test-device-mid",
+    });
+
+    const syncTabs = electronMocks.handlers.get(PlatformChannels.SyncWindowTabs)!;
+    const snapshots = [["/workspace/one", "/workspace/two"], ["/workspace/two"], []];
+    for (const [index, paths] of snapshots.entries()) {
+      syncTabs({ sender: {} }, paths);
+      expect(windowWorkspaceMap.get(7)).toEqual(new Set(paths));
+      expect(syncTaskRealtimeWorkspaceKeys).toHaveBeenNthCalledWith(index + 1, 7, paths);
+    }
+    // 手机远控入口已删除，但本地标签恢复和关闭仍必须更新桌面实时订阅范围。
+    expect(electronMocks.handlers.has(PlatformChannels.SyncWebRemoteControlWorkspaces)).toBe(false);
+    syncTabs({ sender: {} }, [42]);
+    electronMocks.browserWindowFromWebContents.mockReturnValue(null);
+    syncTabs({ sender: {} }, ["/workspace/unowned"]);
+    expect(syncTaskRealtimeWorkspaceKeys).toHaveBeenCalledTimes(snapshots.length);
+    expect(windowWorkspaceMap.get(7)).toEqual(new Set());
+  });
+
   it("allows creating folders from the workspace directory picker", async () => {
     const { registerPlatformIpcHandlers } = await import("../src/main/desktopMainIpcPlatform.js");
 

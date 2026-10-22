@@ -294,6 +294,8 @@ export function registerPlatformIpcHandlers(options: {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) {
       options.windowWorkspaceMap.set(win.id, new Set(result.data));
+      // 删除手机远控不应断开桌面订阅：恢复和关闭标签后，实时总线仍须使用最新工作区范围。
+      options.syncTaskRealtimeWorkspaceKeys(win.id, result.data);
     }
   });
 
