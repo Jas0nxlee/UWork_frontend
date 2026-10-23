@@ -14,7 +14,7 @@
 
 ## 接口与事件顺序
 
-配置：Secrets `WECOM_CORP_ID`、`WECOM_SECRET`；Variables `WECOM_SPACE_ID`、`WECOM_FOLDER_ID`（省略时为空间根目录）、`WECOM_SYNC_ENABLED`（自动派发开关）、可选 `WECOM_SYNC_RUNNER`。运行时输入 `RELEASE_TAG`、`RELEASE_JSON`、`ASSET_DIR`、`SYNC_REPORT`。重试次数固定最多 4 次，每次请求 60 秒超时。
+配置：Secrets `WECOM_CORP_ID`、`WECOM_SECRET`；`WECOM_SPACE_ID`、`WECOM_FOLDER_ID`（省略时为空间根目录）、`WECOM_SYNC_ENABLED`（自动派发开关）兼容 Variables 与 Secrets，同名 Variable 非空时优先，不要求迁移已配置的 Secret。可选 `WECOM_SYNC_RUNNER` 保留为 Variable。开关经步骤环境读取，只输出固定的 yes/no 控制结果，不把 Secret 放入 job/step 的 if 表达式，也不把其原值传入 job output。桌面派发步骤同样在环境中判定开关；未启用时正常退出。运行时输入 `RELEASE_TAG`、`RELEASE_JSON`、`ASSET_DIR`、`SYNC_REPORT`。重试次数固定最多 4 次，每次请求 60 秒超时。
 
 ```mermaid
 sequenceDiagram
@@ -45,6 +45,7 @@ sequenceDiagram
 4. token 刷新、分块临时失败、429/5xx、系统限频可恢复；权限失败不重试；重试耗尽失败。
 5. 目录创建/完成提交响应丢失时，查询已提交结果并验证，避免盲目重发；远端同名冲突/伪成功/大小或 SHA 错误必须失败。
 6. workflow 合同覆盖自动事件、手动标签、显式派发、串行、失败报告、三个文件白名单和下载重试。执行聚焦 Node 测试、根 typecheck、lint、架构检查。没有企业配置时只报告本地验证，不声称已完成真实上传验收。
+7. 目录和启用开关全部配置在 Secrets 时，预检、上传和自动派发仍可正确读取；未配置/false 时不自动派发，手动补传仍可执行。日志和跨 job output 不包含这些配置原值。
 
 ## 官方依据
 

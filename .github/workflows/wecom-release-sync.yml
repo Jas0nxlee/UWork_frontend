@@ -22,6 +22,8 @@ jobs:
     name: Validate installer sync contract
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      run_sync: ${{ steps.gate.outputs.run_sync }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,11 +31,22 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: node --test scripts/test/wecom-release-*.test.mjs
+      - name: Resolve automatic sync gate
+        id: gate
+        env:
+          SYNC_ENABLED: ${{ vars.WECOM_SYNC_ENABLED || secrets.WECOM_SYNC_ENABLED }}
+        run: |
+          # Secrets 不能用于 job if；只传固定控制结果，不传出开关原值。
+          if [[ "$SYNC_ENABLED" == true ]]; then
+            echo 'run_sync=yes' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run_sync=no' >> "$GITHUB_OUTPUT"
+          fi
 
   sync:
     name: Upload and verify DMG, EXE, DEB in WeCom Drive
     needs: contract
-    if: github.event_name == 'workflow_dispatch' || vars.WECOM_SYNC_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.contract.outputs.run_sync == 'yes'
     runs-on: ${{ vars.WECOM_SYNC_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 120
     steps:
@@ -65,8 +78,8 @@ jobs:
         env:
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
-          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID }}
-          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID }}
+          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
+          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
           RELEASE_TAG: ${{ steps.options.outputs.tag }}
           ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
         run: |
@@ -107,8 +120,8 @@ jobs:
         env:
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
-          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID }}
-          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID }}
+          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
+          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
           RELEASE_TAG: ${{ steps.options.outputs.tag }}
           RELEASE_JSON: ${{ runner.temp }}/wecom-release.json
           ASSET_DIR: ${{ runner.temp }}/wecom-release-assets

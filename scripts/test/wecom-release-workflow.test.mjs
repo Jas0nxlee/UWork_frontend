@@ -14,8 +14,29 @@ test("微盘同步覆盖发布事件、手动补传、单写入者和安全凭�
   assert.match(workflow, /needs: contract/);
   assert.match(workflow, /WECOM_SECRET: \$\{\{ secrets.WECOM_SECRET \}\}/);
   assert.match(workflow, /WECOM_CORP_ID: \$\{\{ secrets.WECOM_CORP_ID \}\}/);
-  assert.match(workflow, /WECOM_SPACE_ID: \$\{\{ vars.WECOM_SPACE_ID \}\}/);
-  assert.match(workflow, /WECOM_FOLDER_ID: \$\{\{ vars.WECOM_FOLDER_ID \}\}/);
+  assert.equal(
+    (
+      workflow.match(
+        /WECOM_SPACE_ID: \$\{\{ vars.WECOM_SPACE_ID \|\| secrets.WECOM_SPACE_ID \}\}/g,
+      ) || []
+    ).length,
+    2,
+  );
+  assert.equal(
+    (
+      workflow.match(
+        /WECOM_FOLDER_ID: \$\{\{ vars.WECOM_FOLDER_ID \|\| secrets.WECOM_FOLDER_ID \}\}/g,
+      ) || []
+    ).length,
+    2,
+  );
+  assert.match(
+    workflow,
+    /SYNC_ENABLED: \$\{\{ vars.WECOM_SYNC_ENABLED \|\| secrets.WECOM_SYNC_ENABLED \}\}/,
+  );
+  assert.match(workflow, /if:.*needs.contract.outputs.run_sync == 'yes'/);
+  assert.match(workflow, /echo 'run_sync=yes'/);
+  assert.doesNotMatch(workflow, /if:.*secrets\./);
   assert.match(workflow, /vars.WECOM_SYNC_RUNNER \|\| 'ubuntu-24.04'/);
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /wecom-release-verification/);
@@ -42,8 +63,13 @@ test("桌面公开成功后显式派发微盘；GitLab 派发失败不阻止尝�
   assert.match(workflow, /id: publish_release/);
   assert.match(
     workflow.slice(wecom),
-    /if:.*!cancelled\(\).*steps.publish_release.outcome == 'success'.*vars.WECOM_SYNC_ENABLED == 'true'/,
+    /if:.*!cancelled\(\).*steps.publish_release.outcome == 'success'/,
   );
+  assert.match(
+    workflow.slice(wecom),
+    /SYNC_ENABLED: \$\{\{ vars.WECOM_SYNC_ENABLED \|\| secrets.WECOM_SYNC_ENABLED \}\}/,
+  );
+  assert.match(workflow.slice(wecom), /if \[\[ "\$SYNC_ENABLED" != true \]\]; then/);
   assert.match(workflow.slice(wecom), /gh workflow run wecom-release-sync.yml/);
   assert.match(workflow.slice(wecom), /-f tag="v\$\{version\}"/);
   assert.match(workflow, /scripts\/test\/wecom-release-\*\.test\.mjs/);

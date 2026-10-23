@@ -12,16 +12,18 @@
 
 在仓库 Settings → Secrets and variables → Actions 配置下表。不要将真实凭据写入仓库、issue 或日志。
 
-| 位置     | 名称                 | 用途                                                                                                  |
-| -------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
-| Secret   | `WECOM_CORP_ID`      | 企业标识，须与应用所属企业一致                                                                        |
-| Secret   | `WECOM_SECRET`       | 已被允许调用微盘接口的企业自建应用 Secret                                                             |
-| Variable | `WECOM_SPACE_ID`     | 目标共享空间标识                                                                                      |
-| Variable | `WECOM_FOLDER_ID`    | 目标父文件夹标识；不设置时使用空间根目录                                                              |
-| Variable | `WECOM_SYNC_ENABLED` | 填 `true` 后开启自动派发及 published 事件同步；手动补传不受此开关限制                                 |
-| Variable | `WECOM_SYNC_RUNNER`  | 可选 runner 标签，默认 `ubuntu-24.04`；可信 IP 限制场景使用有固定出口的 Linux self-hosted runner 标签 |
+| 位置               | 名称                 | 用途                                                                                                  |
+| ------------------ | -------------------- | ----------------------------------------------------------------------------------------------------- |
+| Secret             | `WECOM_CORP_ID`      | 企业标识，须与应用所属企业一致                                                                        |
+| Secret             | `WECOM_SECRET`       | 已被允许调用微盘接口的企业自建应用 Secret                                                             |
+| Variable 或 Secret | `WECOM_SPACE_ID`     | 目标共享空间标识                                                                                      |
+| Variable 或 Secret | `WECOM_FOLDER_ID`    | 目标父文件夹标识；不设置时使用空间根目录                                                              |
+| Variable 或 Secret | `WECOM_SYNC_ENABLED` | 填 `true` 后开启自动派发及 published 事件同步；手动补传不受此开关限制                                 |
+| Variable           | `WECOM_SYNC_RUNNER`  | 可选 runner 标签，默认 `ubuntu-24.04`；可信 IP 限制场景使用有固定出口的 Linux self-hosted runner 标签 |
 
 企业管理员需在「协作 → 微盘 → API」配置「可调用接口的应用」，并确认该应用可以访问目标空间、列出目录、创建版本文件夹与上传文件。普通成员可访问的分享链接不能代替服务端 API 的空间/目录参数；目标现有共享文件夹能否被应用操作，必须用实际应用权限验证。此流程不创建空间、不调整空间成员权限。
+
+目录和开关已放在 Secrets 时无需迁移。同名 Variable 非空时优先，只有 Variable 为空时才读取 Secret；两处同时设置时应保持一致。开关通过步骤环境读取，不输出原值。
 
 如果应用安全配置要求可信 IP，需允许所选 runner 的出口地址；GitHub 托管 runner 的出口可能变化，适合改用固定出口 runner。实际应用权限和 IP 错误会使同步失败，不会切换到个人身份或其它目录。
 
