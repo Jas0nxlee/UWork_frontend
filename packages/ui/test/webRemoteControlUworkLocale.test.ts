@@ -2,6 +2,27 @@ import { describe, expect, it } from "vitest";
 import zhCN from "@/i18n/locales/zh-CN.js";
 import enUS from "@/i18n/locales/en-US.js";
 
+describe("client UWork branding", () => {
+  it.each([
+    ["zh-CN", zhCN],
+    ["en-US", enUS],
+  ] as const)(
+    "uses UWork in %s client copy, excluding plugin and skill labels",
+    (_locale, messages) => {
+      // 产品自称与兼容文件名/URL 不同；市场插件与技能内容按本轮范围保持原值。
+      const remnants = Object.entries(messages).filter(
+        ([key, value]) =>
+          !key.startsWith("settings.skills.") &&
+          !key.startsWith("settings.plugins.") &&
+          /\bZCode\b/.test(value),
+      );
+      expect(remnants).toEqual([]);
+      expect(messages["settings.dataBaseDirDescription"]).toContain(".uwork/v2");
+      expect(messages["settings.workspaceFileSearch.description"]).toContain(".zcodeignore");
+    },
+  );
+});
+
 describe("UWork remote control locale coverage", () => {
   it("keeps Chinese coverage for all currently shipped English message IDs", () => {
     const translated = zhCN as Record<string, string>;

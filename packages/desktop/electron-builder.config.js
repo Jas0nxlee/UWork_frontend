@@ -558,6 +558,8 @@ export default {
     mirror: resolveElectronDownloadMirror(),
   },
   productName: desktopProductIdentity.productName,
+  // 作者保留上游归属；产品版权须显式指定，避免 builder 再从 author 推导出 ZCode。
+  copyright: "Copyright © ${year} UWork",
   directories: {
     // macOS arm64/x64 CI 可能共享同一个 checkout 并行打包。
     // 输出根目录允许按架构隔离，避免一个 job 清理 dist 时删除另一个 job 正在签名的 .app。
@@ -839,7 +841,7 @@ export default {
     ],
   },
   win: {
-    target: ["nsis"],
+    target: ["nsis", "zip"],
     artifactName: buildDesktopArtifactName("win"),
     signExts: [".node", ".dll"],
     // Bugfix: Windows CI 之前完全依赖 electron-builder 内置 signtool.exe，
@@ -855,7 +857,7 @@ export default {
       : {}),
   },
   linux: {
-    target: ["AppImage", "deb", "rpm", "pacman"],
+    target: ["AppImage", "deb", "rpm", "pacman", "zip"],
     artifactName: buildDesktopArtifactName("linux"),
     // desktop 包名是 scoped package（@zcode/desktop），electron-builder 默认会把
     // Linux executable/Icon 推成 @zcodedesktop。部分桌面环境无法按这个 icon name 命中

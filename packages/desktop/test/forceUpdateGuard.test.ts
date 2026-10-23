@@ -441,6 +441,8 @@ describe("forceUpdateGuard", () => {
     );
     expect(electronMocks.browserWindowInstance.close).not.toHaveBeenCalled();
     const promptHtml = getLoadedPromptHtml();
+    expect(promptHtml).toContain("UWork");
+    expect(promptHtml).not.toMatch(/\bZCode\b/);
     expect(promptHtml).toContain("自动升级正在进行");
     expect(promptHtml).toContain("确认关闭");
     expect(promptHtml).toContain("继续更新");
@@ -500,6 +502,7 @@ describe("forceUpdateGuard", () => {
     );
 
     expect(text.detail).toBe("当前版本：v3.1.7\n最低可用版本：v4.0.0");
+    expect(text.title).toBe("需要升级 UWork");
     expect(text.autoUpdateButton).toBe("自动升级");
     expect(text.manualUpdateButton).toBe("手动升级");
   });

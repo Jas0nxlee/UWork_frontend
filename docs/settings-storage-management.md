@@ -1,5 +1,7 @@
 # 存储管理（Storage Management）规划
 
+> **UWork 当前边界（2026-10-23）**：扫描与清理根为 HOME 及自定义 dataBaseDir 下的 `.uwork`，不扫描、删除或迁移上游 `.zcode`。CLI 根通过既有 `ZCODE_STORAGE_DIR` 下发；下文旧版 `.zcode` 普查和分裂路径记录仅说明历史背景，当前数据归属以 `specs/uwork-data-root-separation.md` 为准。扫描/清理的接口和作业所有者见 storage/CONTRACT.md。
+
 > Bash 输出优先写入系统 tmp，目录不可用时复用 `cli/exec`。本页统计仍仅覆盖现有 `.zcode` 数据根：
 > tmp 输出暂不计入占用数字，也不增加清理入口；历史及降级的 `cli/exec` 继续归入工具输出与临时缓存。
 > 文件读取和打开入口使用实际输出路径，不受统计范围影响。路径合同见 `tmpdir-storage-paths-spec.md`。

@@ -60,7 +60,8 @@ const DISPOSE_FORCE_KILL_MS = 1_500;
 
 export function spawnCronScheduler(deps: CronSchedulerDeps): CronSchedulerHandle {
   const child = electronUtilityProcess.fork(schedulerModulePath, [], {
-    serviceName: "zcode-cron-scheduler",
+    // serviceName 会直接出现在资源管理器中；只改显示名，保留 scheduler 协议与角色键。
+    serviceName: "uwork-cron-scheduler",
     execArgv: ["--no-warnings"],
     env: {
       ...buildHostProcessEnv(deps.hostProcessLocalEnv),

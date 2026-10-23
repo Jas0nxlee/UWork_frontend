@@ -55,8 +55,8 @@ const enUS: Record<string, string> = {
   "project.hasUnread": "Project has unread tasks",
   "project.projectOrder": "Project order",
   "project.taskOrder": "Task order",
-  "project.browseHint": "ZCode can read and edit these folders",
-  "project.connectAndBrowseHint": "Device status: {status}. ZCode connects first.",
+  "project.browseHint": "UWork can read and edit these folders",
+  "project.connectAndBrowseHint": "Device status: {status}. UWork connects first.",
   "project.selectHost": "Choose a remote connection",
   "project.back": "Back",
   "project.next": "Next",
@@ -69,7 +69,7 @@ const enUS: Record<string, string> = {
   "project.trustFolderTitle": "Trust this folder?",
   "project.trustFoldersTitle": "Trust these folders?",
   "project.trustFoldersDescription":
-    "ZCode can read and edit files in these folders and run commands within your current permission settings. Continue only if you trust every folder listed.",
+    "UWork can read and edit files in these folders and run commands within your current permission settings. Continue only if you trust every folder listed.",
   "project.trustFoldersAndCreate": "Trust folders and create",
   "project.trustFoldersAndRestore": "Trust folders and restore",
   "project.existingOnDeviceHint": "Already have projects on this device?",
@@ -599,7 +599,7 @@ const enUS: Record<string, string> = {
   "manualClaimPlan.claim.share.copyImageSucceeded": "Image copied",
   "manualClaimPlan.claim.share.actionFailed": "Share action failed. Please try again.",
   "manualClaimPlan.claim.share.twitterText":
-    "I claimed {subtitle} on ZCode. Download and install ZCode to claim yours. https://zcode.z.ai",
+    "I claimed {subtitle} on UWork. Download and install UWork to claim yours. https://zcode.z.ai",
   "manualClaimPlan.claim.share.twitterTextLabel": "Twitter/X post text",
   // Common
   "common.loading": "Loading...",
@@ -650,7 +650,7 @@ const enUS: Record<string, string> = {
   "conversationShare.readonly.artifactPreview": "Download file",
   "conversationShare.readonly.markerCompact": "Context compacted",
   "conversationShare.readonly.markerModelChange": "Model switched",
-  "conversationShare.readonly.unsupportedRows": "Some content requires a newer version of ZCode",
+  "conversationShare.readonly.unsupportedRows": "Some content requires a newer version of UWork",
   "conversationShare.workflowSnapshot": "Snapshot at tool execution; does not update live",
   "conversationShare.shareTitle": "Share title",
   "conversationShare.permissionLabel": "Access",
@@ -681,7 +681,7 @@ const enUS: Record<string, string> = {
   "conversationShare.error.preparationExpired": "Share preparation expired. Generate a new link.",
   "conversationShare.import.notAllowed":
     "This share is view-only. Ask the author to enable importing.",
-  "conversationShare.import.unsupportedVersion": "This share format is unsupported. Update ZCode.",
+  "conversationShare.import.unsupportedVersion": "This share format is unsupported. Update UWork.",
   "conversationShare.issue.ruleLabel": "Validation rule",
   "conversationShare.issue.pathLabel": "Field path",
   "conversationShare.issue.fieldLabel": "Field",
@@ -689,7 +689,7 @@ const enUS: Record<string, string> = {
   "conversationShare.issue.rowKindLabel": "Content type",
   "conversationShare.publishFailed": "Could not generate the share link. Try again.",
   "conversationShare.error.authenticationRequired":
-    "Sign in to ZCode before sharing. If you're already signed in, sign in again and retry.",
+    "Sign in to UWork before sharing. If you're already signed in, sign in again and retry.",
   "conversationShare.error.featureDisabled": "Sharing is currently unavailable. Try again later.",
   "conversationShare.error.artifactNotAllowed":
     "A previewed file type is not supported for sharing. Deselect that conversation and retry.",
@@ -699,7 +699,7 @@ const enUS: Record<string, string> = {
   "conversationShare.error.invalidContractHttp":
     "The share service returned HTTP {status}. Retry, and provide the error details if the problem persists.",
   "conversationShare.error.invalidContract":
-    "ZCode could not read the share service’s response, so sharing could not finish. Try again later. If it still fails, copy the request ID from Error details and contact support.",
+    "UWork could not read the share service’s response, so sharing could not finish. Try again later. If it still fails, copy the request ID from Error details and contact support.",
   "conversationShare.issue.clientRequestIdLabel": "Client request ID",
   "conversationShare.issue.codeLabel": "Error code",
   "conversationShare.error.network":
@@ -1025,7 +1025,7 @@ const enUS: Record<string, string> = {
   "confirmDialog.taskArchiveDescription":
     "Task “{taskTitle}” will move to the archive list and can still be restored later.",
   "bots.title": "Bots",
-  "bots.description": "Connect external chats and webhooks to ZCode bots.",
+  "bots.description": "Connect external chats and webhooks to UWork bots.",
   "bots.listTitle": "Bots",
   "bots.addBot": "New bot",
   "bots.addBinding": "Add binding",
@@ -1079,9 +1079,9 @@ const enUS: Record<string, string> = {
   "bots.setup.guide.weixin.create.1":
     "Start Weixin QR login, scan the QR code with Weixin, then confirm on your phone.",
   "bots.setup.guide.weixin.create.2":
-    "ZCode saves the bot_token returned by iLink automatically; after scanning, send any message to the bot in Weixin to activate the chat.",
+    "UWork saves the bot_token returned by iLink automatically; after scanning, send any message to the bot in Weixin to activate the chat.",
   "bots.setup.guide.weixin.create.3":
-    "ZCode uses a built-in iLink client: `/ilink/bot/getupdates` for long polling and `/ilink/bot/sendmessage` for replies.",
+    "UWork uses a built-in iLink client: `/ilink/bot/getupdates` for long polling and `/ilink/bot/sendmessage` for replies.",
   "bots.setup.guide.weixin.bind.1": "Open the Weixin direct chat you want to bind.",
   "bots.setup.guide.weixin.bind.2": "Send {command}.",
   "bots.setup.guide.weixin.bind.3":
@@ -1098,13 +1098,13 @@ const enUS: Record<string, string> = {
   "bots.setup.guide.feishu.bind.3":
     "Return here after the bind succeeds to finish the workspace and CLI defaults.",
   "bots.setup.guide.webhook.create.1":
-    "Webhook mode does not require a native bot in the third-party product; your integration only needs to POST messages to ZCode.",
+    "Webhook mode does not require a native bot in the third-party product; your integration only needs to POST messages to UWork.",
   "bots.setup.guide.webhook.create.2":
     "Set a shared secret first; add an outbound webhook URL as well if you want asynchronous replies pushed back.",
   "bots.setup.guide.webhook.create.3":
     "Keep one stable userId per external user so binding and future context resolve to the same person.",
   "bots.setup.guide.webhook.bind.1":
-    "POST a private-message callback to ZCode's `/api/bots/webhook` endpoint.",
+    "POST a private-message callback to UWork's `/api/bots/webhook` endpoint.",
   "bots.setup.guide.webhook.bind.2":
     'The payload should at least include this botId, a stable userId, `chatType: "private"`, and set text to {command}.',
   "bots.setup.guide.webhook.bind.3":
@@ -1243,7 +1243,7 @@ const enUS: Record<string, string> = {
   "bots.runtime.telegramLongPollingStarting": "Telegram long polling is starting.",
   "bots.runtime.telegramLongPollingStopped": "Telegram long polling is stopped.",
   "bots.runtime.telegramLongPollingHandledElsewhere":
-    "Telegram long polling is handled by another ZCode window.",
+    "Telegram long polling is handled by another UWork window.",
   "bots.runtime.telegramTokenMissing": "Telegram bot credential is missing.",
   "bots.runtime.telegramPollingFailedRetrying": "Telegram polling failed; retrying.",
   "bots.runtime.feishuWebSocketStarting": "Feishu WebSocket is starting.",
@@ -2269,7 +2269,7 @@ const enUS: Record<string, string> = {
   "remote.error.credentialsRequired":
     "No usable SSH password or private-key credential is available. Return to settings to add one.",
   "remote.error.sourceServerUpgradeRequired":
-    "remote device is incompatible with this ZCode Desktop version and must be upgraded.",
+    "remote device is incompatible with this UWork Desktop version and must be upgraded.",
   "remote.error.sourceServerRunningTasks":
     "remote device still has running tasks. Wait for them to finish or confirm a forced update.",
   "remote.error.workspaceTaskIdentityConflict":
@@ -2440,7 +2440,7 @@ const enUS: Record<string, string> = {
   "remote.progress.copyError": "Copy error details",
   "remote.progress.copied": "Copied",
   "remote.link.local": "This device",
-  "remote.link.localVersion": "ZCode v{version}",
+  "remote.link.localVersion": "UWork v{version}",
   "remote.link.deviceHint": "Device details appear after connecting",
   "remote.link.devicePending": "Remote device",
   "remote.recognizedDevice": "Connected to device {device}",
@@ -2596,7 +2596,7 @@ const enUS: Record<string, string> = {
   "remote.kind.wsl": "WSL",
   "remote.kind.docker": "Docker",
   "remote.kind.server.note":
-    "Server (direct connection to a running ZCode service) is shown only in development builds.",
+    "Server (direct connection to a running UWork service) is shown only in development builds.",
   "remote.addAndConnect": "Add and connect",
   "remote.connect": "Connect",
   "remote.connecting": "Connecting...",
@@ -2609,14 +2609,14 @@ const enUS: Record<string, string> = {
   "remote.connectingConfirmTitle": "Stop the current connection?",
   "remote.sourceServerInstallTitle": "UWork Server installation required",
   "remote.sourceServerInstallDescription":
-    "ZCode will upload the matching release, install it under ~/.uwork/server, and start the background daemon. Existing legacy remote files will be preserved.",
+    "UWork will upload the matching release, install it under ~/.uwork/server, and start the background daemon. Existing legacy remote files will be preserved.",
   "remote.sourceServerInstallConfirm": "Install and continue",
   "remote.installTarget": "Target account",
   "remote.installVersion": "Install version",
   "remote.installLocation": "Install location",
   "remote.sourceServerBoundaryTitle": "Local offline, tasks keep running",
   "remote.sourceServerBoundaryDescription":
-    "Remote tasks keep running, even when you close ZCode or put your computer to sleep.",
+    "Remote tasks keep running, even when you close UWork or put your computer to sleep.",
   "remote.sourceServerBoundaryEyebrow": "New remote connection",
   "remote.sourceServerBoundaryLocalDevice": "This computer",
   "remote.sourceServerBoundaryLocalStatus": "Sleeping / closed",
@@ -2664,7 +2664,7 @@ const enUS: Record<string, string> = {
   "settings.machine.scope": "{scope} · {machine}",
   "settings.source.connectionName": "Connection name",
   "settings.source.connectionAddress": "Address",
-  "settings.source.connectionNameHint": "Used only to distinguish this connection in ZCode.",
+  "settings.source.connectionNameHint": "Used only to distinguish this connection in UWork.",
   "settings.source.deviceNameRequired": "Device name is required.",
   "settings.source.error.connection-profile-unavailable":
     "This connection is no longer available. Refresh and try again.",
@@ -2755,13 +2755,13 @@ const enUS: Record<string, string> = {
   "sourceServer.updateFailedToast":
     "{source} could not be updated. Review the log under Remote devices and try again.",
   "sourceServer.controllerUpdateAvailableToast":
-    "ZCode has an update for {source}\nDesktop {current} → {available}; update ZCode to match this Source.",
+    "UWork has an update for {source}\nDesktop {current} → {available}; update UWork to match this Source.",
   "settings.source.forceUpdate": "Force update",
   "settings.source.forceUpdateTitle": "Force-update this device?",
   "settings.source.forceUpdateDescription":
     "A forced update stops tasks that are still running on this device. Confirm that those tasks may be interrupted.",
   "settings.source.controllerUpdateRequired":
-    "Update this ZCode Desktop first; the Server cannot be updated from here.",
+    "Update this UWork Desktop first; the Server cannot be updated from here.",
   "settings.source.neverConnected": "Not connected",
   "settings.source.unidentifiedProfiles": "Not connected",
   "settings.source.unidentifiedProfilesDescription":
@@ -2824,7 +2824,7 @@ const enUS: Record<string, string> = {
   "remote.log.requestingSession": "Requesting the host process to create a remote session...",
   "remote.log.sessionReady":
     "Remote session created successfully. You can choose a directory next.",
-  "server.description": "Connect to an already running ZCode server.",
+  "server.description": "Connect to an already running UWork server.",
   "server.url": "Server URL",
   "server.urlPlaceholder": "e.g. https://studio.example.com:3030",
   "server.name": "Display name",
@@ -3309,7 +3309,7 @@ const enUS: Record<string, string> = {
   "settings.taskAutoArchiveDays.option.30": "Archive after 30 days",
   "settings.dataBaseDir": "Data storage path",
   "settings.dataBaseDirDescription":
-    "Root directory for app data (defaults to user home directory). Existing data will be copied to the new location. The .zcode/v2 suffix cannot be changed.",
+    "Root directory for app data (defaults to user home directory). Existing data will be copied to the new location. The .uwork/v2 suffix cannot be changed.",
   "settings.dataBaseDirPlaceholder": "Default: user home directory",
   "settings.dataBaseDirBrowse": "Choose folder",
   "settings.dataBaseDirSave": "Save",
@@ -6575,10 +6575,10 @@ const enUS: Record<string, string> = {
   "chat.toolCall.workflow.saveRun.announce.project": "Saved to the project",
   "chat.toolCall.workflow.saveRun.announce.global": "Saved as a global workflow",
   "chat.toolCall.workflow.saveRun.title": "Save workflow",
-  "chat.toolCall.workflow.saveRun.lead": "Let ZCode refine and save it",
+  "chat.toolCall.workflow.saveRun.lead": "Let UWork refine and save it",
   "chat.toolCall.workflow.saveRun.lead.hint":
-    "ZCode distills a reusable workflow for you, then asks you to confirm.",
-  "chat.toolCall.workflow.saveRun.lead.sending": "Handed to ZCode…",
+    "UWork distills a reusable workflow for you, then asks you to confirm.",
+  "chat.toolCall.workflow.saveRun.lead.sending": "Handed to UWork…",
   "chat.toolCall.workflow.saveRun.lead.unsupported": "This agent cannot save directly.",
   "chat.toolCall.workflow.saveRun.or": "or save it as is",
   "chat.toolCall.workflow.saveRun.name": "Name",
@@ -8104,13 +8104,13 @@ const enUS: Record<string, string> = {
   "globalNotice.highspeed.textCopied": "Share text copied",
   "globalNotice.highspeed.textCopyFailed": "Could not copy share text. Try again.",
   "globalNotice.highspeed.copyImage": "Copy image",
-  "globalNotice.highspeed.badge": "ZCode & Coding Plan Exclusive Benefits",
+  "globalNotice.highspeed.badge": "UWork & Coding Plan Exclusive Benefits",
   "globalNotice.highspeed.standardTaskSpeed": "Standard generation speed",
   "globalNotice.highspeed.relativeTaskDuration": "Relative generation time",
   "globalNotice.highspeed.speedSummary": "HighSpeed · {duration}",
   "globalNotice.highspeed.lessWaiting": "{percent}% less waiting",
   "globalNotice.highspeed.copySummary":
-    "I used the ZCode Highspeed card and saved {duration}s. Give it a try. Download ZCode https://zcode.z.ai",
+    "I used the UWork Highspeed card and saved {duration}s. Give it a try. Download UWork https://zcode.z.ai",
   "globalNotice.highspeed.imageSummary": "{tokens} tokens · {duration}s saved",
   "globalNotice.highspeed.close": "Close Highspeed share card",
   ...requestSecurityMessagesEnUS,
@@ -8357,7 +8357,7 @@ const enUS: Record<string, string> = {
   "remote.step.connect": "Connect",
   "remote.step.selectDirectory": "Choose directory",
   "remote.kind.ssh.wizardDescription": "Remote host",
-  "remote.kind.server.wizardDescription": "Running ZCode service",
+  "remote.kind.server.wizardDescription": "Running UWork service",
   "remote.kind.wsl.wizardDescription": "Windows Subsystem for Linux",
   "remote.kind.docker.wizardDescription": "Local container",
   "remote.success": "Connected. Choose a directory to continue.",

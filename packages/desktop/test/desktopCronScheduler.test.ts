@@ -33,6 +33,14 @@ describe("desktopCronScheduler", () => {
         logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
         resolveDispatchHost: () => host as never,
       });
+      expect(electronUtilityProcess.fork).toHaveBeenLastCalledWith(
+        "/tmp/zcode-scheduler.js",
+        [],
+        expect.objectContaining({
+          serviceName: "uwork-cron-scheduler",
+          env: expect.objectContaining({ ZCODE_PROCESS_LABEL: "scheduler" }),
+        }),
+      );
       const execution = {
         workspacePath: "/frozen",
         workspaceIdentity: "remote:server:s:/frozen",

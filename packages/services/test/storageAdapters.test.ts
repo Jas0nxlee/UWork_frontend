@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmod, mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,8 @@ import { walkStorageRoot } from "../src/storage/adapters/fsWalker.js";
 import { probeStorageVolume } from "../src/storage/adapters/volumeProbe.js";
 import { createFsStorageCleaner } from "../src/storage/adapters/fsCleaner.js";
 import { runStorageScan } from "../src/storage/adapters/inProcessScanRunner.js";
+import { createStorageRootsResolver } from "../src/storage/adapters/rootsResolver.js";
+import { createStorageService } from "../src/storage/app/storageService.js";
 import type { StorageScanEntry } from "../src/storage/domain/usageAggregate.js";
 
 let root: string;
@@ -175,6 +177,39 @@ describe("createFsStorageCleaner", () => {
 });
 
 describe("runStorageScan", () => {
+  it("scans and cleans UWork files without touching a sibling ZCode data root", async () => {
+    await seed({
+      ".uwork/cli/debug/model-io-local.jsonl": "12",
+      ".zcode/cli/debug/model-io-upstream.jsonl": "upstream-owned",
+    });
+    const roots = createStorageRootsResolver({
+      getHomeDir: () => root,
+      getDataBaseDir: () => root,
+    });
+    const result = await runStorageScan({
+      roots: await roots.resolveRoots(),
+      signal: new AbortController().signal,
+      onProgress: () => {},
+    });
+    expect(result.roots.map((usage) => usage.bytes)).toEqual([2]);
+    const service = createStorageService({
+      roots,
+      scanRunner: { run: runStorageScan },
+      cleaner: createFsStorageCleaner(),
+    });
+    try {
+      expect(await service.clean({ rootId: "home", categoryId: "modelTrajectory" })).toMatchObject({
+        deletedCount: 1,
+        freedBytes: 2,
+      });
+      expect(await readFile(join(root, ".zcode/cli/debug/model-io-upstream.jsonl"), "utf8")).toBe(
+        "upstream-owned",
+      );
+    } finally {
+      service.dispose();
+    }
+  });
+
   it("classifies real files per root and reports progress plus a final result", async () => {
     await seed({
       "cli/debug/model-io-a.jsonl": "12345",

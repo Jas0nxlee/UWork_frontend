@@ -1,5 +1,22 @@
 # UWork 品牌替换
 
+## 客户端显示残留修正（2026-10-23）
+
+- 本轮覆盖客户端自身的中英文文案、项目与信任确认、分享错误、机器人与远程设备、工作流保存、高速卡、登录与更新界面的可访问名称、原生升级/清除数据/权限弹窗、窗口标题及打包版权。统一显示 UWork；不修改市场插件、插件元数据、技能内容、技能来源标签或插件图标。
+- i18n 字典与各界面的现有格式化函数继续拥有显示文案，不增加状态或接口。原生菜单、协议与持久化写入路径保持现有所有者。
+- 数据存储路径说明必须与实际 `.uwork/v2` 一致；清除数据确认显示传入的真实配置目录，仍由既有命令执行删除。资源管理器扫描根由 storage 的 `RootsResolverPort` 唯一解析为 HOME 与自定义 base 下的 `.uwork`，不再扫描或清理上游 `.zcode`。扫描、清理分类和作业时序保持原合同。
+- scheduler 的 Electron serviceName 使用 `uwork-cron-scheduler`，保留内部 `ZCODE_PROCESS_LABEL` 与协议字段。不修改 Bundle ID、`zcode://`、内部包名、请求头、服务 URL、`.zcodeignore`、Finder workflow 安装文件名及上游作者/许可归属；这些不是普通展示文字。打包版权显式使用 UWork，不再从上游作者名推导。
+- 验收：新项目与信任确认中英文使用 UWork；常规设置说明 `.uwork/v2`；升级和权限提示不自称 ZCode；scheduler 显示名为 UWork；同一 HOME 同时有 `.uwork` 与 `.zcode` 时只扫描和清理前者；自定义 base 同样适用且不迁移文件。市场、技能和兼容标识维持原值。
+
+```mermaid
+flowchart LR
+  UI[资源管理器] -->|现有 IPC| Main[Main 持有的 StorageService]
+  Main --> Roots[RootsResolverPort: HOME / dataBaseDir]
+  Roots --> Target[仅解析 .uwork 根]
+  Target --> Scan[现有扫描作业与清理校验]
+  Scan -->|现有进度事件| UI
+```
+
 显示名称统一为 UWork；应用、窗口标题、菜单、启动页、引导、关于页和主界面使用 UWork。主界面背景为 UCAS SVG 字样，深浅主题保持原有弱化效果。界面标识采用 SVG；macOS 图标从同一 U 造型的 SVG 源生成原生 ICNS/PNG。
 
 只替换产品展示与打包名称，不修改内部包名、RPC/协议、workspaceIdentity、凭据格式或供应商配置。数据目录与 Electron userData 目录按 [UWork 独立数据根](uwork-data-root-separation.md) 使用 UWork 自己的命名空间（`~/.uwork`、`~/Library/Application Support/UWork*`），不做迁移。macOS 最终安装为 `/Applications/UWork.app`，原应用备份后移出应用程序目录。
