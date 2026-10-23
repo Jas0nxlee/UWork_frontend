@@ -1,3 +1,7 @@
+import {
+  subagentRuntimeStateSchema,
+  subagentRuntimeConfigSchema,
+} from "../src/subagent-runtime-config.js";
 import { describe, expect, it } from "vitest";
 import { importSubagentStateSelections } from "../src/subagent-state-migration.js";
 
@@ -30,6 +34,29 @@ describe("Subagent 内置 state 单向导入", () => {
       ).toEqual({});
     },
   );
+  it("显式继承 null 在迁移和 Host runtime schema 中保留", () => {
+    const overrides = { [pluginId]: null };
+    const next = importSubagentStateSelections({
+      ...pluginLegacy,
+      pluginAgentModelSelectionOverrides: overrides,
+    });
+    expect(next.pluginAgentModelSelectionOverrides).toEqual(overrides);
+    const state = {
+      disabledAgentIds: [],
+      builtInModelSelectionOverrides: {},
+      pluginAgentModelSelectionOverrides: overrides,
+    };
+    expect(subagentRuntimeStateSchema.parse(state)).toEqual(state);
+    expect(
+      subagentRuntimeConfigSchema.parse({
+        kind: "ready",
+        profiles: [],
+        builtInModelSelectionOverrides: {},
+        pluginAgentModelSelectionOverrides: overrides,
+      }),
+    ).toMatchObject({ pluginAgentModelSelectionOverrides: overrides });
+  });
+
   it("插件正式model-only覆盖不回填旧档位/不继续迁移旧Provider中间身份", () => {
     const selection = { providerId: "builtin:zai-coding-plan", modelId: "GLM" };
     expect(

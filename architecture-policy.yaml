@@ -836,6 +836,10 @@ global:
   acceptedUpstreamSnapshot: scripts/architecture/upstream-snapshot.json
 
 exceptions:
+  - id: subagent-runtime-existing-inheritance-contract-edit
+    rule: unmanaged-new-file
+    paths: [packages/shared/src/subagent-runtime-config.ts]
+    reason: 已存在的共享 runtime schema 仅为插件模型覆盖增加 null 显式继承，Host/CLI 仍消费同一公开契约，不新增状态所有者或依赖。修改后的文件不冒充原样上游；例外仅接纳此既有路径，schema 往返、设置持久化、CLI 加载及 E2E 证据见 specs/official-plugin-subagent-model-defaults.md。
   - id: uwork-source-server-existing-brand-compat-edit
     rule: unmanaged-new-file
     paths:

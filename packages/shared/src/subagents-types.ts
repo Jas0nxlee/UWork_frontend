@@ -11,7 +11,8 @@ export type BuiltInSubagentModelSelectionOverrides = Partial<
   Record<BuiltInSubagentName, ModelSelection>
 >;
 
-export type PluginSubagentModelSelectionOverrides = Readonly<Record<string, ModelSelection>>;
+/** null 显式继承父任务；缺少键才恢复插件默认，不能用真假判断混同两者。 */
+export type PluginSubagentModelSelectionOverrides = Readonly<Record<string, ModelSelection | null>>;
 
 /** 正式 reader 只接受结构化覆盖，不在读取时解释旧双 map 或重新匹配 Provider。 */
 export function parsePluginSubagentModelSelectionOverrides(
@@ -20,7 +21,7 @@ export function parsePluginSubagentModelSelectionOverrides(
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value).flatMap(([id, candidate]) => {
-      const selection = modelSelectionSchema.safeParse(candidate);
+      const selection = modelSelectionSchema.nullable().safeParse(candidate);
       return id.startsWith("plugin:") && selection.success ? [[id, selection.data]] : [];
     }),
   );
@@ -54,7 +55,7 @@ export interface AgentSummary {
   color?: AgentColor;
   modelSelection?: ModelSelection;
   defaultModelSelection?: ModelSelection;
-  modelSelectionOverride?: ModelSelection;
+  modelSelectionOverride?: ModelSelection | null;
   tools?: string[];
   disallowedTools?: string[];
   injectAgentsMd?: boolean;
@@ -143,7 +144,8 @@ export interface BuiltInSubagentModelOverrideParams {
 
 export interface PluginSubagentModelOverrideParams {
   agentId: string;
-  modelSelection?: ModelSelection;
+  /** undefined 恢复插件默认；null 显式继承主任务模型。 */
+  modelSelection?: ModelSelection | null;
 }
 
 /**

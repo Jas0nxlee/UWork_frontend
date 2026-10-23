@@ -1,5 +1,13 @@
 # Tool Change Chain Spec
 
+## 插件 Agent 模型继承（2026-10-23）
+
+Settings → SubagentsService → agents-state.json → Host runtime snapshot / CLI loader →
+Agent profile 规范名及别名 → 父任务完整模型选择。`null` 显式继承，缺省恢复插件默认，
+结构化 Selection 保持显式指定；不改 Agent 输入 schema、执行队列或已运行子任务。
+验收覆盖状态 round-trip、真实插件定义扫描、UI 自动保存与 Desktop 重进回显，见
+`07-subagent.md` 和根目录 `specs/official-plugin-subagent-model-defaults.md`。
+
 ## Bash 临时输出路径隔离
 
 主应用及 workflow 子运行时装配 tmp 父目录 → execution adapter 实际准备具名输出文件 →

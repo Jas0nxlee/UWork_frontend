@@ -86,6 +86,7 @@ const AGENT_COLORS: AgentColor[] = [...SUBAGENT_COLORS];
 const COLOR_DOT_CLASS: Record<AgentColor, string> = SUBAGENT_COLOR_CLASS;
 const MODEL_ITEM_NEVER_LOCKED = () => false;
 const INHERIT_MODEL_VALUE = "inherit";
+const PLUGIN_DEFAULT_MODEL_VALUE = "plugin-default";
 const TOOL_OPTIONS = [
   "Read",
   "Grep",
@@ -192,7 +193,11 @@ function allowsAllTools(tools: readonly string[] | undefined): boolean {
 
 function toPersistedModel(model: string): string | undefined {
   const trimmedModel = model.trim();
-  return trimmedModel && trimmedModel !== INHERIT_MODEL_VALUE ? trimmedModel : undefined;
+  return trimmedModel &&
+    trimmedModel !== INHERIT_MODEL_VALUE &&
+    trimmedModel !== PLUGIN_DEFAULT_MODEL_VALUE
+    ? trimmedModel
+    : undefined;
 }
 
 function toSubagentModelValue(selection: ModelSelection | undefined): string {
@@ -286,7 +291,11 @@ export function isSubagentModelAvailable(
   modelSelectionLoading = false,
 ): boolean {
   const trimmedModel = model?.trim();
-  if (!trimmedModel || trimmedModel === INHERIT_MODEL_VALUE) {
+  if (
+    !trimmedModel ||
+    trimmedModel === INHERIT_MODEL_VALUE ||
+    trimmedModel === PLUGIN_DEFAULT_MODEL_VALUE
+  ) {
     return true;
   }
   if (modelSelectionLoading) {
@@ -334,7 +343,11 @@ function resolveSubagentModelLabel(params: {
   model: string | undefined;
 }): string {
   const trimmedModel = params.model?.trim();
-  if (!trimmedModel || trimmedModel === INHERIT_MODEL_VALUE) {
+  if (
+    !trimmedModel ||
+    trimmedModel === INHERIT_MODEL_VALUE ||
+    trimmedModel === PLUGIN_DEFAULT_MODEL_VALUE
+  ) {
     return params.inheritLabel;
   }
   // Registry 只包含当前可选模型，但历史 Subagent 配置仍需展示原模型身份，
@@ -616,9 +629,12 @@ function SubagentModelOverrideControl({
     model?: string;
     thoughtLevel?: string;
   }>(() => ({
+    // 未覆盖与显式继承必须分开：插件默认可能仍固定了另一账号的模型。
     model: agent.modelSelectionOverride
       ? toSubagentModelValue(agent.modelSelectionOverride)
-      : undefined,
+      : agent.source === "plugin" && agent.modelSelectionOverride === undefined
+        ? PLUGIN_DEFAULT_MODEL_VALUE
+        : undefined,
     thoughtLevel: agent.modelSelectionOverride?.options?.reasoningLevel,
   }));
   const defaultLabel = intl.formatMessage({
@@ -644,23 +660,36 @@ function SubagentModelOverrideControl({
   // Coding Plan 连接切换后，Builtin 的旧模型可能不再属于当前候选；仅隐藏 reasoning
   // 会让用户误以为模型仍有效，因此触发器改用“选择模型”提示，候选列表仍只展示当前连接。
   const triggerLabel =
-    value === INHERIT_MODEL_VALUE
-      ? defaultLabel
-      : !modelAvailable
-        ? selectModelLabel
-        : resolveSubagentModelLabel({
-            inheritLabel: defaultLabel,
-            modelGroups,
-            model: value,
-          });
+    value === PLUGIN_DEFAULT_MODEL_VALUE
+      ? intl.formatMessage(
+          { id: "settings.subagents.model.pluginDefaultValue" },
+          {
+            model: resolveSubagentModelLabel({
+              inheritLabel: defaultLabel,
+              modelGroups,
+              model: toSubagentModelValue(agent.defaultModelSelection),
+            }),
+          },
+        )
+      : value === INHERIT_MODEL_VALUE
+        ? defaultLabel
+        : !modelAvailable
+          ? selectModelLabel
+          : resolveSubagentModelLabel({
+              inheritLabel: defaultLabel,
+              modelGroups,
+              model: value,
+            });
   useEffect(() => {
     setConfig({
       model: agent.modelSelectionOverride
         ? toSubagentModelValue(agent.modelSelectionOverride)
-        : undefined,
+        : agent.source === "plugin" && agent.modelSelectionOverride === undefined
+          ? PLUGIN_DEFAULT_MODEL_VALUE
+          : undefined,
       thoughtLevel: agent.modelSelectionOverride?.options?.reasoningLevel,
     });
-  }, [agent.modelSelectionOverride]);
+  }, [agent.modelSelectionOverride, agent.source]);
 
   const persistConfig = useCallback(
     async (nextConfig: { model?: string; thoughtLevel?: string }) => {
@@ -672,7 +701,11 @@ function SubagentModelOverrideControl({
       setPending(true);
       try {
         let selectedConfig = nextConfig;
-        if (nextConfig.model && nextConfig.model !== config.model) {
+        if (
+          nextConfig.model &&
+          nextConfig.model !== PLUGIN_DEFAULT_MODEL_VALUE &&
+          nextConfig.model !== config.model
+        ) {
           const selection = toSubagentModelSelection(nextConfig.model, nextConfig.thoughtLevel);
           const chosen = selection ? await recommendStartPlan(selection) : null;
           if (!chosen) {
@@ -711,7 +744,7 @@ function SubagentModelOverrideControl({
         modelSelectionView,
         modelSelectionLoading,
         thoughtLevel:
-          nextModel && modelSelectionView
+          nextModel && nextModel !== PLUGIN_DEFAULT_MODEL_VALUE && modelSelectionView
             ? completeNewModelSelection(modelSelectionView, parseModelPickerValue(nextModel))
                 ?.options?.reasoningLevel
             : undefined,
@@ -727,6 +760,16 @@ function SubagentModelOverrideControl({
   );
   const footerActions = useMemo<ModelSelectFooterAction[]>(
     () => [
+      ...(agent.source === "plugin"
+        ? [
+            {
+              key: "subagent-model:plugin-default",
+              label: intl.formatMessage({ id: "settings.subagents.model.pluginDefault" }),
+              onSelect: () => handleValueChange(PLUGIN_DEFAULT_MODEL_VALUE),
+              selected: value === PLUGIN_DEFAULT_MODEL_VALUE,
+            },
+          ]
+        : []),
       {
         key: "subagent-model:built-in-default",
         label: defaultLabel,
@@ -734,7 +777,7 @@ function SubagentModelOverrideControl({
         selected: value === INHERIT_MODEL_VALUE,
       },
     ],
-    [defaultLabel, handleValueChange, value],
+    [agent.source, defaultLabel, handleValueChange, intl, value],
   );
 
   return (
@@ -1582,7 +1625,11 @@ export function SubagentsSection({
           await subagentsService.setBuiltInModelOverride({ agentName, modelSelection });
         } else {
           // 稳定 ID 不含插件版本；升级换目录后继续读取同一份用户 Selection 覆盖。
-          await subagentsService.setPluginAgentModelOverride({ agentId: agent.id, modelSelection });
+          await subagentsService.setPluginAgentModelOverride({
+            agentId: agent.id,
+            modelSelection:
+              config.model === PLUGIN_DEFAULT_MODEL_VALUE ? undefined : (modelSelection ?? null),
+          });
         }
       } catch (changeError) {
         toast(changeError instanceof Error ? changeError.message : String(changeError));

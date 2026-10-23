@@ -535,7 +535,10 @@ function applyPluginAgentOverrides(agent: AgentSummary, state: AgentsStateFile):
   return {
     ...agent,
     defaultModelSelection: agent.modelSelection,
-    ...(override ? { modelSelection: override, modelSelectionOverride: override } : {}),
+    // null 是用户显式继承，必须压过 Markdown 固定模型；undefined 才表示恢复插件默认。
+    ...(override !== undefined
+      ? { modelSelection: override ?? undefined, modelSelectionOverride: override }
+      : {}),
   };
 }
 
@@ -722,8 +725,11 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
       const runUpdate = async () => {
         const state = await readAgentStateFile(storageOptions);
         const overrides = { ...state.pluginAgentModelSelectionOverrides };
-        const selection = normalizeSubagentModelSelection(params.modelSelection);
-        if (selection) overrides[params.agentId] = selection;
+        const selection =
+          params.modelSelection === null
+            ? null
+            : normalizeSubagentModelSelection(params.modelSelection);
+        if (selection !== undefined) overrides[params.agentId] = selection;
         else delete overrides[params.agentId];
         await writeAgentStateFile(
           { ...state, pluginAgentModelSelectionOverrides: overrides },

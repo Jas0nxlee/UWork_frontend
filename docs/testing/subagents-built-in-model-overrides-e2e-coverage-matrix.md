@@ -86,3 +86,9 @@
 - Claude runtime-catalog parity 已确认采用完整重复矩阵，不以现有 DeepSeek `I20` 代表覆盖；catalog 首次 loading 使用受控 UI 测试，不为 E2E 添加生产测试开关。
 - Settings CRUD E2E 不发送 prompt，不验证冷启动 child、provider request 或 model-io；这些行为继续由 SB/SX 负责，避免 UI 保存回归扩大到 CLI/runtime。
 - SL 是登录后 App provider 快照与 desktop continuous workspace runtime catalog 的双阶段回归门禁：App metadata 保证控件立即可用，后台对账保证 runtime catalog 最终一致；runtime 已有明确能力声明时仍优先。remote workspace、手机 `/remote` replayable、task queue 与 provider request 均剪枝。
+
+## 2026-10-23 插件默认与显式继承回归
+
+SE-04 扩展：指定模型/档位后点击“继承主任务模型”，状态文件保存 `null`；
+重进设置仍回显继承并隐藏独立档位；点击“使用插件默认”删除覆盖，回显官方插件默认继承。
+两种动作都不修改插件 Markdown。实际执行结果随本次验证报告记录，不因添加断言视为验收通过。

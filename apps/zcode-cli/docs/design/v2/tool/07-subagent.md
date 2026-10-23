@@ -1,5 +1,10 @@
 # Subagent Tool
 
+插件模型覆盖区分三种状态：缺省使用 Markdown 默认、`null` 显式继承父任务完整模型选择、
+`ModelSelection` 完整覆盖。官方插件 agent 默认不固定模型或推理档位。Host 快照和独立 CLI
+加载均须保留显式继承，规范名与别名共用选择；已运行子任务保持创建时快照。
+详见根目录 `specs/official-plugin-subagent-model-defaults.md`。
+
 模型可见工具名是 `Agent`，历史别名是 `Task`。本设计文档称为 `Subagent`，但实现时需要保留 `Agent` 作为模型可见工具名，与兼容的 Claude Code 插件生态中的 agent 配置、transcript 和 SDK 事件保持一致。
 
 ## 定位

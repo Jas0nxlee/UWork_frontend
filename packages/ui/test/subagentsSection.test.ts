@@ -412,8 +412,10 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
           "settings.subagents.scope.plugin": "Plugin",
           "settings.scope.user": "User",
           "settings.subagents.model.select": "Select model",
-          "settings.subagents.model.inherit": "Inherit default",
-          "settings.subagents.model.defaultMain": "Inherit default",
+          "settings.subagents.model.inherit": "Inherit parent task model",
+          "settings.subagents.model.defaultMain": "Inherit parent task model",
+          "settings.subagents.model.pluginDefault": "Use plugin default",
+          "settings.subagents.model.pluginDefaultValue": `Plugin default: ${values?.model ?? ""}`,
           "settings.subagents.model.main": "Main model",
           "settings.subagents.reasoningUnavailable": "Reasoning effort unavailable",
           "settings.subagents.toolsCount": `${values?.count ?? 0} tools`,
@@ -884,13 +886,13 @@ describe("SubagentsSection", () => {
 
     expect(html).toContain("Explore");
     expect(html).toContain("code-reviewer");
-    expect(html).toContain("Inherit default");
+    expect(html).toContain("Inherit parent task model");
     expect(html).toContain("gpt-5.4");
     expect(capturedModelConfigSelects).toEqual([
       expect.objectContaining({
         normalizedValue: "inherit",
         showManageModelsAction: false,
-        triggerLabel: "Inherit default",
+        triggerLabel: "Inherit parent task model",
         contentSide: "top",
         contentAlign: "end",
       }),
@@ -1016,13 +1018,13 @@ describe("SubagentsSection", () => {
 
     const html = await renderSubagentsSection();
     const generalPurposePicker = capturedModelConfigSelects.find(
-      (picker) => picker.triggerLabel === "Inherit default",
+      (picker) => picker.triggerLabel === "Inherit parent task model",
     );
     const explorePicker = capturedModelConfigSelects.find(
       (picker) => picker.normalizedValue === "custom:custom-openai:glm-5.2",
     );
 
-    expect(html).toContain("Inherit default");
+    expect(html).toContain("Inherit parent task model");
     expect(explorePicker).toMatchObject({
       normalizedValue: "custom:custom-openai:glm-5.2",
       triggerLabel: "glm-5.2",
@@ -1032,7 +1034,7 @@ describe("SubagentsSection", () => {
     expect(explorePicker?.footerActions).toContainEqual(
       expect.objectContaining({
         key: "subagent-model:built-in-default",
-        label: "Inherit default",
+        label: "Inherit parent task model",
         selected: false,
       }),
     );
@@ -1179,6 +1181,62 @@ describe("SubagentsSection", () => {
     expect(mockSubagentsService.setBuiltInModelOverride).not.toHaveBeenCalled();
     expect(mockSubagentsService.list).toHaveBeenCalled();
   });
+
+  it.each([undefined, null])(
+    "distinguishes plugin default from explicit inheritance (%s)",
+    async (override) => {
+      const pluginAgent = {
+        id: "plugin:fixture@personal:judge",
+        name: "fixture:judge",
+        description: "Review",
+        systemPrompt: "Review",
+        path: "/cache/fixture/agents/judge.md",
+        scope: "user",
+        source: "plugin",
+        enabled: true,
+        readOnly: true,
+        defaultModelSelection: { providerId: "custom-openai", modelId: "gpt-5.4" },
+        modelSelection:
+          override === null ? undefined : { providerId: "custom-openai", modelId: "gpt-5.4" },
+        modelSelectionOverride: override,
+      };
+      stateOverrides = new Map<number, unknown>([
+        [1, [pluginAgent]],
+        [2, { userScopeAvailable: true }],
+      ]);
+      await renderSubagentsSection();
+      const picker = capturedModelConfigSelects[0]!;
+      expect(picker.triggerLabel).toBe(
+        override === null ? "Inherit parent task model" : "Plugin default: gpt-5.4",
+      );
+      const actions = picker.footerActions as Array<{
+        key: string;
+        label: string;
+        onSelect: () => void;
+      }>;
+      const inherit = actions.find((action) => action.label === "Inherit parent task model")!;
+      const restore = actions.find((action) => action.label === "Use plugin default")!;
+      expect(inherit).toBeDefined();
+      expect(restore).toBeDefined();
+      if (override === null) {
+        restore.onSelect();
+        await waitFor(() =>
+          expect(mockSubagentsService.setPluginAgentModelOverride).toHaveBeenCalledWith({
+            agentId: pluginAgent.id,
+            modelSelection: undefined,
+          }),
+        );
+      } else {
+        inherit.onSelect();
+        await waitFor(() =>
+          expect(mockSubagentsService.setPluginAgentModelOverride).toHaveBeenCalledWith({
+            agentId: pluginAgent.id,
+            modelSelection: null,
+          }),
+        );
+      }
+    },
+  );
 
   it("uses the new model's highest effort when the built-in model changes", async () => {
     stateOverrides = new Map<number, unknown>([
@@ -1528,10 +1586,10 @@ describe("SubagentsSection", () => {
       | undefined;
     const modelValues = modelGroups?.flatMap((group) => group.items.map((item) => item.value));
 
-    expect(html).toContain("Inherit default");
+    expect(html).toContain("Inherit parent task model");
     expect(modelPicker).toMatchObject({
       normalizedValue: "inherit",
-      triggerLabel: "Inherit default",
+      triggerLabel: "Inherit parent task model",
       showManageModelsAction: true,
       manageModelsLabel: "Manage models",
       contentSide: "bottom",
@@ -1544,7 +1602,7 @@ describe("SubagentsSection", () => {
     expect(modelPicker?.footerActions).toContainEqual(
       expect.objectContaining({
         key: "subagent-model:inherit",
-        label: "Inherit default",
+        label: "Inherit parent task model",
         selected: true,
       }),
     );

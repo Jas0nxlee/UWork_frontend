@@ -1148,6 +1148,31 @@ tools:
         .map((agent) => agent.modelSelection),
     ).toEqual([selection, selection]);
 
+    // 显式继承经过真实状态文件重读后仍抑制插件 Markdown 固定模型。
+    await service.setPluginAgentModelOverride({ agentId, modelSelection: null });
+    const reopened = createSubagentsService({ homeDir: home, isDesktopRuntime: true });
+    const inherited = await reopened.list({ workspacePath, provider: "glm" });
+    await reopened.prepareRuntimeState({ workspacePath });
+    expect(await reopened.readRuntimeConfig({ workspacePath })).toMatchObject({
+      kind: "ready",
+      pluginAgentModelSelectionOverrides: { [agentId]: null },
+    });
+    reopened.disposeAll();
+    expect(inherited.pluginAgents[0]?.modelSelection).toBeUndefined();
+    expect(inherited.pluginAgents[0]?.modelSelectionOverride).toBeNull();
+    expect(inherited.pluginAgents[0]?.defaultModelSelection).toEqual({
+      providerId: "custom-openai",
+      modelId: "gpt-5.4",
+    });
+    expect(
+      inherited.agents
+        .filter((agent) => agent.source === "plugin")
+        .map((agent) => agent.modelSelection),
+    ).toEqual([undefined, undefined]);
+    expect(
+      JSON.parse(await readFile(stateFile, "utf8")).pluginAgentModelSelectionOverrides,
+    ).toEqual({ [agentId]: null });
+
     // 清除完整选择时一并清掉档位，回落到 md 声明；不恢复旧双 map 保存入口。
     await service.setPluginAgentModelOverride({ agentId });
     const cleared = await service.list({ workspacePath, provider: "glm" });
