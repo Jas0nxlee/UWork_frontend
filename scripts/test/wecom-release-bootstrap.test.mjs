@@ -9,10 +9,24 @@ const key = publicKey.export({ type: "spki", format: "pem" }).toString();
 const config = { adminName: "Synthetic Admin", oldSpace: "s.1.old", publicKey: key };
 const admin = { userid: "synthetic-member", name: "Synthetic Admin", status: 1 };
 
-function fixture({ members = [admin], status = 1, failCreate = false, missingAdmin = false } = {}) {
+function fixture({
+  members = [admin],
+  status = 1,
+  failCreate = false,
+  missingAdmin = false,
+  explicitUsers = false,
+} = {}) {
   const calls = [];
   const request = async (op, body) => {
     calls.push({ op, body });
+    if (op === "agent_list") return { agentlist: [{ agentid: 7, name: "Synthetic App" }] };
+    if (op === "agent_get")
+      return {
+        allow_userinfos: {
+          user: explicitUsers ? members.map((user) => ({ userid: user.userid })) : [],
+        },
+        allow_partys: { partyid: explicitUsers ? [] : [42] },
+      };
     if (op === "user_simplelist") return { userlist: members };
     if (op === "user_get") return { ...admin, status };
     if (op === "new_space_info") {
@@ -62,6 +76,13 @@ test("初始化只授权唯一管理员，创建一次，回读并加密交接�
   assert.deepEqual(target, { space: "s.1.new", folder: "s.1.new", name: "UWork 发布包" });
   for (const value of [admin.userid, "s.1.new", "private-token"])
     assert.ok(!JSON.stringify(report).includes(value));
+});
+
+test("应用仅允许显式成员时不查询未授权根部门，按可见账号查找管理员", async () => {
+  const client = fixture({ explicitUsers: true });
+  const report = await bootstrapWecomSpace({ config, client, saveHandoff: async () => {} });
+  assert.equal(report.administratorVerified, true);
+  assert.equal(client.calls.filter((x) => x.op === "user_simplelist").length, 0);
 });
 
 test("管理员无匹配、重名、停用或公钥无效时不得创建空间", async () => {
@@ -134,6 +155,8 @@ test("实际传输合同通过只读 GET 核对成员，创建仅一次 POST，�
         return Response.json({ errcode: 0, access_token: "synthetic-token", expires_in: 7200 });
       }
       const getOps = {
+        "/cgi-bin/agent/list": "agent_list",
+        "/cgi-bin/agent/get": "agent_get",
         "/cgi-bin/user/simplelist": "user_simplelist",
         "/cgi-bin/user/get": "user_get",
       };

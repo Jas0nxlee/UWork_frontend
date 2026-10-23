@@ -38,6 +38,44 @@ export function resolveBootstrapConfig(env) {
   };
 }
 
+async function findAdministrator(client, name) {
+  const { agentlist: apps } = await client.request("agent_list");
+  if (!Array.isArray(apps) || apps.length !== 1 || !Number.isInteger(apps[0].agentid))
+    throw new Error("管理员查找要求当前凭据对应唯一应用");
+  const scope = await client.request("agent_get", { agentid: apps[0].agentid });
+  const candidates = new Map();
+  const add = (user) => {
+    if (typeof user?.userid !== "string" || !user.userid) throw new Error("管理员查询响应无效");
+    candidates.set(user.userid.toLowerCase(), user);
+  };
+  // 只读当前应用的真实可见范围，避免根部门不在范围内时触发 60011。
+  for (const entry of scope.allow_userinfos?.user || [])
+    add(await client.request("user_get", { userid: entry.userid }));
+  for (const department of scope.allow_partys?.partyid || []) {
+    const members = await client.request("user_simplelist", {
+      department_id: department,
+      fetch_child: 1,
+    });
+    if (!Array.isArray(members.userlist)) throw new Error("管理员部门查询响应无效");
+    members.userlist.forEach(add);
+  }
+  for (const tag of scope.allow_tags?.tagid || []) {
+    const members = await client.request("tag_get", { tagid: tag });
+    if (!Array.isArray(members.userlist)) throw new Error("管理员标签查询响应无效");
+    members.userlist.forEach(add);
+  }
+  const matches = [...candidates.values()].filter((user) => user.name === name);
+  if (matches.length !== 1) throw new Error("管理员必须在应用可见范围内唯一匹配，未创建空间");
+  const user = await client.request("user_get", { userid: matches[0].userid });
+  if (
+    user.name !== name ||
+    user.userid?.toLowerCase() !== matches[0].userid.toLowerCase() ||
+    user.status !== 1
+  )
+    throw new Error("管理员账号校验失败或未激活，未创建空间");
+  return user;
+}
+
 export async function bootstrapWecomSpace({
   config,
   client = createWecomClient({ config }),
@@ -45,18 +83,7 @@ export async function bootstrapWecomSpace({
 }) {
   const key = checkedKey(config.publicKey);
   if (typeof saveHandoff !== "function") throw new Error("缺少加密配置交接通道");
-  const members = await client.request("user_simplelist", { department_id: 1, fetch_child: 1 });
-  if (!Array.isArray(members.userlist)) throw new Error("管理员查询响应无效");
-  const matches = members.userlist.filter((user) => user.name === config.adminName);
-  if (matches.length !== 1 || typeof matches[0].userid !== "string" || !matches[0].userid)
-    throw new Error("管理员必须唯一匹配，未创建空间");
-  const user = await client.request("user_get", { userid: matches[0].userid });
-  if (
-    user.name !== config.adminName ||
-    user.userid?.toLowerCase() !== matches[0].userid.toLowerCase() ||
-    user.status !== 1
-  )
-    throw new Error("管理员账号校验失败或未激活，未创建空间");
+  const user = await findAdministrator(client, config.adminName);
   let space;
   if (config.oldSpace) {
     try {

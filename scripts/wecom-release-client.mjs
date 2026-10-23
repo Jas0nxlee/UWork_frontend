@@ -8,6 +8,8 @@ const REPLAYABLE = new Set([
   "file_upload_part",
   "new_space_info",
   "agent_list",
+  "agent_get",
+  "tag_get",
   "user_simplelist",
   "user_get",
 ]);
@@ -94,7 +96,7 @@ export function createWecomClient({
   return {
     async request(operation, body) {
       if (
-        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list|user_simplelist|user_get|space_create)$/.test(
+        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list|agent_get|tag_get|user_simplelist|user_get|space_create)$/.test(
           operation,
         )
       )
@@ -102,6 +104,8 @@ export function createWecomClient({
       for (let refresh = 0; refresh < 2; refresh++) {
         const getPaths = {
           agent_list: "agent/list",
+          agent_get: "agent/get",
+          tag_get: "tag/get",
           user_simplelist: "user/simplelist",
           user_get: "user/get",
         };
@@ -115,6 +119,8 @@ export function createWecomClient({
           url.searchParams.set("fetch_child", String(body?.fetch_child));
         }
         if (operation === "user_get") url.searchParams.set("userid", body?.userid);
+        if (operation === "agent_get") url.searchParams.set("agentid", String(body?.agentid));
+        if (operation === "tag_get") url.searchParams.set("tagid", String(body?.tagid));
         url.searchParams.set("access_token", await accessToken());
         try {
           return await invoke(
