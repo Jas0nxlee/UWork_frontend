@@ -57,6 +57,7 @@ jobs:
           node --test packages/safe-extract-zip/test/*.test.cjs
           packages/safe-extract-zip/contract.test.ts
           scripts/test/desktop-release.test.mjs
+          scripts/test/wecom-release-*.test.mjs
           scripts/test/desktop-asar-runtime.test.mjs
           scripts/test/desktop-packaging-config.test.mjs
           scripts/test/arms-patch-install-contract.test.mjs
@@ -192,6 +193,7 @@ jobs:
       - name: Verify release identity and all installer checksums
         run: node scripts/desktop-release.mjs assemble
       - name: Publish the complete release
+        id: publish_release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -221,3 +223,12 @@ jobs:
         run: |
           version=$(node -p 'require("./package.json").version')
           gh workflow run gitlab-release-sync.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f tag="v${version}"
+      - name: Dispatch the WeCom release sync
+        # GitLab 派发失败也须尝试微盘；只有本次 Release 已公开且开关启用时才派发。
+        if: ${{ !cancelled() && steps.publish_release.outcome == 'success' && vars.WECOM_SYNC_ENABLED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          gh workflow run wecom-release-sync.yml --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" -f tag="v${version}"
