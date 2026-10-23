@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { ensureDesktopDeviceMidSync } from "../src/main/desktopDeviceMid.js";
 
 const tempDirs: string[] = [];
@@ -63,7 +64,10 @@ describe("ensureDesktopDeviceMidSync", () => {
     const dir = makeTempDir();
     writeFileSync(
       join(dir, "telemetry-state.json"),
-      JSON.stringify({ lastDailyActiveDate: "2026-06-23", dailyActiveInFlight: { date: "x", startedAt: 1 } }),
+      JSON.stringify({
+        lastDailyActiveDate: "2026-06-23",
+        dailyActiveInFlight: { date: "x", startedAt: 1 },
+      }),
       "utf-8",
     );
 
@@ -76,22 +80,14 @@ describe("ensureDesktopDeviceMidSync", () => {
   });
 
   it("与数仓侧（telemetryCore）读到同一个 device_mid", async () => {
-    const dir = makeTempDir();
+    const home = makeTempDir();
+    // Main 与显式 home 的 Telemetry 必须直接共享产品根，不能复制到另一个旧目录冒充共享。
+    const sharedDir = join(home, UWORK_DATA_ROOT_DIR_NAME, "v2");
     const generated = ensureDesktopDeviceMidSync({
-      configDir: dir,
+      configDir: sharedDir,
       createId: () => "shared-device-uuid",
     });
-
-    // telemetryCore 用 homeDir 定位 state 文件：{homeDir}/.zcode/v2/telemetry-state.json
-    // 让该路径正好等于本测试的 configDir，验证两侧读同一字段。
-    const home = makeTempDir();
-    const sharedDir = join(home, ".zcode", "v2");
-    mkdirSync(sharedDir, { recursive: true });
-    writeFileSync(
-      join(sharedDir, "telemetry-state.json"),
-      JSON.stringify({ deviceMid: generated }),
-      "utf-8",
-    );
+    expect(generated).toBe("shared-device-uuid");
 
     const { createTelemetryCore } = await import("@zcode/services/node");
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
@@ -115,6 +111,8 @@ describe("ensureDesktopDeviceMidSync", () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body));
     expect(body.device_mid).toBe("shared-device-uuid");
+    expect(readState(sharedDir).deviceMid).toBe(generated);
+    expect(existsSync(join(home, ".zcode"))).toBe(false);
   });
 
   it("JSON 损坏时视作缺失，生成新 UUID 不抛", () => {
