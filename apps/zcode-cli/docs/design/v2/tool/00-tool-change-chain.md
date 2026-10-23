@@ -1,5 +1,13 @@
 # Tool Change Chain Spec
 
+## MCP 初次授权与历史停止记录恢复（2026-10-23）
+
+MCP 授权先由文件 adapter 幂等创建凭据父目录，再经原 lease 互斥进入授权与 pending URL
+发布；权限错误仍上抛，不新增 auth、refresh 或锁 owner。fresh-user 回归从缺失目录开始。
+历史 transcript hydration 对精确的 `ZCode Protocol session stopped` 和
+`UWork Protocol session stopped` 均恢复 cancelled；普通相似错误仍为 error，
+不修改原始 transcript、实时消息顺序或会话执行所有权。
+
 ## 插件 Agent 模型继承（2026-10-23）
 
 Settings → SubagentsService → agents-state.json → Host runtime snapshot / CLI loader →
