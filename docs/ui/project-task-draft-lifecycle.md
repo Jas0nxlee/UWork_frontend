@@ -259,3 +259,7 @@ PD06 的 rejected/unknown/duplicate、刷新重建账本、TTL 与旧 ACK，PD07
 真实安装应用验收：已有任务 → 任务区新建 →「不在项目中工作」→ 发送安装验证 A；再次新建并发送一个持续执行 `sleep 90` 的任务。在其运行期间通过 Cmd+N 进入独立草稿并发送验证 B，B 返回 `INSTALL_VERIFY_B_DONE` 后切回 A，界面仍显示工作中（1 分 5 秒）、`sleep 90` 与停止按钮。Host 索引只读核对两个任务 projectId 均为空，session 与 workspacePath 均不同。
 
 本机依赖/生成目录存在历史副本，干净安装依赖并重新构建后完成打包。桌面文件提供程序会重新附加 Finder 元数据，故将生成应用复制到非同步构建目录，仅清除 FinderInfo/ResourceFork 后重新签名；afterPack 改写 ASAR 后重新计算其 header 摘要并再次签名，最终从 DMG 中验证同一应用字节再安装。安装包体积 196.4 MiB（上限 500 MiB）。本次只执行本机构建和安装，未公开发布或打标签。
+
+### PR 扩大验证中的夹具维护
+
+干净工作树以 PR 的 `origin/main` 为显式基线执行推送检查，affected 选择 582 个测试文件。发现三个 E2E helper 消费者仍按 `.zcode` 用户根准备/读取配置，已随 helper 合同同步改为 `.uwork`；工作区内 `.zcode/config.json` 保持不变。另在未修改的主干上复现五个文件、六项既有失败：四项文案仍期待旧 ZCode 品牌，静态路由两项测试在 HTTP listening 事件之前读取端口。按当前 UWork 文案和异步 listen 合同修正测试夹具，保留所有内容、路径隔离和 HTTP 响应断言，不跳过测试或降低门槛；未改变对应产品行为。Electron 缺失属于新工作树忽略安装脚本的环境准备，执行已有安装脚本恢复。

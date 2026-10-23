@@ -50,7 +50,8 @@ describe("model provider restart runtime", () => {
     await seedTurboAgentStartupModel("provider-a", "model-a");
 
     expect(
-      JSON.parse(await readFile(join(homeDir, ".zcode", "v2", "provider_config.json"), "utf-8")),
+      // 用户配置读实际 UWork 根；下方工作区内 .zcode/config.json 仍是兼容合同。
+      JSON.parse(await readFile(join(homeDir, ".uwork", "v2", "provider_config.json"), "utf-8")),
     ).toEqual({
       schemaVersion: 1,
       config: {
