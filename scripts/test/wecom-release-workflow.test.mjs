@@ -50,8 +50,21 @@ test("下载和上传使用 GitLab 同一安装包选择器且下载有重试", 
   assert.match(script, /selectGitLabReleaseAssets/);
   assert.match(workflow, /for attempt in 1 2 3 4/);
   assert.match(workflow, /gh release download.*--clobber/);
-  assert.match(workflow, /node scripts\/sync-wecom-release.mjs/);
+  assert.match(workflow, /node scripts\/wecom-release-proxy.mjs/);
   assert.doesNotMatch(workflow, /--pattern ['"]\*['"]/);
+});
+
+test("固定代理配置只从 Secret 注入，上传前先探测出口，凭据不写入 workflow", async () => {
+  const workflow = await read(".github/workflows/wecom-release-sync.yml");
+  assert.equal(
+    (workflow.match(/WECOM_PROXY_CONFIG: \$\{\{ secrets.WECOM_PROXY_CONFIG \}\}/g) || []).length,
+    2,
+  );
+  assert.match(workflow, /node scripts\/wecom-release-proxy.mjs --probe-only/);
+  assert.ok(
+    workflow.indexOf("--probe-only") < workflow.indexOf("Download the three release installers"),
+  );
+  assert.doesNotMatch(workflow, /uuid:|public-key:|skip-cert-verify:\s*true/);
 });
 
 test("桌面公开成功后显式派发微盘；GitLab 派发失败不阻止尝试；无配置时关闭自动派发", async () => {

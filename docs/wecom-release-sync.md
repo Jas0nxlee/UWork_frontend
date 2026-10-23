@@ -31,6 +31,16 @@
 
 ## 自动触发与手动补传
 
+### 使用固定代理出口
+
+也可以保留 GitHub 托管 Linux runner，通过 `WECOM_PROXY_CONFIG` Secret 配置一个 VLESS Reality 节点。值为单个节点的 JSON 对象（包含 server、port、uuid、flow、tls、servername、reality-opts、client-fingerprint、network、encryption 等字段），不是整份 Clash 配置。必须开启 TLS 且 `skip-cert-verify` 为 `false`；只支持 TCP、Vision 和 chrome 指纹。
+
+代理只解决出口固定问题，实际出口地址仍需添加到企业微信应用的“企业可信 IP”。工作流先运行无凭据出口/连通性探测，通过后才下载三个安装包；上传时重新启动代理，所有企微 token、目录及文件请求都经该出口。GitHub 附件下载不使用该隧道。代理连接失败时停止，不回退直连。
+
+代理二进制固定为 Mihomo `v1.19.33`，下载后核对仓库代码中的固定 SHA-256。配置仅在运行时随机临时目录中创建（目录 0700、文件 0600），只监听 loopback；成功、失败或取消时删除配置并终止代理。原始节点配置和代理日志不保存到 artifact。
+
+### 触发方式
+
 - 桌面发布工作流将所有附件上传并将 Release 公开后，显式派发微盘同步。`GITHUB_TOKEN` 发布事件不会再自动启动另一个 workflow，因此不能只依赖 `release.published`。网页人工发布 Release 时也支持 published 事件。
 - 在 Actions → **Sync release to WeCom Drive** → Run workflow，选择已包含该 workflow 的默认分支，输入已公开标签，如 `v0.1.2`。不填时使用最新公开 Release。草稿、非正式版本和缺少必需安装包会失败。
 - 也可用 CLI：`gh workflow run wecom-release-sync.yml --ref main -f tag=v0.1.2`。查看运行结果：`gh run list --workflow wecom-release-sync.yml`。

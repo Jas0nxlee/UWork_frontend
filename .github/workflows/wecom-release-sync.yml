@@ -89,6 +89,11 @@ jobs:
           catch (error) { console.error(error.message); process.exitCode = 1; }
           JS
 
+      - name: Check fixed proxy egress before downloading installers
+        env:
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+        run: node scripts/wecom-release-proxy.mjs --probe-only
+
       - name: Download the three release installers with retries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -118,6 +123,7 @@ jobs:
 
       - name: Upload and verify the three installers
         env:
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
@@ -126,7 +132,7 @@ jobs:
           RELEASE_JSON: ${{ runner.temp }}/wecom-release.json
           ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
           SYNC_REPORT: ${{ runner.temp }}/wecom-release-verification.json
-        run: node scripts/sync-wecom-release.mjs
+        run: node scripts/wecom-release-proxy.mjs
 
       - name: Preserve the verification and partial progress report
         if: always()
