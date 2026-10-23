@@ -4,6 +4,7 @@ import {
   ZCODE_VERSION,
   ZCODE_ENV,
   ZCODE_TELEMETRY_REPORT_ENDPOINT,
+  UWORK_DATA_ROOT_DIR_NAME,
   buildZCodeSourceHeadersFromContext,
   rewriteZCodeEndpointUrl,
   sanitizeTelemetryEventDetail,
@@ -125,14 +126,15 @@ function toLocalDateKey(timestamp: number, timeZone: string): string {
 
 function resolveTelemetryStateFile(homeDir?: string): string {
   if (homeDir) {
-    return join(homeDir, ".zcode", "v2", "telemetry-state.json");
+    // 显式 home 与默认数据根必须共用状态，否则来源头和上报会生成两个 deviceMid。
+    return join(homeDir, UWORK_DATA_ROOT_DIR_NAME, "v2", "telemetry-state.json");
   }
   return join(getAppConfigDir(), "telemetry-state.json");
 }
 
 function resolveTelemetryLockFile(homeDir?: string): string {
   if (homeDir) {
-    return join(homeDir, ".zcode", "v2", "telemetry-state.lock");
+    return join(homeDir, UWORK_DATA_ROOT_DIR_NAME, "v2", "telemetry-state.lock");
   }
   return join(getAppConfigDir(), "telemetry-state.lock");
 }

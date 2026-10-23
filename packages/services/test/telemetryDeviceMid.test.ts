@@ -1,3 +1,4 @@
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ describe("ensureTelemetryDeviceMid", () => {
     setDataBaseDir(dataBaseDir);
     return {
       dataBaseDir,
-      stateFile: join(dataBaseDir, ".zcode", "v2", "telemetry-state.json"),
+      stateFile: join(dataBaseDir, UWORK_DATA_ROOT_DIR_NAME, "v2", "telemetry-state.json"),
     };
   }
 
@@ -65,8 +66,9 @@ describe("ensureTelemetryDeviceMid", () => {
       homeDir: dataBaseDir,
     });
 
+    // 显式 home 与默认数据根必须共享设备身份，不能分别落到上游和产品目录。
     const [first, second] = await Promise.all([
-      ensureTelemetryDeviceMid({ homeDir: dataBaseDir }),
+      ensureTelemetryDeviceMid(),
       ensureTelemetryDeviceMid({ homeDir: dataBaseDir }),
     ]);
     await core.reportAppLaunch({
@@ -76,6 +78,8 @@ describe("ensureTelemetryDeviceMid", () => {
     });
 
     expect(first).toBe(second);
+    expect(buildZCodeSourceHeaders()["X-Device-Mid"]).toBe(first);
+    expect(existsSync(join(dataBaseDir, ".zcode"))).toBe(false);
     expect(JSON.parse(readFileSync(stateFile, "utf-8")).deviceMid).toBe(first);
     const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)) as {
       device_mid?: string;
