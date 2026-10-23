@@ -39,6 +39,14 @@
 
 代理二进制固定为 Mihomo `v1.19.33`，下载后核对仓库代码中的固定 SHA-256。配置仅在运行时随机临时目录中创建（目录 0700、文件 0600），只监听 loopback；成功、失败或取消时删除配置并终止代理。原始节点配置和代理日志不保存到 artifact。
 
+### 一次性初始化应用空间
+
+普通成员共享空间出现空间级拒绝时，已获得明确授权后可以手动选择 `bootstrap_space=true`，创建由当前应用拥有的「UWork 发布包」空间。须先配置 Secret `WECOM_SPACE_ADMIN_NAME`（唯一管理员的准确姓名），并在 `bootstrap_public_key` 输入本地 RSA 公钥 PEM 的 Base64。私钥仅留在调用方本地，至少使用 2048 位 RSA。
+
+初始化先查询可见通讯录并校验唯一成员及激活状态，以权限 7 将该成员设置为管理员；不删除、转让或更改原空间，也不下载安装包。创建后立即保存 `wecom-encrypted-target-<运行编号>` artifact（1 天、RSA-OAEP-SHA256 加密），随后校验管理员和目录。管理员缺失或创建响应不明时停止，不盲目重新创建。已切换到该专用空间后，再次初始化会验证并复用，不重复创建。
+
+只有初始化验证成功后，调用方解密交接配置，将 `space`、`folder` 分别写入 `WECOM_SPACE_ID`、`WECOM_FOLDER_ID`，再以普通模式运行同步。不要在输出、工单或仓库中保存明文账号、空间标识、私钥。`bootstrap_space` 和 `inspect_only` 不能同时开启；自动 Release 不执行初始化。
+
 ### 触发方式
 
 需要定位空间权限时，可以勾选 `inspect_only`，或运行 `gh workflow run wecom-release-sync.yml --ref main -f tag=v0.1.2 -f inspect_only=true`。该模式通过同一代理和凭据读取应用名称、空间信息和一条目录列表；不下载安装包、不上传、不调整权限。报告中只有名称、结果码和格式判断，不输出内部标识或凭据。诊断拒绝仍失败退出，不能被当作同步成功。

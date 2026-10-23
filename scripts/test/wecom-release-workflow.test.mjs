@@ -79,6 +79,17 @@ test("手动权限诊断不下载安装包，使用独立只读入口并保留�
   assert.match(wrapper, /wecom-release-diagnostics\.mjs/);
 });
 
+test("应用空间初始化只能手动显式启用，不下载安装包并加密交接配置", async () => {
+  const workflow = await read(".github/workflows/wecom-release-sync.yml");
+  const wrapper = await read("scripts/wecom-release-proxy.mjs");
+  assert.match(workflow, /bootstrap_space:\s+description:.*\s+type: boolean\s+default: false/);
+  assert.match(workflow, /if: inputs.inspect_only != true && inputs.bootstrap_space != true/);
+  assert.match(workflow, /WECOM_SPACE_ADMIN_NAME: \$\{\{ secrets.WECOM_SPACE_ADMIN_NAME \}\}/);
+  assert.match(workflow, /wecom-encrypted-target/);
+  assert.match(workflow, /if: always\(\) && inputs.bootstrap_space == true/);
+  assert.match(wrapper, /wecom-release-bootstrap\.mjs/);
+});
+
 test("桌面公开成功后显式派发微盘；GitLab 派发失败不阻止尝试；无配置时关闭自动派发", async () => {
   const workflow = await read(".github/workflows/desktop-release.yml");
   const publish = workflow.indexOf('gh release edit "$tag"');

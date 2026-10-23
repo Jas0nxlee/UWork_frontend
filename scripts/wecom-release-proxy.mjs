@@ -193,9 +193,11 @@ async function probeEgress(env, _child, signal) {
 async function runSyncProcess(env, signal) {
   const script = fileURLToPath(
     new URL(
-      env.WECOM_INSPECT_ONLY === "true"
-        ? "./wecom-release-diagnostics.mjs"
-        : "./sync-wecom-release.mjs",
+      env.WECOM_BOOTSTRAP_SPACE === "true"
+        ? "./wecom-release-bootstrap.mjs"
+        : env.WECOM_INSPECT_ONLY === "true"
+          ? "./wecom-release-diagnostics.mjs"
+          : "./sync-wecom-release.mjs",
       import.meta.url,
     ),
   );

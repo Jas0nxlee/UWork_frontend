@@ -8,6 +8,8 @@ const REPLAYABLE = new Set([
   "file_upload_part",
   "new_space_info",
   "agent_list",
+  "user_simplelist",
+  "user_get",
 ]);
 
 class WecomError extends Error {
@@ -92,23 +94,33 @@ export function createWecomClient({
   return {
     async request(operation, body) {
       if (
-        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list)$/.test(
+        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list|user_simplelist|user_get|space_create)$/.test(
           operation,
         )
       )
         throw new Error("不支持的微盘同步操作");
       for (let refresh = 0; refresh < 2; refresh++) {
+        const getPaths = {
+          agent_list: "agent/list",
+          user_simplelist: "user/simplelist",
+          user_get: "user/get",
+        };
         const url = new URL(
-          operation === "agent_list"
-            ? "https://qyapi.weixin.qq.com/cgi-bin/agent/list"
+          getPaths[operation]
+            ? `https://qyapi.weixin.qq.com/cgi-bin/${getPaths[operation]}`
             : `https://qyapi.weixin.qq.com/cgi-bin/wedrive/${operation}`,
         );
+        if (operation === "user_simplelist") {
+          url.searchParams.set("department_id", String(body?.department_id));
+          url.searchParams.set("fetch_child", String(body?.fetch_child));
+        }
+        if (operation === "user_get") url.searchParams.set("userid", body?.userid);
         url.searchParams.set("access_token", await accessToken());
         try {
           return await invoke(
             operation,
             url,
-            operation === "agent_list" ? undefined : body,
+            getPaths[operation] ? undefined : body,
             REPLAYABLE.has(operation),
           );
         } catch (error) {

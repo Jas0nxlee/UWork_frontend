@@ -13,6 +13,14 @@ on:
         description: Read application and target space permissions without downloading or uploading installers
         type: boolean
         default: false
+      bootstrap_space:
+        description: Explicit one-time creation of the application-owned release space and its administrator
+        type: boolean
+        default: false
+      bootstrap_public_key:
+        description: Base64 PEM RSA public key for encrypted target handoff (bootstrap only)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -80,6 +88,10 @@ jobs:
 
       - name: Check required WeCom settings
         env:
+          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
+          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
+          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
@@ -89,7 +101,11 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { resolveWecomConfig } from './scripts/sync-wecom-release.mjs';
-          try { resolveWecomConfig(process.env); }
+          import { resolveBootstrapConfig } from './scripts/wecom-release-bootstrap.mjs';
+          try {
+            if (process.env.WECOM_BOOTSTRAP_SPACE === 'true') resolveBootstrapConfig(process.env);
+            else resolveWecomConfig(process.env);
+          }
           catch (error) { console.error(error.message); process.exitCode = 1; }
           JS
 
@@ -99,7 +115,7 @@ jobs:
         run: node scripts/wecom-release-proxy.mjs --probe-only
 
       - name: Download the three release installers with retries
-        if: inputs.inspect_only != true
+        if: inputs.inspect_only != true && inputs.bootstrap_space != true
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.options.outputs.tag }}
@@ -128,6 +144,10 @@ jobs:
 
       - name: Inspect access or upload and verify the three installers
         env:
+          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
+          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
+          BOOTSTRAP_HANDOFF: ${{ runner.temp }}/wecom-encrypted-target.json
           WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
           WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
@@ -148,3 +168,11 @@ jobs:
           path: ${{ runner.temp }}/wecom-release-verification.json
           if-no-files-found: ignore
           retention-days: 7
+      - name: Preserve encrypted bootstrap configuration handoff
+        if: always() && inputs.bootstrap_space == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wecom-encrypted-target-${{ github.run_id }}
+          path: ${{ runner.temp }}/wecom-encrypted-target.json
+          if-no-files-found: ignore
+          retention-days: 1
