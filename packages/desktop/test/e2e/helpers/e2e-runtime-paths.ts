@@ -1,4 +1,5 @@
 import { join, posix, resolve } from "node:path";
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 
 export const E2E_RUNTIME_RELATIVE_ROOT = ".zcode-e2e";
 export const E2E_RUNTIME_ROOT_REPLAY_TOKEN = "{{e2eRuntimeRoot}}";
@@ -22,8 +23,8 @@ export function resolveE2EHomeDir({
 
 export function resolveE2EStorageRoot(e2eHomeDir = resolveE2EHomeDir()): string {
   // Bug 根因：回滚 storage profile 时删除了仍被 E2E 用例依赖的路径 helper。
-  // E2E 继续隔离 HOME，但 CLI 根固定使用历史目录 .zcode，不再区分 dev/stable profile。
-  return join(e2eHomeDir, ".zcode");
+  // 与 WDIO bootstrap、产品 Host 共用同一根，避免夹具与实际 CLI 分叉。
+  return join(e2eHomeDir, UWORK_DATA_ROOT_DIR_NAME);
 }
 
 export function resolveE2ERuntimeRoot(e2eHomeDir = resolveE2EHomeDir()): string {

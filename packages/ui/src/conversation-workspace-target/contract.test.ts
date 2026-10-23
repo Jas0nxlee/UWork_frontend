@@ -42,7 +42,7 @@ describe("conversation-workspace-target contract", () => {
     expect(input.openRemoteConversation).not.toHaveBeenCalled();
     expect(input.resolveLocalConversationWorkspacePath).not.toHaveBeenCalled();
   });
-  it("已有本地无项目会话继续使用其目录", async () => {
+  it("已有本地无项目会话仍由草稿 owner 准备下一任务目录", async () => {
     const input = {
       ...ports(),
       activeWorkspaceIdentity: null,
@@ -55,7 +55,7 @@ describe("conversation-workspace-target contract", () => {
         },
       ],
     };
-    expect(await resolveConversationWorkspaceTarget(input)).toEqual({ workspacePath: "/project" });
-    expect(input.resolveLocalConversationWorkspacePath).not.toHaveBeenCalled();
+    expect(await resolveConversationWorkspaceTarget(input)).toEqual({ workspacePath: "/local" });
+    expect(input.resolveLocalConversationWorkspacePath).toHaveBeenCalledOnce();
   });
 });

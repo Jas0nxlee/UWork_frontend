@@ -571,6 +571,7 @@ function RootInner({
     setDirectoryBrowserOpen(true);
   }, []);
   const {
+    workspaceActionError,
     setWorkspaceActionError,
     startDraftInWorkspace,
     startNewTaskFromActiveWorkspace,
@@ -704,6 +705,33 @@ function RootInner({
       },
     });
   }
+
+  // 目录失败由 Root 的现有错误状态直接展示，不与其他全局确认弹窗争用 owner。
+  const rootErrorNode = (
+    <>
+      {rootModelSelectionErrorNode}
+      {workspaceActionError ? (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-4 z-50 flex max-w-sm items-center gap-3 rounded-lg border border-destructive/30 bg-surface-raised px-3 py-2 text-ui-base text-foreground shadow-lg"
+        >
+          <div className="min-w-0 flex-1 break-words">
+            <div className="font-medium">
+              {intl.formatMessage({ id: "root.workspaceActionFailed" })}
+            </div>
+            <div>
+              {workspaceActionError === "project.draftDirectoryMissing"
+                ? intl.formatMessage({ id: "project.draftDirectoryMissing" })
+                : workspaceActionError}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setWorkspaceActionError(null)}>
+            {intl.formatMessage({ id: "common.close" })}
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
 
   const handleResolveConversationWorkspaceForShell = useCallback(
     async () =>
@@ -1304,7 +1332,7 @@ function RootInner({
     const loadingLabel = intl.formatMessage({ id: "common.loading" });
     return (
       <RootShell>
-        {rootModelSelectionErrorNode}
+        {rootErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         {/* HTML 启动壳已经展示 ZCode SVG，但 React 接管 root 后旧壳会被整棵替换。
@@ -1318,7 +1346,7 @@ function RootInner({
   if (!workspaceShellPath && isSettingsTabActive) {
     return (
       <RootShell>
-        {rootModelSelectionErrorNode}
+        {rootErrorNode}
         {remoteConnectionDialog}
         {directoryBrowserDialog}
         <ScopedErrorBoundary
@@ -1343,7 +1371,7 @@ function RootInner({
     // 这里延续入口 loading，等任务列表有 workspaceShellPath 后再切换，避免露出浏览器白底。
     return (
       <RootShell>
-        {rootModelSelectionErrorNode}
+        {rootErrorNode}
         {initialWorkspaceLoadingFallback}
         {directoryBrowserDialog}
       </RootShell>
@@ -1351,9 +1379,12 @@ function RootInner({
   }
 
   if (!workspaceShellPath) {
-    return remoteConnectionDialogOpen || directoryBrowserOpen || rootModelSelectionErrorNode ? (
+    return remoteConnectionDialogOpen ||
+      directoryBrowserOpen ||
+      workspaceActionError ||
+      rootModelSelectionErrorNode ? (
       <RootShell>
-        {rootModelSelectionErrorNode}
+        {rootErrorNode}
         {remoteConnectionDialogOpen ? remoteConnectionDialog : null}
         {directoryBrowserDialog}
       </RootShell>
@@ -1436,7 +1467,7 @@ function RootInner({
 
   return (
     <RootShell>
-      {rootModelSelectionErrorNode}
+      {rootErrorNode}
       {remoteConnectionDialog}
       {directoryBrowserDialog}
       {isWebRemoteControlRoot ? (

@@ -107,6 +107,7 @@ import { ensureSshRemoteReleaseAssets } from "./test/e2e/helpers/e2e-ssh-remote-
 import {
   ASK_USER_QUESTION_E2E_CLOCK_SCALE_ENV,
   BIGMODEL_PROVIDER_ID,
+  UWORK_DATA_ROOT_DIR_NAME,
   ZAI_PROVIDER_ID,
 } from "@zcode/shared";
 import {
@@ -215,8 +216,8 @@ const E2E_HOME_DIR = resolve(
 const E2E_PACKAGED_APP_BINARY_PATH = process.env.ZCODE_E2E_PACKAGED_APP_PATH?.trim()
   ? resolve(process.env.ZCODE_E2E_PACKAGED_APP_PATH)
   : null;
-// 目录隔离已回滚：所有 Desktop E2E 继续使用历史 ~/.zcode 布局。
-const E2E_STORAGE_ROOT = resolve(E2E_HOME_DIR, ".zcode");
+// 夹具与当前产品必须读取同一数据根；写到旧 .zcode 会让实际 UWork 看不到配置。
+const E2E_STORAGE_ROOT = resolve(E2E_HOME_DIR, UWORK_DATA_ROOT_DIR_NAME);
 const E2E_APP_CONFIG_DIR = resolve(E2E_STORAGE_ROOT, "v2");
 const E2E_APP_SETTINGS_FILE = resolve(E2E_APP_CONFIG_DIR, "setting.json");
 const E2E_APP_CREDENTIALS_FILE = resolve(E2E_APP_CONFIG_DIR, "credentials.json");

@@ -100,6 +100,9 @@ const zhCN: Record<string, string> = {
   "project.browse": "选择文件夹",
   "project.noFolders": "项目尚未添加源文件夹",
   "project.primaryRootMissing": "该项目主文件夹已被删除或移动",
+  "project.draftDirectoryMissing":
+    "任务草稿文件夹已被删除或移动。首次发送结果仍待确认，请保留当前任务并恢复后重试。",
+  "root.workspaceActionFailed": "无法打开任务工作区",
   "project.primaryRootUnavailable": "无法访问该项目主文件夹",
   "project.cancel": "取消",
   "project.save": "保存",

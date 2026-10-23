@@ -2,7 +2,12 @@
 // 新建草稿按项目隔离；未归类任务仅在首发接纳后分配下一工作区。
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { TID_CHAT_MODE_SELECT_TRIGGER, TID_V4_COMPOSER_SEND } from "@zcode/shared/test-ids";
+import {
+  TID_CHAT_MODE_SELECT_TRIGGER,
+  TID_COMPOSER_WORK_OUTSIDE_PROJECT,
+  TID_COMPOSER_WORKSPACE_TRIGGER,
+  TID_V4_COMPOSER_SEND,
+} from "@zcode/shared/test-ids";
 import { ServiceChannels } from "@zcode/shared";
 import {
   installHandoffRpcProbe,
@@ -17,7 +22,13 @@ import {
 } from "../../../helpers/upstream-provider.js";
 import { skipOccupationOnboardingIfPresent } from "../../../helpers/occupation-onboarding.js";
 import { startDraftFromProject } from "../../../helpers/project-sidebar.js";
-import { clearAppData, DEFAULT_WORKSPACE } from "../../../helpers/desktop-app.js";
+import {
+  clearAppData,
+  clickTestIdByDom,
+  clickTestIdByWebDriver,
+  DEFAULT_WORKSPACE,
+  waitForWorkspaceApp,
+} from "../../../helpers/desktop-app.js";
 import { resolveE2ERuntimePath, resolveE2EToolPath } from "../../../helpers/e2e-runtime-paths.js";
 import { getLatestUpstreamToolResultByToolCallId } from "../../../helpers/conversation-session-network.js";
 import { getV4ComposerDraftScopeSnapshot } from "../../../helpers/conversation-session-store.js";
@@ -32,6 +43,8 @@ import {
   waitForV4ComposerSelectionReady,
   waitForV4TimelineContaining,
   waitForV4ComposerText,
+  waitForV4ConversationState,
+  getV4ConversationState,
   sendV4Prompt,
 } from "../../../helpers/v4-conversation.js";
 
@@ -94,15 +107,20 @@ async function expectMode(mode: string) {
 }
 
 describe("Composer Recent 权限继承", () => {
-  it("PD01/02: 任务草稿复用执行目录，接纳后新任务换目录并继承模型权限", async () => {
-    await skipOccupationOnboardingIfPresent();
+  it("PD01/02: 菜单与任务加号复用草稿，首个任务运行时仍可新建并发送", async () => {
+    // 通过现有 workspace 就绪入口关闭引导，避免依赖被弹层遮挡的“跳过”按钮。
+    await waitForWorkspaceApp(DEFAULT_WORKSPACE, 30_000);
     await startDraftFromProject(DEFAULT_WORKSPACE);
     await ensureUpstreamProviderForE2E({ skipToolbarSelection: true });
-    const startTask = async () => {
-      const button = $('[data-testid="virtual-project-new-task"]');
-      await $('[data-testid="conversation-section"]').moveTo();
-      await button.waitForDisplayed();
-      await button.click();
+    // UWork 新 profile 的企微登录是独立弹层；通过产品提供的跳过入口关闭后再操作草稿菜单。
+    const enterpriseLoginSkip = $('[data-testid="enterprise-login-skip"]');
+    if (await enterpriseLoginSkip.isDisplayed()) {
+      await enterpriseLoginSkip.click();
+      await $('[data-testid="enterprise-login-page"]').waitForExist({ reverse: true });
+    }
+    await mkdir(EVIDENCE_DIR, { recursive: true });
+    await browser.saveScreenshot(join(EVIDENCE_DIR, "pd01-project-before-menu.png"));
+    const waitForTaskDraft = async () => {
       await browser.waitUntil(
         async () =>
           (await getV4PaneSnapshot()).sessionId === "draft" &&
@@ -121,6 +139,20 @@ describe("Composer Recent 权限继承", () => {
           })),
       );
     };
+    const startTask = async () => {
+      const button = $('[data-testid="virtual-project-new-task"]');
+      await $('[data-testid="conversation-section"]').moveTo();
+      await button.waitForDisplayed();
+      await button.click();
+      await waitForTaskDraft();
+    };
+    const pendingDraftId = () =>
+      browser.execute(() => {
+        const pending = JSON.parse(
+          localStorage.getItem('zcode-pending-task-draft:v1:["desktop","local",null]') ?? "null",
+        ) as { draftId?: string } | null;
+        return pending?.draftId ?? null;
+      });
     const activePath = () =>
       browser.execute(
         () =>
@@ -130,15 +162,38 @@ describe("Composer Recent 权限继承", () => {
             }
           ).__zcodeTabStoreE2E.getState().activeWorkspacePath,
       );
-    await startTask();
+    // 仅向本用例隔离 profile 注入失效的未发送引用，复现线上遗留缓存；不删除任何目录。
+    const staleDraftId = await browser.execute(() => {
+      const draftId = crypto.randomUUID();
+      localStorage.setItem(
+        'zcode-pending-task-draft:v1:["desktop","local",null]',
+        JSON.stringify({
+          draftId,
+          workspacePath: `/missing-e2e-draft-${draftId}`,
+        }),
+      );
+      return draftId;
+    });
+    // 菜单曾绕过 Root 的待发送目录身份；只测任务加号不能发现两条入口分叉。
+    await clickTestIdByWebDriver(TID_COMPOSER_WORKSPACE_TRIGGER, {
+      timeoutMsg: "项目草稿没有工作区选择器",
+    });
+    await clickTestIdByDom(TID_COMPOSER_WORK_OUTSIDE_PROJECT, {
+      timeoutMsg: "项目菜单没有「不在项目中工作」入口",
+    });
+    await waitForTaskDraft();
     await switchV4Model(UPSTREAM_PROVIDER_ID, UPSTREAM_MODEL, "");
     await switchV4Mode("yolo");
     await setV4ComposerText("E2E_PD01_UNSENT");
     const firstPath = await activePath();
+    const firstDraftId = await pendingDraftId();
+    expect(firstDraftId).toBeTruthy();
+    expect(firstDraftId).not.toBe(staleDraftId);
     await startDraftFromProject(DEFAULT_WORKSPACE);
     await startTask();
     await waitForV4ComposerText("E2E_PD01_UNSENT", "任务草稿未恢复");
     expect(await activePath()).toBe(firstPath);
+    expect(await pendingDraftId()).toBe(firstDraftId);
     await expectMode("yolo");
     const selected = await getV4ModelConfig();
     await sendV4PromptAndWaitAccepted(
@@ -146,14 +201,78 @@ describe("Composer Recent 权限继承", () => {
       "E2E_COMPOSER_RECENT_MODE_SEED",
       "任务首发未接纳",
     );
+    await waitForV4TimelineContaining("RECENT_MODE_STREAMING");
+    const firstRunning = await waitForV4ConversationState(
+      (state) => state.state === "streaming" && Boolean(state.sessionId),
+      "首个无项目任务没有进入运行态",
+    );
+    const firstSessionId = firstRunning.sessionId;
+    if (!firstSessionId) throw new Error("首个无项目任务缺少 sessionId");
+    await captureState("pd02-first-running");
+    // 新建的边界是首发接纳，不能等模型完成才释放上一份草稿身份。
     await startTask();
     await waitForV4ComposerText("", "新任务不应复制已发送正文");
     expect(await activePath()).not.toBe(firstPath);
+    expect(await pendingDraftId()).not.toBe(firstDraftId);
     await expectMode("yolo");
     expect(await getV4ModelConfig()).toMatchObject({
       provider: selected.provider,
       model: selected.model,
     });
+    const secondPath = await activePath();
+    await captureState("pd02-second-draft");
+    await sendV4PromptAndWaitAccepted(
+      "E2E_COMPOSER_RECENT_MODE_SECOND 请回复第二个任务测试标记。",
+      "E2E_COMPOSER_RECENT_MODE_SECOND",
+      "首个任务运行时第二个无项目任务未接纳",
+    );
+    const secondSessionId = (await getV4PaneSnapshot()).sessionId;
+    expect(secondSessionId).toBeTruthy();
+    expect(secondSessionId).not.toBe("draft");
+    expect(secondSessionId).not.toBe(firstSessionId);
+    await waitForV4TimelineContaining("RECENT_MODE_SECOND_DONE");
+    await selectV4TaskById(firstSessionId);
+    expect(await activePath()).toBe(firstPath);
+    expect(await activePath()).not.toBe(secondPath);
+    await waitForV4TimelineContaining("RECENT_MODE_STREAMING");
+    expect(await getV4ConversationState()).toMatchObject({
+      sessionId: firstSessionId,
+      state: "streaming",
+      stopRequested: false,
+    });
+    await captureState("pd02-first-still-running");
+    // 结果未知的首发不能因缺目录被释放；错误必须可见，当前运行任务必须保留。
+    const lockedDraftId = await browser.execute(() => {
+      const draftId = crypto.randomUUID();
+      localStorage.setItem(
+        'zcode-pending-task-draft:v1:["desktop","local",null]',
+        JSON.stringify({
+          draftId,
+          workspacePath: `/missing-e2e-draft-${draftId}`,
+          commandId: "e2e-unknown-command",
+          sessionId: null,
+        }),
+      );
+      return draftId;
+    });
+    try {
+      await $('[data-testid="conversation-section"]').moveTo();
+      await $('[data-testid="virtual-project-new-task"]').click();
+      const error = $('[role="alert"]');
+      await error.waitForDisplayed();
+      expect(await error.getText()).toContain("首次发送结果仍待确认");
+      expect(await pendingDraftId()).toBe(lockedDraftId);
+      expect((await getV4PaneSnapshot()).sessionId).toBe(firstSessionId);
+      await browser.saveScreenshot(join(EVIDENCE_DIR, "pd02-pending-command-error.png"));
+      await error.$("button").click();
+      await error.waitForExist({ reverse: true });
+    } finally {
+      await browser.execute((draftId) => {
+        const key = 'zcode-pending-task-draft:v1:["desktop","local",null]';
+        if (JSON.parse(localStorage.getItem(key) ?? "null")?.draftId === draftId)
+          localStorage.removeItem(key);
+      }, lockedDraftId);
+    }
   });
 
   it("PD03/04/09: 同目录项目独立保存草稿和默认配置，修改主要目录保留项目草稿", async () => {

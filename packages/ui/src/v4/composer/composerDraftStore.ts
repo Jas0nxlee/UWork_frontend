@@ -88,6 +88,17 @@ export function ensurePendingTaskDraft(scope: ComposerScope): PendingTaskDraft {
   writePendingTaskDraft(scope, next);
   return next;
 }
+/** 仅 Host 已确认目录缺失的未发送草稿允许换代；未知发送仍归命令恢复账本。 */
+export function replaceMissingPendingTaskDraft(
+  scope: ComposerScope,
+  expectedDraftId: string,
+): PendingTaskDraft | null {
+  const current = readPendingTaskDraft(scope);
+  if (current?.draftId !== expectedDraftId || current.commandId) return null;
+  const next = { draftId: crypto.randomUUID() };
+  writePendingTaskDraft(scope, next);
+  return next;
+}
 export function bindPendingTaskDraft(
   scope: ComposerScope,
   draftId: string,

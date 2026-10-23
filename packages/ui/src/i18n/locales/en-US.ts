@@ -158,6 +158,9 @@ const enUS: Record<string, string> = {
   "project.browse": "Choose folder",
   "project.noFolders": "No source folders in this project",
   "project.primaryRootMissing": "This project's main folder has been deleted or moved",
+  "project.draftDirectoryMissing":
+    "The task draft folder was deleted or moved. The first submission is still awaiting confirmation. Keep the current task and retry after recovery.",
+  "root.workspaceActionFailed": "Unable to open the task workspace",
   "project.primaryRootUnavailable": "This project's main folder cannot be accessed",
   "project.cancel": "Cancel",
   "project.save": "Save",

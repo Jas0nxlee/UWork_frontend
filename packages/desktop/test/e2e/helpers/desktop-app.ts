@@ -12,7 +12,7 @@ import {
   NodePersonalProviderConfigRepository,
   PERSONAL_PROVIDER_CONFIG_FILE_NAME,
 } from "@zcode/provider-node";
-import { ZAI_PROVIDER_ID } from "@zcode/shared";
+import { ZAI_PROVIDER_ID, UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import {
   TID_COMPOSER_WORKSPACE_TRIGGER,
   TID_V4_SESSION_PANE,
@@ -37,8 +37,8 @@ const E2E_HOME_DIR =
   // 导致 provider 诊断和清理读写开发者本机配置，而不是当前 e2e sandbox。
   DEFAULT_E2E_HOME_DIR;
 // Bug 根因：storage profile 回滚删除了该共享根字段，但多个 E2E 仍需定位 CLI 数据。
-// 隔离由测试 HOME 保证，目录名保持生产历史语义 .zcode。
-const E2E_STORAGE_ROOT = join(E2E_HOME_DIR, ".zcode");
+// 旧夹具写到 .zcode，实际 UWork 读取 .uwork，导致引导/配置并未按夹具初始化。
+const E2E_STORAGE_ROOT = join(E2E_HOME_DIR, UWORK_DATA_ROOT_DIR_NAME);
 const E2E_APP_DATA_DIR = join(E2E_STORAGE_ROOT, "v2");
 export const DEFAULT_WORKSPACE = join(E2E_HOME_DIR, "ZCodeProject");
 export const DEFAULT_CONVERSATION_WORKSPACE = join(E2E_STORAGE_ROOT, "workspace", "default");
@@ -935,7 +935,7 @@ export function probeWorkspaceAppState(
       }
     ).__zcodeTabStoreE2E?.getState().activeWorkspacePath === params.expectedPath;
   const conversationWorkspaceReady =
-    params.expectedPath.replace(/\\/g, "/").endsWith("/.zcode/workspace/default") &&
+    params.expectedPath.replace(/\\/g, "/").endsWith("/.uwork/workspace/default") &&
     Boolean(document.querySelector(`[data-testid="${params.composerWorkspaceTriggerTestId}"]`));
   // v4 硬切后聊天区是 v4 session pane（testid 带 paneId 后缀，用前缀匹配）。
   return (workspaceItem || conversationWorkspaceReady) &&

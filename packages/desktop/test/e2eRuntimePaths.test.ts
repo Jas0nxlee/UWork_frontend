@@ -70,10 +70,10 @@ describe("Desktop E2E runtime paths", () => {
     ).toBe(resolve("root", "explicit-home"));
   });
 
-  it("keeps the E2E CLI storage under the legacy .zcode directory", () => {
+  it("keeps the E2E CLI storage under the current UWork data directory", () => {
     const homeDir = resolve("root", "isolated-e2e-home");
 
-    expect(resolveE2EStorageRoot(homeDir)).toBe(join(homeDir, ".zcode"));
+    expect(resolveE2EStorageRoot(homeDir)).toBe(join(homeDir, ".uwork"));
   });
 
   it("does not allow raw system /tmp paths in Desktop E2E runtime sources", () => {

@@ -60,7 +60,7 @@ describe("RPN-11 conversation target", () => {
       expect(resolveLocalConversationWorkspacePath).toHaveBeenCalledOnce();
     },
   );
-  it("reuses the active local conversation when a remote tab with the same path is first", async () => {
+  it("asks the local draft owner even when a remote tab with the same path is first", async () => {
     const store = createTabStore();
     const path = "/local/conversation";
     const localId = store.getState().addTab(path, { workspacePurpose: "conversation" });
@@ -75,10 +75,10 @@ describe("RPN-11 conversation target", () => {
         activeWorkspaceIdentity: store.getState().activeWorkspaceIdentity,
         resolveLocalConversationWorkspacePath,
       }),
-    ).resolves.toEqual({ workspacePath: path });
-    expect(resolveLocalConversationWorkspacePath).not.toHaveBeenCalled();
+    ).resolves.toEqual({ workspacePath: "/unused" });
+    expect(resolveLocalConversationWorkspacePath).toHaveBeenCalledOnce();
   });
-  it("reuses the local conversation without creating another workspace", async () => {
+  it("lets the draft owner decide whether the local conversation directory is reusable", async () => {
     const store = createTabStore();
     store.getState().addTab("/local/conversation", { workspacePurpose: "conversation" });
     const resolveLocalConversationWorkspacePath = vi.fn(async () => "/unused");
@@ -89,7 +89,7 @@ describe("RPN-11 conversation target", () => {
         activeWorkspaceIdentity: null,
         resolveLocalConversationWorkspacePath,
       }),
-    ).resolves.toEqual({ workspacePath: "/local/conversation" });
-    expect(resolveLocalConversationWorkspacePath).not.toHaveBeenCalled();
+    ).resolves.toEqual({ workspacePath: "/unused" });
+    expect(resolveLocalConversationWorkspacePath).toHaveBeenCalledOnce();
   });
 });

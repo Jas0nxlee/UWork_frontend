@@ -27,7 +27,6 @@ export async function resolveConversationWorkspaceTarget(
   ) {
     throw new Error("Remote projects require a project workspace");
   }
-  if (activeTab?.workspacePurpose === "conversation")
-    return { workspacePath: activeTab.workspacePath };
+  // conversation 只是 tab 分类，可能已经有运行任务；草稿复用/消费必须由 Root 决定。
   return { workspacePath: await params.resolveLocalConversationWorkspacePath() };
 }

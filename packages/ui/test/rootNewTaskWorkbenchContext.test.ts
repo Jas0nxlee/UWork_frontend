@@ -6,6 +6,11 @@ import {
   readComposerWorkspaceScope,
   rememberComposerWorkspaceScope,
   resolveComposerScope,
+  ensurePendingTaskDraft,
+  bindPendingTaskDraft,
+  readPendingTaskDraft,
+  persistV4ComposerDraft,
+  markPendingTaskDraftCommand,
 } from "@/v4/composer/composerDraftStore.js";
 import { selectRemoteWorkspaceProjectFromDialog } from "@/root/useRemoteWorkspaceHistory.js";
 import type { CreateTaskOptions } from "@/app-shell/types.js";
@@ -93,6 +98,176 @@ beforeEach(() => {
   useZCodeSessionStore.setState({ workspaces: {} });
   usePaneLayoutStore.setState(INITIAL_PANE_LAYOUT);
   useWorkbenchGroupStore.getState().resetWorkbenchGroups();
+});
+
+it("无项目菜单与任务加号共用未发送目录及草稿身份", async () => {
+  const { result, prepareSession } = fixture();
+  let path!: string;
+  await act(async () => {
+    path = await result.current.handleResolveConversationWorkspace();
+  });
+  const pending = readPendingTaskDraft(resolveComposerScope(null));
+  expect(pending).toMatchObject({ workspacePath: path, draftId: expect.any(String) });
+  expect(prepareSession).toHaveBeenLastCalledWith({ draftId: pending!.draftId, reuseDraft: false });
+  await act(async () => {
+    await result.current.handleCreateTask({ projectId: null });
+  });
+  expect(prepareSession).toHaveBeenLastCalledWith({ draftId: pending!.draftId, reuseDraft: true });
+});
+
+it("缺失的未发送目录换代且保留正文，已运行任务不受影响", async () => {
+  const scope = resolveComposerScope(null);
+  const stale = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, stale.draftId, "/missing");
+  persistV4ComposerDraft("/missing", undefined, "__draft__", { text: "保留未发送正文" }, scope);
+  useZCodeSessionStore.getState().setActiveTaskId("/old", "running-session");
+  const { result, prepareSession, addTab } = fixture();
+  prepareSession.mockRejectedValueOnce(new Error("project.draftDirectoryMissing"));
+  await act(async () => {
+    await result.current.handleCreateTask({ projectId: null });
+  });
+  const next = readPendingTaskDraft(scope)!;
+  expect(next.draftId).not.toBe(stale.draftId);
+  expect(prepareSession).toHaveBeenLastCalledWith({ draftId: next.draftId, reuseDraft: false });
+  expect(addTab).toHaveBeenCalledWith(next.workspacePath, { workspacePurpose: "conversation" });
+  expect(readV4ComposerDraft(next.workspacePath!, undefined, "__draft__", scope)?.text).toBe(
+    "保留未发送正文",
+  );
+  expect(useZCodeSessionStore.getState().getWorkspaceState("/old").activeTaskId).toBe(
+    "running-session",
+  );
+});
+
+it.each(["pending-command", "permission"])("%s 不得使草稿目录误换代", async (condition) => {
+  const scope = resolveComposerScope(null);
+  const pending = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, pending.draftId, "/missing");
+  if (condition === "pending-command")
+    markPendingTaskDraftCommand(scope, pending.draftId, "command", null);
+  const { result, prepareSession, addTab } = fixture();
+  const message = condition === "pending-command" ? "project.draftDirectoryMissing" : "EACCES";
+  prepareSession.mockRejectedValueOnce(new Error(message));
+  await act(async () => {
+    await result.current.handleCreateTask({ projectId: null });
+  });
+  expect(prepareSession).toHaveBeenCalledTimes(1);
+  expect(readPendingTaskDraft(scope)?.draftId).toBe(pending.draftId);
+  expect(addTab).not.toHaveBeenCalled();
+  expect(result.current.workspaceActionError).toBe(message);
+});
+
+it("旧目录检查晚回时不覆盖另一份新草稿", async () => {
+  const scope = resolveComposerScope(null);
+  const stale = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, stale.draftId, "/missing");
+  const { result, prepareSession, addTab } = fixture();
+  let reject!: (error: Error) => void;
+  prepareSession.mockImplementationOnce(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  let opening!: Promise<void>;
+  await act(async () => {
+    opening = result.current.handleCreateTask({ projectId: null });
+  });
+  const nextId = crypto.randomUUID();
+  localStorage.setItem(
+    'zcode-pending-task-draft:v1:["desktop","local",null]',
+    JSON.stringify({ draftId: nextId }),
+  );
+  await act(async () => {
+    reject(new Error("project.draftDirectoryMissing"));
+    await opening;
+  });
+  expect(readPendingTaskDraft(scope)?.draftId).toBe(nextId);
+  expect(prepareSession).toHaveBeenCalledTimes(1);
+  expect(addTab).not.toHaveBeenCalled();
+});
+
+it("目录检查成功前草稿已被首发 ACK 消费时不重新打开旧目录", async () => {
+  const scope = resolveComposerScope(null);
+  const stale = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, stale.draftId, "/sent-task");
+  const { result, prepareSession, addTab } = fixture();
+  let finish!: (value: Awaited<ReturnType<typeof prepareSession>>) => void;
+  prepareSession.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let opening!: Promise<void>;
+  await act(async () => {
+    opening = result.current.handleCreateTask({ projectId: null });
+  });
+  localStorage.removeItem('zcode-pending-task-draft:v1:["desktop","local",null]');
+  await act(async () => {
+    finish({ workspacePath: "/sent-task", projectId: null, additionalDirectories: [] });
+    await opening;
+  });
+  expect(readPendingTaskDraft(scope)).toBeNull();
+  expect(addTab).not.toHaveBeenCalled();
+  expect(prepareSession).toHaveBeenCalledTimes(1);
+  expect(result.current.workspaceActionError).toBeNull();
+});
+
+it("离开原任务后缺失目录的迟到结果不触发换代", async () => {
+  const scope = resolveComposerScope(null);
+  const stale = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, stale.draftId, "/missing");
+  const { result, prepareSession, addTab } = fixture();
+  let reject!: (error: Error) => void;
+  prepareSession.mockImplementationOnce(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  let opening!: Promise<void>;
+  await act(async () => {
+    opening = result.current.handleCreateTask({ projectId: null });
+  });
+  act(() => useZCodeSessionStore.getState().setActiveTaskId("/old", "another-task"));
+  await act(async () => {
+    reject(new Error("project.draftDirectoryMissing"));
+    await opening;
+  });
+  expect(readPendingTaskDraft(scope)?.draftId).toBe(stale.draftId);
+  expect(prepareSession).toHaveBeenCalledTimes(1);
+  expect(addTab).not.toHaveBeenCalled();
+  expect(result.current.workspaceActionError).toBeNull();
+});
+
+it.each(["missing", "success"])("菜单目录准备 %s 晚回时不覆盖新导航", async (outcome) => {
+  const scope = resolveComposerScope(null);
+  const stale = ensurePendingTaskDraft(scope);
+  bindPendingTaskDraft(scope, stale.draftId, "/missing");
+  const { result, prepareSession } = fixture();
+  let finish!: (value: Awaited<ReturnType<typeof prepareSession>>) => void;
+  let reject!: (error: Error) => void;
+  prepareSession.mockImplementationOnce(
+    () =>
+      new Promise((resolve, fail) => {
+        finish = resolve;
+        reject = fail;
+      }),
+  );
+  let opening!: Promise<string>;
+  await act(async () => {
+    opening = result.current.handleResolveConversationWorkspace();
+  });
+  act(() => useZCodeSessionStore.getState().setActiveTaskId("/old", "other-task"));
+  const check = expect(opening).rejects.toThrow();
+  await act(async () => {
+    if (outcome === "missing") reject(new Error("project.draftDirectoryMissing"));
+    else finish({ workspacePath: "/missing", projectId: null, additionalDirectories: [] });
+    await check;
+  });
+  expect(prepareSession).toHaveBeenCalledTimes(1);
+  expect(readPendingTaskDraft(scope)?.draftId).toBe(stale.draftId);
+  expect(result.current.workspaceActionError).toBeNull();
 });
 it.each([null, "other-project", "retained-project"])(
   "恢复原项目时显式初始化草稿归属，不沿用缓存 %s",

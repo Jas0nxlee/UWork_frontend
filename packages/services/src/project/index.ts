@@ -220,7 +220,14 @@ export function createProjectService(options: {
           );
           // 已交付的目录若被移走，只报告缺失；不能用 mkdir 静默重建空目录。
           if (params?.reuseDraft) {
-            if (!(await stat(path)).isDirectory()) throw new Error("project.directory-required");
+            try {
+              if (!(await stat(path)).isDirectory()) throw new Error("project.directory-required");
+            } catch (error) {
+              // 只有 ENOENT 证明旧目录缺失；权限/IO 错误不能触发客户端草稿换代。
+              if ((error as NodeJS.ErrnoException).code === "ENOENT")
+                throw new Error("project.draftDirectoryMissing", { cause: error });
+              throw error;
+            }
           } else await mkdir(path, { recursive: true });
           return { workspacePath: path, additionalDirectories: [], projectId: null };
         }

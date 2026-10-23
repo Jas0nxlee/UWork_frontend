@@ -27,6 +27,8 @@ import {
   resolveComposerScope,
   ensurePendingTaskDraft,
   bindPendingTaskDraft,
+  readPendingTaskDraft,
+  replaceMissingPendingTaskDraft,
   rememberComposerWorkspaceScope,
   readComposerWorkspaceScope,
 } from "@/v4/composer/composerDraftStore.js";
@@ -170,6 +172,68 @@ export function useRootWorkspaceActions({
   }, [workbenchGroupClientMode]);
 
   const composerClientNamespace = useComposerClientNamespace();
+  const beginWorkspaceNavigation = useCallback(() => {
+    const sequence = ++navigationSequence.current;
+    const originTab = tabStoreApi.getState().activeTabId;
+    const originWorkspace = activeWorkspacePath
+      ? useZCodeSessionStore
+          .getState()
+          .getWorkspaceState(activeWorkspacePath, activeWorkspaceIdentity ?? undefined)
+      : null;
+    return {
+      originWorkspace,
+      isCurrent: () =>
+        sequence === navigationSequence.current &&
+        tabStoreApi.getState().activeTabId === originTab &&
+        (!activeWorkspacePath ||
+          (() => {
+            const state = useZCodeSessionStore
+              .getState()
+              .getWorkspaceState(activeWorkspacePath, activeWorkspaceIdentity ?? undefined);
+            return (
+              state.activeTaskId === originWorkspace?.activeTaskId &&
+              state.draftFocusVersion === originWorkspace?.draftFocusVersion
+            );
+          })()),
+    };
+  }, [activeWorkspacePath, activeWorkspaceIdentity, tabStoreApi]);
+  const prepareConversationDraft = useCallback(
+    async (isCurrent: () => boolean) => {
+      if (!services.projectService) throw new Error("project.service-unavailable");
+      const scope = resolveComposerScope(null, undefined, composerClientNamespace);
+      let pending = ensurePendingTaskDraft(scope);
+      let target;
+      try {
+        target = await services.projectService.prepareSession({
+          draftId: pending.draftId,
+          reuseDraft: Boolean(pending.workspacePath),
+        });
+      } catch (error) {
+        if (!isCurrent()) throw new Error("project.creation-cancelled");
+        // 旧入口绕开草稿身份，遗留的未发送引用可能指向已移走目录。
+        // 只在明确 ENOENT 且导航、草稿身份、未发送条件均有效时换代，不复活旧 cwd。
+        if (!(error instanceof Error) || error.message !== "project.draftDirectoryMissing")
+          throw error;
+        const next = replaceMissingPendingTaskDraft(scope, pending.draftId);
+        if (!next) throw error;
+        pending = next;
+        target = await services.projectService.prepareSession({
+          draftId: pending.draftId,
+          reuseDraft: false,
+        });
+      }
+      // 后台首发 ACK 可能在目录检查期间消费草稿，不能把已正式运行的 cwd 当新草稿打开。
+      if (!isCurrent() || readPendingTaskDraft(scope)?.draftId !== pending.draftId)
+        throw new Error("project.creation-cancelled");
+      bindPendingTaskDraft(scope, pending.draftId, target.workspacePath);
+      return { ...target, draftId: pending.draftId };
+    },
+    [composerClientNamespace, services.projectService],
+  );
+  const prepareConversationDraftFromMenu = useCallback(() => {
+    const { isCurrent } = beginWorkspaceNavigation();
+    return prepareConversationDraft(isCurrent);
+  }, [beginWorkspaceNavigation, prepareConversationDraft]);
   const startDraftInWorkspace = useCallback(
     (workspacePath: string, workspaceIdentity?: string, options?: CreateTaskOptions) => {
       const projectId =
@@ -248,27 +312,9 @@ export function useRootWorkspaceActions({
   const startNewTaskFromActiveWorkspace = useCallback(
     async (source: string, request?: CreateTaskRequest) => {
       const openRemoteProjectWorkspace = remoteProjectOpener.current;
-      const sequence = ++navigationSequence.current;
-      const originTab = tabStoreApi.getState().activeTabId;
-      const originWorkspace = activeWorkspacePath
-        ? useZCodeSessionStore
-            .getState()
-            .getWorkspaceState(activeWorkspacePath, activeWorkspaceIdentity ?? undefined)
-        : null;
+      const { originWorkspace, isCurrent: navigationIsCurrent } = beginWorkspaceNavigation();
       const isCurrent = () =>
-        (typeof request !== "object" || request.isCurrent?.() !== false) &&
-        sequence === navigationSequence.current &&
-        tabStoreApi.getState().activeTabId === originTab &&
-        (!activeWorkspacePath ||
-          (() => {
-            const state = useZCodeSessionStore
-              .getState()
-              .getWorkspaceState(activeWorkspacePath, activeWorkspaceIdentity ?? undefined);
-            return (
-              state.activeTaskId === originWorkspace?.activeTaskId &&
-              state.draftFocusVersion === originWorkspace?.draftFocusVersion
-            );
-          })());
+        (typeof request !== "object" || request.isCurrent?.() !== false) && navigationIsCurrent();
       try {
         // 在第一次 await 前捕获活动任务/草稿；快捷键和侧栏新建共用同一组织意图。
         const requestOptions = typeof request === "string" ? { provider: request } : { ...request };
@@ -354,18 +400,13 @@ export function useRootWorkspaceActions({
           return;
         }
         if (!services.projectService) throw new Error("project.service-unavailable");
-        const pendingDraft =
-          !projectId && (!hostId || hostId === "local")
-            ? ensurePendingTaskDraft(resolveComposerScope(null, undefined, composerClientNamespace))
-            : null;
-        const target = await services.projectService.prepareSession({
-          ...(projectId ? { projectId } : {}),
-          ...(hostId ? { hostId } : {}),
-          // 显式 local 与省略 Host 是同一入口，不能漏掉待发送身份而另建目录。
-          ...(pendingDraft
-            ? { draftId: pendingDraft.draftId, reuseDraft: Boolean(pendingDraft.workspacePath) }
-            : {}),
-        });
+        const unclassified = !projectId && (!hostId || hostId === "local");
+        const target = unclassified
+          ? await prepareConversationDraft(isCurrent)
+          : await services.projectService.prepareSession({
+              ...(projectId ? { projectId } : {}),
+              ...(hostId ? { hostId } : {}),
+            });
         if (!isCurrent()) return;
         if (hostId && hostId !== "local") {
           if (!target.workspaceIdentity || !openRemoteProjectWorkspace)
@@ -387,7 +428,9 @@ export function useRootWorkspaceActions({
           });
         startDraftInWorkspace(target.workspacePath, target.workspaceIdentity, {
           ...(typeof request === "string" ? { provider: request } : request),
-          ...(pendingDraft ? { draftId: pendingDraft.draftId } : {}),
+          ...("draftId" in target && typeof target.draftId === "string"
+            ? { draftId: target.draftId }
+            : {}),
           projectId: target.projectId,
         });
         if (typeof request === "object") request.onComplete?.();
@@ -397,7 +440,11 @@ export function useRootWorkspaceActions({
           projectId: target.projectId,
         });
       } catch (error) {
-        if (!isCurrent()) return;
+        if (
+          !isCurrent() ||
+          (error instanceof Error && error.message === "project.creation-cancelled")
+        )
+          return;
         logger.error("[Root] 准备新任务失败", error);
         if (typeof request === "object") request.onError?.(error);
         setWorkspaceActionError(error instanceof Error ? error.message : String(error));
@@ -405,6 +452,8 @@ export function useRootWorkspaceActions({
     },
     [
       services.projectService,
+      prepareConversationDraft,
+      beginWorkspaceNavigation,
       composerClientNamespace,
       activeWorkspacePath,
       activeWorkspaceIdentity,
@@ -422,7 +471,7 @@ export function useRootWorkspaceActions({
     handleEnsureConversationWorkspace,
     handleCreateConversationTask,
   } = useConversationWorkspaceActions({
-    services,
+    prepareConversationDraft: prepareConversationDraftFromMenu,
     addTab,
     createTask: startNewTaskFromActiveWorkspace,
     setWorkspaceActionError,
