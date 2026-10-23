@@ -2,6 +2,8 @@
 
 ## 发布规则
 
+- `v0.1.1` 发布客户端品牌残留和资源管理器数据根修正，市场插件与技能内容不变。Windows 与 Linux 在原安装格式外增加 ZIP，五平台安装包、源提交和摘要的完整发布门禁继续生效（共 16 个应用产物）。GitLab 下游只分发 macOS ARM64、Windows x64、Linux/Ubuntu x64 三个 ZIP，选择合同见 `specs/gitlab-release-sync.md`。根版本、`docs/releases/0.1.1.md` 与不可变 `v0.1.1` 标签一致后才发布。
+
 - 发布目标为用户 fork `Jas0nxlee/UWork_frontend`，默认分支 `main`；正式客户端身份为 `UWork` / `dev.zcode.app`，构建显式使用 `ZCODE_ENV=production` 和 `ZCODE_PREVIEW_IDENTITY=0`。
 - 首次配置以 `v3.14.4` 发布，版本由根 `package.json` 提供。已有标签不移动，不覆盖其他版本的 Release。
 - 本轮修复以 `v3.14.5` 发布：登录恢复与取消、子进程崩溃归类、Linux 历史桌面项、UCAS 验收地址及发布 tag 门禁。Release 说明列出用户可见修复与仍需每台设备单独放置的企业身份公开配置。

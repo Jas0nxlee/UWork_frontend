@@ -8,8 +8,8 @@ const root = resolve(import.meta.dirname, "..");
 export const releaseTargets = ["mac-arm64", "mac-x64", "win-x64", "linux-x64", "linux-arm64"];
 const formats = {
   mac: [".dmg", ".zip"],
-  win: [".exe"],
-  linux: [".AppImage", ".deb", ".rpm", ".pkg.tar.zst"],
+  win: [".exe", ".zip"],
+  linux: [".AppImage", ".deb", ".rpm", ".pkg.tar.zst", ".zip"],
 };
 function matchesTarget(name, platform, arch, version) {
   const architectures =

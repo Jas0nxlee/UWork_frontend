@@ -3,7 +3,8 @@
 ## 产品规则
 
 - GitHub Release 是版本、说明、附件和 SHA-256 的事实来源。GitLab 仅用于分发发布附件，不同步应用源码、源码标签或源码分支。
-- 每次 GitHub Release published（以及发布 job 的显式派发）必须下载全部附件，校验大小和 SHA-256，上传到 GitLab Generic Package Registry 的 `uwork-release/<版本>/`，再创建或更新同名 Release。取消可选 upload_assets 和 force_branch 入口，不能退化为 GitHub 下载链接。
+- 每次 GitHub Release published（以及发布 job 的显式派发）只下载、校验并上传三个 ZIP：`UWork-<版本>-mac-arm64.zip`、`UWork-<版本>-win-x64.zip`、`UWork-<版本>-linux-x64.zip`（Ubuntu x64 使用 Linux x64 产物）。上传到 GitLab Generic Package Registry 的 `uwork-release/<版本>/` 后创建或更新同名 Release。取消可选 upload_assets 和 force_branch 入口，不能退化为 GitHub 下载链接。
+- 选择规则由同步脚本的单一函数拥有，工作流下载和脚本校验/上传/建链接共用同一名单。三个文件各须恰有一个；缺失或重复在任何写入前失败。忽略 macOS x64、Linux ARM64、DMG、EXE、DEB、RPM、AppImage、清单及审计附件；GitHub 完整发布仍保留原五平台门禁和全部格式。历史 GitLab Release/包/手工链接不自动删除。
 - GitLab Release 必须关联 Git 标签；所有发布标签关联独立的 `release-metadata` 根提交。该提交只有固定 README.md、无父提交，与 GitHub 源码历史无关。实际源码 SHA 保留在发布 manifest 中。
 - Release 附件链接指向 GitLab 包文件；允许额外保留一个 GitHub Release 来源页面链接。按名称更新链接，分页读取全部现有链接（本次共 21 条，超过 API 默认的 20 条）。以实际包 URL 和链接类型判定一致性，不依赖目标未返回的自定义 direct_asset_path 字段；重复运行不新增重复包文件或链接，不改写已一致的链接。
 - 上传前校验所有本地附件（文件名、大小、GitHub digest）；上传后读取 GitLab package_files 的大小和 file_sha256 逐项比对。已有同版本包只有内容一致才能视为成功；冲突失败，不覆盖已发布文件。
@@ -28,7 +29,7 @@ sequenceDiagram
   participant WF as 附件同步脚本
   participant GL as GitLab
   GH->>WF: 已公开版本、说明、附件和摘要
-  WF->>WF: 下载全部附件并校验大小及 SHA256
+  WF->>WF: 精确选择三个 ZIP，下载并校验大小及 SHA256
   WF->>GL: 上传包文件，回读 package_files 校验
   WF->>GL: 准备独立 README 根提交和发布标签
   WF->>GL: 创建或更新 Release 与 GitLab 附件链接
@@ -41,7 +42,7 @@ sequenceDiagram
 
 ## 验收场景
 
-1. 自动发布始终上传全部附件，GitLab 下载链接指向本机包注册表，大小与摘要和 GitHub 一致。
+1. 自动发布只上传 macOS ARM64、Windows x64、Linux/Ubuntu x64 三个 ZIP，GitLab 下载链接指向本机包注册表，大小与摘要和 GitHub 一致；缺失、重复目标或损坏文件阻止发布。
 2. 发布后 GitLab 标签只引用单 README、无父提交的元数据根，源码提交不被推送。
 3. 同版本重跑幂等；本地附件缺失/摘要错误、远端摘要冲突、令牌无效、网络不可达时失败，不输出成功。
 4. 普通重跑拒绝旧源码标签；显式迁移在附件完整后重建标签及 Release，删除源码分支；未知其它标签/Release 或引用并发变化时停止。

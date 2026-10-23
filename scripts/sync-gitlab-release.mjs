@@ -40,6 +40,20 @@ export function validateRelease(release, tag) {
     throw new Error(`Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`);
 }
 
+export function selectGitLabReleaseAssets(release, tag = release?.tag_name) {
+  validateRelease(release, tag);
+  const version = String(tag).replace(/^v(?=\d)/, "");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("ZIP 分发要求明确的发布版本");
+  // 下载、校验、上传与链接必须消费同一白名单，避免其它架构/安装格式混入 GitLab。
+  const assets = ["mac-arm64", "win-x64", "linux-x64"].map((target) => {
+    const name = `UWork-${version}-${target}.zip`;
+    const matches = release.assets.filter((asset) => asset?.name === name);
+    if (matches.length !== 1) throw new Error(`必需 ZIP 缺失或重复：${name}`);
+    return matches[0];
+  });
+  return { ...release, assets };
+}
+
 export async function upsertRelease({ client, config, release, log = console.log }) {
   const payload = {
     name:
@@ -249,9 +263,10 @@ export async function syncGitLabRelease({
     }),
   );
   if (config.inspectOnly) return { inspected: true };
-  const metadata =
-    release ?? JSON.parse(await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8"));
-  validateRelease(metadata, config.tag);
+  const metadata = selectGitLabReleaseAssets(
+    release ?? JSON.parse(await readFile(requireValue(env.RELEASE_JSON, "RELEASE_JSON"), "utf8")),
+    config.tag,
+  );
   // 删除旧源码标签会同时影响 Release，迁移前先阻止未知其它版本被误处理。
   if (
     config.cleanupSource &&

@@ -14,6 +14,7 @@ import {
   verifyPackageFiles,
   validateLocalAssets,
   syncGitLabRelease,
+  selectGitLabReleaseAssets,
 } from "../sync-gitlab-release.mjs";
 const token = "test-token";
 const baseEnv = { GITLAB_TOKEN: token, RELEASE_TAG: "v0.1.0" };
@@ -34,6 +35,40 @@ const release = {
 };
 const ok = (data = {}, status = 200) => ({ ok: true, status, data });
 const config = () => resolveSyncConfig(baseEnv);
+
+const zipNames = ["mac-arm64", "win-x64", "linux-x64"].map((target) => `UWork-0.1.0-${target}.zip`);
+const fullRelease = {
+  ...release,
+  assets: [
+    ...release.assets,
+    ...[
+      ...zipNames,
+      "UWork-0.1.0-mac-x64.zip",
+      "UWork-0.1.0-linux-arm64.zip",
+      "UWork-0.1.0-win-x64.exe",
+    ].map((name) => ({ ...release.assets[0], name })),
+  ],
+};
+
+test("GitLab 只选择当前版本的 mac ARM、Windows x64、Ubuntu x64 ZIP", () => {
+  const selected = selectGitLabReleaseAssets(fullRelease);
+  assert.deepEqual(
+    selected.assets.map((asset) => asset.name),
+    zipNames,
+  );
+  assert.equal(selected.body, fullRelease.body);
+  assert.equal(fullRelease.assets.length, 7, "选择不能改写 GitHub 原始资产清单");
+});
+
+test("指定 ZIP 缺失、重复或只有其它版本时拒绝同步", () => {
+  for (const assets of [
+    fullRelease.assets.filter((asset) => asset.name !== zipNames[1]),
+    [...fullRelease.assets, fullRelease.assets.find((asset) => asset.name === zipNames[0])],
+    fullRelease.assets.map((asset) => ({ ...asset, name: asset.name.replace("0.1.0", "0.1.1") })),
+  ]) {
+    assert.throws(() => selectGitLabReleaseAssets({ ...fullRelease, assets }), /ZIP/);
+  }
+});
 
 test("发布配置固定为附件上传和独立元数据分支，不接受旧源码开关", () => {
   const c = resolveSyncConfig({
@@ -171,7 +206,7 @@ test("本地附件不完整时完整同步不会写远端", async () => {
   await assert.rejects(
     syncGitLabRelease({
       env: { ...baseEnv, ASSET_DIR: "/nonexistent-release-assets" },
-      release,
+      release: fullRelease,
       fetchImpl: async (_url, options) => {
         methods.push(options.method);
         return { ok: true, status: 200, text: async () => "[]" };
@@ -193,6 +228,8 @@ test("工作流总是下载附件、不检出源码历史，自动入口不暴�
     /upload_assets:|force_branch:|fetch-tags:|fetch-depth: 0|SYNC_BRANCH:/,
   );
   assert.match(workflow, /Download release assets/);
+  assert.match(workflow, /selectGitLabReleaseAssets/);
+  assert.match(workflow, /--pattern "\$asset"/);
   assert.match(workflow, /cleanup_source:/);
   assert.match(workflow, /group: gitlab-release-sync\s/);
 });

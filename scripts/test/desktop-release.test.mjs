@@ -41,6 +41,8 @@ test("packaged Electron runtime uses the version pinned in the desktop manifest"
   );
   const { default: config } = await import("../../packages/desktop/electron-builder.config.js");
   assert.equal(config.electronVersion, manifest.devDependencies.electron);
+  assert.ok(config.win.target.includes("zip"));
+  assert.ok(config.linux.target.includes("zip"));
 });
 test("Linux startup validation uses the retained executable from the production identity", () => {
   const identity = resolveDesktopProductIdentity({
@@ -62,8 +64,8 @@ async function fixture(run) {
         platform === "mac"
           ? [".dmg", ".zip"]
           : platform === "win"
-            ? [".exe"]
-            : [".AppImage", ".deb", ".rpm", ".pkg.tar.zst"];
+            ? [".exe", ".zip"]
+            : [".AppImage", ".deb", ".rpm", ".pkg.tar.zst", ".zip"];
       for (const ext of extensions)
         await writeFile(
           join(source, `UWork-${version}-${target}${ext}`),
@@ -76,9 +78,9 @@ async function fixture(run) {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test("a complete release has 13 installers from one version and commit", async () => {
+test("a complete release has 16 application artifacts from one version and commit", async () => {
   await fixture(async (directory) =>
-    assert.equal((await validateReleaseAssets({ directory, version, sha })).length, 13),
+    assert.equal((await validateReleaseAssets({ directory, version, sha })).length, 16),
   );
 });
 test("a mutated installer cannot be published", async () => {
@@ -118,10 +120,10 @@ test("Linux distribution architecture aliases retain the correct target", async 
       const input = join(source, arch),
         output = join(source, `${arch}-assets`);
       await mkdir(input);
-      const extensions = [".AppImage", ".deb", ".rpm", ".pkg.tar.zst"];
+      const extensions = [".AppImage", ".deb", ".rpm", ".pkg.tar.zst", ".zip"];
       for (let i = 0; i < extensions.length; i++)
         await writeFile(
-          join(input, `UWork-${version}-linux-${aliases[i]}${extensions[i]}`),
+          join(input, `UWork-${version}-linux-${aliases[i] ?? arch}${extensions[i]}`),
           "fixture",
         );
       await stageReleaseAssets({
@@ -134,7 +136,7 @@ test("Linux distribution architecture aliases retain the correct target", async 
       });
       assert.equal(
         JSON.parse(await readFile(join(output, `uwork-linux-${arch}.json`))).files.length,
-        4,
+        5,
       );
     }
   } finally {
