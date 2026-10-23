@@ -18,6 +18,7 @@ import {
   loadCanonicalCredentials,
   publishCanonicalCredentials,
   type CanonicalCredentialSnapshot,
+  type CredentialGenerationObservation,
 } from "./oauth-credentials.js";
 import {
   deletePendingAuthorizationIfOwned,
@@ -48,6 +49,7 @@ export type McpInteractiveAuthorizationOutcome =
   | { status: "failed"; error: unknown };
 
 export interface McpInteractiveAuthorizationInput {
+  credentialObservation?: CredentialGenerationObservation;
   adapterInstanceId?: string;
   config: McpAuthorizationCodeOAuthConfig;
   credentialStore: SharedZCodeCredentialStore;
@@ -78,8 +80,12 @@ export async function runMcpInteractiveAuthorization(
   input: McpInteractiveAuthorizationInput,
 ): Promise<McpInteractiveAuthorizationOutcome> {
   const transactionTtlMs = input.transactionTtlMs ?? MCP_OAUTH_AUTHORIZATION_TRANSACTION_TTL_MS;
-  const baseline = await loadCanonicalCredentials(input.credentialStore, input.keyPrefix);
-  const baselineGeneration = baseline?.generation;
+  // 必须比较失败请求真正观察到的代际；Phase 2 入口重读会把刚完成的授权误当作旧基线。
+  // 403 扩权仍须重新授权；不能把只换代但 scope 不足的新 token 当作扩权成功。
+  const baselineGeneration =
+    input.credentialObservation && !input.forceReauthorization
+      ? input.credentialObservation.generation
+      : (await loadCanonicalCredentials(input.credentialStore, input.keyPrefix))?.generation;
 
   const lease = await tryAcquireAuthorizationLease({
     credentialsFilePath: input.credentialStore.filePath,

@@ -64,7 +64,7 @@ import {
   createMcpTransportFetch,
   type NetworkEgressEnvPolicy,
 } from "./network.js";
-import { loadCredentialPair } from "./oauth-credentials.js";
+import { loadCredentialPair, type CredentialGenerationObservation } from "./oauth-credentials.js";
 import {
   classifyInteractiveAuthorizationTrigger,
   type InteractiveAuthorizationTrigger,
@@ -1514,6 +1514,7 @@ class NodeMcpAdapter implements McpPort {
     let getRecentStderr: (() => string | undefined) | undefined;
     let listToolsDurationMs: number | undefined;
     let transport: McpTransport | undefined;
+    let credentialObservation: CredentialGenerationObservation | undefined;
     let failureKind: McpServerFailureKind =
       config.type === "stdio" ? "process_start_failed" : "network_unreachable";
 
@@ -1525,6 +1526,9 @@ class NodeMcpAdapter implements McpPort {
         oauthAuthorizationTimeoutMs,
         workingDirectory,
         signal,
+        (observation) => {
+          credentialObservation = observation;
+        },
       );
       transport = transportBundle.transport;
       getRecentStderr = this.attachStdioLogging(name, transport);
@@ -1695,6 +1699,7 @@ class NodeMcpAdapter implements McpPort {
           generation,
           name,
           oauthConfig: authorizationCodeOAuthConfig,
+          ...(credentialObservation ? { credentialObservation } : {}),
           serverUrl: config.url,
           signal,
           trigger,
@@ -1757,6 +1762,7 @@ class NodeMcpAdapter implements McpPort {
    * `connectServer` / `waitForSharedConnection`，本方法不感知 caller 预算。
    */
   private async runInteractiveOAuthAuthorization(input: {
+    credentialObservation?: CredentialGenerationObservation;
     config: Extract<McpServerConfig, { type: "http" | "sse" }>;
     generation: number;
     name: string;
@@ -1787,6 +1793,9 @@ class NodeMcpAdapter implements McpPort {
         );
       }
       return await runMcpInteractiveAuthorization({
+        ...(input.credentialObservation
+          ? { credentialObservation: input.credentialObservation }
+          : {}),
         adapterInstanceId: this.adapterInstanceId,
         config: input.oauthConfig,
         credentialStore,
@@ -1913,6 +1922,7 @@ class NodeMcpAdapter implements McpPort {
     _oauthAuthorizationTimeoutMs?: number,
     workingDirectory?: string,
     signal?: AbortSignal,
+    onCredentialObservation?: (observation: CredentialGenerationObservation) => void,
   ): Promise<{ transport: McpTransport }> {
     if (config.type === "stdio") {
       return {
@@ -1953,7 +1963,7 @@ class NodeMcpAdapter implements McpPort {
         transport: new StreamableHTTPClientTransport(new URL(config.url), {
           // 官方鉴权路径下 authProvider 必为 undefined：不落 OAuth 凭据、
           // 不起 localhost 回调 server、401/403 不转授权流程。
-          authProvider: this.createOAuthClientProvider(serverName, config),
+          authProvider: this.createOAuthClientProvider(serverName, config, onCredentialObservation),
           fetch: officialAuthFetch ?? fetch,
           requestInit: config.headers ? { headers: config.headers } : undefined,
         }),
@@ -1962,7 +1972,7 @@ class NodeMcpAdapter implements McpPort {
 
     return {
       transport: new SSEClientTransport(new URL(config.url), {
-        authProvider: this.createOAuthClientProvider(serverName, config),
+        authProvider: this.createOAuthClientProvider(serverName, config, onCredentialObservation),
         fetch,
         requestInit: config.headers ? { headers: config.headers } : undefined,
       }),
@@ -2029,6 +2039,7 @@ class NodeMcpAdapter implements McpPort {
   private createOAuthClientProvider(
     serverName: string,
     config: McpServerConfig,
+    onCredentialObservation?: (observation: CredentialGenerationObservation) => void,
   ): AuthProvider | OAuthClientProvider | undefined {
     if (config.type === "stdio") return undefined;
     // 官方鉴权与 OAuth 互斥：官方 MCP 的失败只能由 ZCode 登录/套餐解决，
@@ -2037,6 +2048,7 @@ class NodeMcpAdapter implements McpPort {
     const authorizationCodeOAuthConfig = resolveAuthorizationCodeOAuthConfig(config);
     if (authorizationCodeOAuthConfig) {
       return createMcpOAuthTokenProvider({
+        ...(onCredentialObservation ? { onCredentialObservation } : {}),
         config: authorizationCodeOAuthConfig,
         credentialStore: this.resolveCredentialStore(),
         fetchFn: createMcpTransportFetch({ env: this.env, network: this.network }),

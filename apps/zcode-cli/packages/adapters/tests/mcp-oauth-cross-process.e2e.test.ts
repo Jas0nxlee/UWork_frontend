@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSharedZCodeCredentialStore,
   type SharedZCodeCredentialStore,
@@ -42,10 +42,7 @@ afterEach(async () => {
 });
 
 interface StrictServerState {
-  authorizationCodes: Map<
-    string,
-    { challenge: string; clientId: string; redirectUri: string }
-  >;
+  authorizationCodes: Map<string, { challenge: string; clientId: string; redirectUri: string }>;
   clients: Map<string, { redirectUris: string[] }>;
   /** 单次使用的 refresh token;二次使用即 invalid_grant(rotation reuse-detection)。 */
   consumedRefreshTokens: Set<string>;
@@ -194,11 +191,7 @@ async function handleAuthServer(
     const redirectUri = body.get("redirect_uri") ?? "";
     const issued = state.authorizationCodes.get(code);
     const actualChallenge = createHash("sha256").update(verifier).digest("base64url");
-    if (
-      !issued ||
-      redirectUri !== issued.redirectUri ||
-      actualChallenge !== issued.challenge
-    ) {
+    if (!issued || redirectUri !== issued.redirectUri || actualChallenge !== issued.challenge) {
       sendJson(res, 400, { error: "invalid_grant" });
       return;
     }
@@ -363,6 +356,8 @@ describe("MCP OAuth cross-process end-to-end", () => {
     stack.state.knownRefreshTokens.add("seed-rt-0");
     await publishCanonicalCredentials(credentialStore, keyPrefix, {
       clientInformation: { client_id: "seed-client" },
+      // 刷新凭据绑定本地授权服务器；不能绕过 issuer 安全门禁测试跨进程单飞。
+      issuer: stack.asBaseUrl,
       // 已经过期一小时:两个子进程的 token() 都会判定临期并进锁。
       obtainedAt: Date.now() - 7_200_000,
       publishedBy: "cross-process-seed",
@@ -477,16 +472,18 @@ describe("MCP OAuth cross-process end-to-end", () => {
   it("completes authorization that outlasts the caller budget (incident timeline replay)", async () => {
     // 现场:2026-08-11 真人授权耗时约 74 秒,而 session 预算只有 15 秒。旧实现 15 秒后
     // 关闭 listener,授权必败;新实现预算只约束 caller 等待,事务继续存活。
-    // 按比例缩放:caller 预算 100ms,「用户」1500ms 后才完成授权。
+    // caller预算仍为100ms；明确的用户完成屏障保证授权一定在caller返回以后才完成。
     const stack = await startFakeStack();
-    const { credentialStore, credentialsPath } = await createCredentials("cross-process-budget");
-    const secret = "cross-process-budget";
+    const { credentialStore } = await createCredentials("cross-process-budget");
+    const published = Promise.withResolvers<string>();
+    const userCompletedAuthorization = Promise.withResolvers<void>();
     const { createMcpAdapter } = await import("../src/mcp/index.js");
     const adapter = createMcpAdapter({
       mcpOAuth: {
         credentialStore,
         openAuthorizationUrl: async ({ authorizationUrl }) => {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          published.resolve(authorizationUrl);
+          await userCompletedAuthorization.promise;
           const response = await fetch(authorizationUrl, { redirect: "manual" });
           const location = response.headers.get("location");
           if (location) await fetch(location);
@@ -497,24 +494,36 @@ describe("MCP OAuth cross-process end-to-end", () => {
     try {
       const budgeted = await adapter.connectServer(
         "budget",
-        { type: "http", url: stack.mcpUrl, oauth: { type: "authorization_code", scope: MCP_SCOPE } },
+        {
+          type: "http",
+          url: stack.mcpUrl,
+          oauth: { type: "authorization_code", scope: MCP_SCOPE },
+        },
         { oauthAuthorizationTimeoutMs: 100 },
       );
-      // 预算到点只返回快照:connecting + 授权 URL,事务没有被杀。
+      // 预算只返回当时快照；网络发现未必在100ms内发布URL，不能把调度快慢当成产品合同。
       expect(budgeted.status).toBe("connecting");
-      expect(budgeted.authorization?.authorizationUrl).toContain(stack.asBaseUrl);
-
-      let final = budgeted;
-      for (let attempt = 0; attempt < 100 && final.status !== "connected"; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        final = (await adapter.status()).budget ?? final;
-      }
-      expect(final.status).toBe("connected");
-      expect(final.toolCount).toBe(1);
+      const authorizationUrl = await published.promise;
+      expect(authorizationUrl).toContain(stack.asBaseUrl);
+      await expect(adapter.status()).resolves.toMatchObject({
+        budget: { status: "connecting", authorization: { authorizationUrl } },
+      });
+      userCompletedAuthorization.resolve();
+      // 保留原100×100ms的完成验收预算，等待实际状态而非固定用户耗时。
+      await vi.waitFor(
+        async () => {
+          expect((await adapter.status()).budget).toMatchObject({
+            status: "connected",
+            toolCount: 1,
+          });
+        },
+        { timeout: 10_000, interval: 100 },
+      );
       expect(stack.state.registrations).toHaveLength(1);
       expect(stack.state.authorizationRequests).toHaveLength(1);
       expect(stack.state.tokenExchanges).toHaveLength(1);
     } finally {
+      userCompletedAuthorization.resolve();
       await adapter.close();
     }
   }, 90_000);
@@ -527,7 +536,8 @@ function sendJson(res: ServerResponse, statusCode: number, body: unknown): void 
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  for await (const chunk of req)
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
   return Buffer.concat(chunks).toString("utf8");
 }
 

@@ -1,6 +1,8 @@
-import { dirname } from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UnauthorizedError } from "@modelcontextprotocol/client";
+import { dirname, join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { InsufficientScopeError, UnauthorizedError } from "@modelcontextprotocol/client";
 import { ZCODE_TOOL_ENV_PASSTHROUGH_ENV_KEY } from "@zcode/shared";
 import type { SharedZCodeCredentialStore } from "../src/auth/shared-credentials.js";
 
@@ -108,6 +110,9 @@ vi.mock("@modelcontextprotocol/client/stdio", () => ({
   },
 }));
 
+import { createSharedZCodeCredentialStore } from "../src/auth/shared-credentials.js";
+import { publishCanonicalCredentials } from "../src/mcp/oauth-credentials.js";
+import { createCredentialKeyPrefix } from "../src/mcp/oauth.js";
 import { createMcpAdapter } from "../src/mcp/index.js";
 import { createMcpTelemetryTracker } from "../src/mcp/telemetry.js";
 
@@ -175,7 +180,11 @@ async function observePromiseWithin<T>(
 }
 
 describe("createMcpAdapter", () => {
-  beforeEach(() => {
+  let credentialBaseDir: string;
+  beforeEach(async () => {
+    // Phase 2 使用真实磁盘 lease；每项独立目录避免读取真实用户凭据和复用前一用例的授权事务。
+    credentialBaseDir = await mkdtemp(join(tmpdir(), "uwork-mcp-adapter-"));
+    vi.stubEnv("ZCODE_DATA_BASE_DIR", credentialBaseDir);
     capturedClientInfo.length = 0;
     capturedHttpOptions.length = 0;
     capturedSseOptions.length = 0;
@@ -198,6 +207,11 @@ describe("createMcpAdapter", () => {
     clientCallToolMock.mockResolvedValue({
       content: [{ type: "text", text: "ok" }],
     });
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await rm(credentialBaseDir, { recursive: true, force: true });
   });
 
   it("waits for the existing App connection without exposing a premature snapshot or reconnecting", async () => {
@@ -1040,8 +1054,178 @@ describe("createMcpAdapter", () => {
     });
   });
 
+  it.each([false, true])(
+    "reuses credentials published while the request was in flight instead of starting another authorization (previous=%s)",
+    async (hadPreviousCredentials) => {
+      const credentialStore = createSharedZCodeCredentialStore();
+      const serverName = "late-unauthorized";
+      const serverUrl = "https://mcp.example.test/mcp";
+      const oauth = { type: "authorization_code" as const, scope: "mcp:tools" };
+      const keyPrefix = createCredentialKeyPrefix(serverName, serverUrl, oauth);
+      if (hadPreviousCredentials) {
+        await publishCanonicalCredentials(credentialStore, keyPrefix, {
+          clientInformation: { client_id: "previous-client" },
+          issuer: "https://auth.example.test",
+          publishedBy: "previous-process",
+          tokens: { access_token: "previous-token", token_type: "Bearer", expires_in: 3600 },
+        });
+      }
+      let attempts = 0;
+      clientConnectMock.mockImplementation(async () => {
+        attempts += 1;
+        const provider = (
+          capturedHttpOptions.at(-1) as { authProvider: { token(): Promise<string | undefined> } }
+        ).authProvider;
+        if (attempts === 1) {
+          expect(await provider.token()).toBe(
+            hadPreviousCredentials ? "previous-token" : undefined,
+          );
+          // 精确复现另一个进程已完成授权、旧匿名请求的401才返回：不能把新generation当成授权起点。
+          await publishCanonicalCredentials(credentialStore, keyPrefix, {
+            clientInformation: { client_id: "other-process-client" },
+            issuer: "https://auth.example.test",
+            publishedBy: "other-process",
+            tokens: { access_token: "other-process-token", token_type: "Bearer", expires_in: 3600 },
+          });
+          throw new UnauthorizedError();
+        }
+        expect(await provider.token()).toBe("other-process-token");
+      });
+      const adapter = createMcpAdapter({ mcpOAuth: { credentialStore } });
+      try {
+        await expect(
+          adapter.connectServer(serverName, { type: "http", url: serverUrl, oauth }),
+        ).resolves.toMatchObject({ status: "connected" });
+        expect(clientConnectMock).toHaveBeenCalledTimes(2);
+        expect(authMock).not.toHaveBeenCalled();
+      } finally {
+        await adapter.close();
+      }
+    },
+  );
+
+  it("still authorizes a 403 step-up when another transaction published a newer token with insufficient scope", async () => {
+    const credentialStore = createSharedZCodeCredentialStore();
+    const serverName = "late-insufficient-scope";
+    const serverUrl = "https://mcp.example.test/mcp";
+    const oauth = { type: "authorization_code" as const, scope: "read" };
+    const keyPrefix = createCredentialKeyPrefix(serverName, serverUrl, oauth);
+    const publishReadToken = (accessToken: string) =>
+      publishCanonicalCredentials(credentialStore, keyPrefix, {
+        clientInformation: { client_id: "read-client" },
+        issuer: "https://auth.example.test",
+        publishedBy: accessToken,
+        tokens: {
+          access_token: accessToken,
+          token_type: "Bearer",
+          expires_in: 3600,
+          scope: "read",
+        },
+      });
+    await publishReadToken("read-token-a");
+    let attempts = 0;
+    clientConnectMock.mockImplementation(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        const provider = (
+          capturedHttpOptions.at(-1) as { authProvider: { token(): Promise<string | undefined> } }
+        ).authProvider;
+        expect(await provider.token()).toBe("read-token-a");
+        // B只是另一次read授权，不满足这次403要求的write；generation变化不能代表扩权完成。
+        await publishReadToken("read-token-b");
+        throw new InsufficientScopeError({ requiredScope: "write" });
+      }
+    });
+    authMock.mockImplementation(
+      async (provider: unknown, options?: { scope?: string; forceReauthorization?: boolean }) => {
+        const metadata = (provider as { clientMetadata: { scope?: string } }).clientMetadata;
+        expect(new Set(options?.scope?.split(" "))).toEqual(new Set(["read", "write"]));
+        expect(new Set(metadata.scope?.split(" "))).toEqual(new Set(["read", "write"]));
+        expect(options?.forceReauthorization).toBe(true);
+        return "AUTHORIZED" as const;
+      },
+    );
+    const adapter = createMcpAdapter({ mcpOAuth: { credentialStore } });
+    try {
+      await expect(
+        adapter.connectServer(serverName, { type: "http", url: serverUrl, oauth }),
+      ).resolves.toMatchObject({ status: "connected" });
+      expect(authMock).toHaveBeenCalledOnce();
+      expect(clientConnectMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await adapter.close();
+    }
+  });
+
+  it.each([false, true])(
+    "requires interactive authorization when no newer canonical was published (previous=%s)",
+    async (hadPreviousCredentials) => {
+      const credentialStore = createSharedZCodeCredentialStore();
+      const serverName = "unchanged-unauthorized";
+      const serverUrl = "https://mcp.example.test/mcp";
+      const oauth = { type: "authorization_code" as const, scope: "mcp:tools" };
+      const keyPrefix = createCredentialKeyPrefix(serverName, serverUrl, oauth);
+      if (hadPreviousCredentials) {
+        await publishCanonicalCredentials(credentialStore, keyPrefix, {
+          clientInformation: { client_id: "rejected-client" },
+          issuer: "https://auth.example.test",
+          publishedBy: "existing-process",
+          tokens: { access_token: "rejected-token", token_type: "Bearer", expires_in: 3600 },
+        });
+      }
+      let attempts = 0;
+      clientConnectMock.mockImplementation(async () => {
+        attempts += 1;
+        const provider = (
+          capturedHttpOptions.at(-1) as { authProvider: { token(): Promise<string | undefined> } }
+        ).authProvider;
+        if (attempts === 1) {
+          expect(await provider.token()).toBe(
+            hadPreviousCredentials ? "rejected-token" : undefined,
+          );
+          throw new UnauthorizedError();
+        }
+      });
+      const adapter = createMcpAdapter({ mcpOAuth: { credentialStore } });
+      try {
+        await expect(
+          adapter.connectServer(serverName, { type: "http", url: serverUrl, oauth }),
+        ).resolves.toMatchObject({ status: "connected" });
+        expect(clientConnectMock).toHaveBeenCalledTimes(2);
+        // 当前generation正是被401拒绝的generation；不能因磁盘有token就跳过授权。
+        expect(authMock).toHaveBeenCalledOnce();
+      } finally {
+        await adapter.close();
+      }
+    },
+  );
+
+  it("starts interactive OAuth when the credential directory does not yet exist", async () => {
+    const { release, ready } = stubInteractiveAuthorization(
+      "https://auth.example.test/authorize?state=fresh_user",
+    );
+    const adapter = createMcpAdapter();
+    const connect = adapter.connectServer("fresh-user", {
+      type: "http",
+      url: "https://mcp.example.test/mcp",
+      oauth: { type: "authorization_code" },
+    });
+    try {
+      const first = await Promise.race([
+        ready.then(() => ({ phase: "authorization-published" })),
+        connect.then((status) => ({ phase: "connection-settled", status })),
+      ]);
+      expect(first).toEqual({ phase: "authorization-published" });
+      release();
+      await expect(connect).resolves.toMatchObject({ status: "connected" });
+    } finally {
+      release();
+      await adapter.close();
+    }
+  });
+
   it("exposes pending OAuth authorization URL through server status", async () => {
-    const { release: resolveConnect } = stubInteractiveAuthorization(
+    const { release: resolveConnect, ready } = stubInteractiveAuthorization(
       "https://auth.example.test/authorize?state=state_test",
     );
     const adapter = createMcpAdapter();
@@ -1055,13 +1239,8 @@ describe("createMcpAdapter", () => {
       },
     });
 
-    let authorizationUrl: string | undefined;
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const status = await adapter.status();
-      authorizationUrl = status.notion?.authorization?.authorizationUrl;
-      if (authorizationUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await ready;
+    const authorizationUrl = (await adapter.status()).notion?.authorization?.authorizationUrl;
 
     expect(authorizationUrl).toBe("https://auth.example.test/authorize?state=state_test");
 
@@ -1074,7 +1253,7 @@ describe("createMcpAdapter", () => {
   });
 
   it("reuses an unchanged configured connection while OAuth authorization is pending", async () => {
-    const { release: resolveConnect } = stubInteractiveAuthorization(
+    const { release: resolveConnect, ready } = stubInteractiveAuthorization(
       "https://auth.example.test/authorize?state=stable_state",
     );
     const adapter = createMcpAdapter();
@@ -1089,13 +1268,8 @@ describe("createMcpAdapter", () => {
       },
     });
 
-    let authorizationUrl: string | undefined;
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const status = await adapter.status();
-      authorizationUrl = status.notion?.authorization?.authorizationUrl;
-      if (authorizationUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await ready;
+    const authorizationUrl = (await adapter.status()).notion?.authorization?.authorizationUrl;
 
     const secondConnect = adapter.connectConfiguredServers({
       notion: {
@@ -1132,7 +1306,7 @@ describe("createMcpAdapter", () => {
   });
 
   it("keeps a reused OAuth connection alive when a bounded caller times out", async () => {
-    const { release: resolveConnect } = stubInteractiveAuthorization(
+    const { release: resolveConnect, ready } = stubInteractiveAuthorization(
       "https://auth.example.test/authorize?state=shared_timeout_state",
     );
     const adapter = createMcpAdapter();
@@ -1148,11 +1322,7 @@ describe("createMcpAdapter", () => {
     };
     const settingsConnect = adapter.connectConfiguredServers(servers);
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const status = await adapter.status();
-      if (status.notion?.authorization?.authorizationUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await ready;
 
     const sessionConnect = await adapter.connectConfiguredServers(servers, {
       oauthAuthorizationTimeoutMs: 20,
@@ -1177,7 +1347,7 @@ describe("createMcpAdapter", () => {
   });
 
   it("only cancels the caller waiter when a reused OAuth connection is aborted", async () => {
-    const { release: resolveConnect } = stubInteractiveAuthorization(
+    const { release: resolveConnect, ready } = stubInteractiveAuthorization(
       "https://auth.example.test/authorize?state=shared_abort_state",
     );
     const adapter = createMcpAdapter();
@@ -1193,11 +1363,7 @@ describe("createMcpAdapter", () => {
     };
     const settingsConnect = adapter.connectConfiguredServers(servers);
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const status = await adapter.status();
-      if (status.notion?.authorization?.authorizationUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await ready;
 
     const abortController = new AbortController();
     const sessionConnect = adapter.connectConfiguredServers(servers, {
@@ -1374,6 +1540,7 @@ describe("createMcpAdapter", () => {
   });
 
   it("shares one runtime OAuth recovery across concurrent tool callers", async () => {
+    const published = Promise.withResolvers<void>();
     let releaseAuthorization!: () => void;
     const authorizationGate = new Promise<void>((resolve) => {
       releaseAuthorization = resolve;
@@ -1386,6 +1553,7 @@ describe("createMcpAdapter", () => {
       const authorizationUrl = new URL("https://auth.example.test/authorize");
       authorizationUrl.searchParams.set("state", await interactiveProvider.state());
       await interactiveProvider.redirectToAuthorization(authorizationUrl);
+      published.resolve();
       await authorizationGate;
       return "AUTHORIZED" as const;
     });
@@ -1411,11 +1579,13 @@ describe("createMcpAdapter", () => {
     );
 
     try {
-      for (let attempt = 0; attempt < 50; attempt += 1) {
-        const status = await adapter.status();
-        if (status.runtime?.authorization?.authorizationUrl) break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      // 直接观察发布边界，并立即接住工具拒绝，避免延后断言产生 unhandled rejection。
+      await expect(
+        Promise.race([
+          published.promise.then(() => "authorization-published"),
+          firstCall.then(() => "tool-completed"),
+        ]),
+      ).resolves.toBe("authorization-published");
       await expect(adapter.status()).resolves.toMatchObject({
         runtime: {
           authorization: {
@@ -1454,6 +1624,7 @@ describe("createMcpAdapter", () => {
   });
 
   it("does not let a caller abort close the shared runtime OAuth callback listener", async () => {
+    const published = Promise.withResolvers<void>();
     let authorizationContext:
       | {
           authorizationUrl: string;
@@ -1481,6 +1652,7 @@ describe("createMcpAdapter", () => {
       mcpOAuth: {
         onAuthorizationRequired: async (context) => {
           authorizationContext = context;
+          published.resolve();
         },
       },
     });
@@ -1505,10 +1677,12 @@ describe("createMcpAdapter", () => {
     );
 
     try {
-      for (let attempt = 0; attempt < 50; attempt += 1) {
-        if (authorizationContext) break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
+      await expect(
+        Promise.race([
+          published.promise.then(() => "authorization-published"),
+          call.then(() => "tool-completed"),
+        ]),
+      ).resolves.toBe("authorization-published");
       expect(authorizationContext).toBeDefined();
 
       abortController.abort(new Error("caller stopped"));
@@ -1601,7 +1775,7 @@ describe("createMcpAdapter", () => {
 
   it("only opens OAuth authorization URL when an opener is injected", async () => {
     const openAuthorizationUrl = vi.fn(async () => {});
-    const { release: resolveConnect } = stubInteractiveAuthorization(
+    const { release: resolveConnect, ready } = stubInteractiveAuthorization(
       "https://auth.example.test/authorize?state=state_test",
     );
     const adapter = createMcpAdapter({
@@ -1619,11 +1793,7 @@ describe("createMcpAdapter", () => {
       },
     });
 
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      const status = await adapter.status();
-      if (status.notion?.authorization?.authorizationUrl) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+    await ready;
 
     expect(openAuthorizationUrl).toHaveBeenCalledWith(
       expect.objectContaining({

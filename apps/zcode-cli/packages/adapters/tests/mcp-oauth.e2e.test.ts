@@ -512,6 +512,7 @@ describe("MCP OAuth client credentials e2e", () => {
     // 现成可用的凭据：还没临期，因此连接期不需要任何 OAuth 动作。
     await publishCanonicalCredentials(credentialStore, keyPrefix, {
       clientInformation: { client_id: "passive-client" },
+      issuer: authBaseUrl,
       publishedBy: "passive-seed",
       tokens: {
         access_token: OAUTH_ACCESS_TOKEN,
@@ -612,6 +613,7 @@ describe("MCP OAuth client credentials e2e", () => {
     const keyPrefix = createCredentialKeyPrefix("runtime", mcpUrl, oauthConfig);
     await publishCanonicalCredentials(credentialStore, keyPrefix, {
       clientInformation: { client_id: "revoked-client" },
+      issuer: authBaseUrl,
       publishedBy: "runtime-seed",
       tokens: {
         access_token: OAUTH_ACCESS_TOKEN,
@@ -701,6 +703,7 @@ describe("MCP OAuth client credentials e2e", () => {
     // 现存凭据：token 有效、已授予 mcp:tools,但服务端现在要求 admin:tools。
     await publishCanonicalCredentials(credentialStore, keyPrefix, {
       clientInformation: { client_id: "stepup-client" },
+      issuer: authBaseUrl,
       publishedBy: "stepup-seed",
       tokens: {
         access_token: OAUTH_ACCESS_TOKEN,
@@ -1412,7 +1415,7 @@ describe("MCP OAuth client credentials e2e", () => {
       ]);
       expect(registrationRequests).toHaveLength(1);
       expect(registrationRequests[0]).toMatchObject({
-        client_name: "ZCode notion",
+        client_name: "UWork notion",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         scope: MCP_SCOPE,

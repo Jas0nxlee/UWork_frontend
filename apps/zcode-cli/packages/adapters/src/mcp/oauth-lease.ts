@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { acquireFileLock } from "@zcode/shared/node";
 import { ZCODE_FILE_LOCK_TIMEOUT_ERROR_CODE } from "@zcode/shared";
@@ -53,6 +54,8 @@ export async function tryAcquireAuthorizationLease(input: {
   keyPrefix: string;
 }): Promise<McpOAuthAuthorizationLease | undefined> {
   const leasePath = resolveAuthorizationLeasePath(input.credentialsFilePath, input.keyPrefix);
+  // 新用户尚无凭据目录时锁的 mkdir 会直接 ENOENT；先准备同一 store 的父目录，权限错误仍上抛。
+  await mkdir(dirname(input.credentialsFilePath), { recursive: true });
   try {
     const release = await acquireFileLock(
       leasePath,
