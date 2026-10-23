@@ -52,7 +52,11 @@ import { HYDRATION_TRACE_ID } from "./projection-state.js";
 
 const SUBAGENT_TOOL_NAMES = new Set(["Agent", "Task", "subagent"]);
 const LEGACY_MODEL_REQUEST_CANCELLED_MESSAGE = "Model request was cancelled.";
-const LEGACY_PROTOCOL_SESSION_STOPPED_MESSAGE = "UWork Protocol session stopped";
+// 品牌变化不能改变已持久化的取消语义；仅兼容这两个精确消息，不能把普通 provider 错误吞为取消。
+const LEGACY_PROTOCOL_SESSION_STOPPED_MESSAGES = new Set([
+  "ZCode Protocol session stopped",
+  "UWork Protocol session stopped",
+]);
 const PERSISTED_CANCELLATION_CODES = new Set<string>([
   CoreErrorType.TurnCancelled,
   ModelErrorCode.ModelRequestCancelled,
@@ -238,7 +242,8 @@ function isPersistedAssistantCancellation(error: AssistantErrorInfo): boolean {
   if (
     code === undefined &&
     error.name === "Error" &&
-    data?.message === LEGACY_PROTOCOL_SESSION_STOPPED_MESSAGE
+    typeof data?.message === "string" &&
+    LEGACY_PROTOCOL_SESSION_STOPPED_MESSAGES.has(data.message)
   ) {
     // 旧 session/stop 使用普通 Error 作为 AbortSignal.reason，transcript 又未持久化
     // cancelled result；冷恢复若只认 AbortError，会把用户停止重新合成为 TurnError 和错误 Banner。
