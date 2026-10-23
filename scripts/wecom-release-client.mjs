@@ -1,5 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
+// 企业微信只承诺标识为字符串；成员空间和应用空间的标识形式不能互相推断。
+export function isWecomIdentifier(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 const TRANSIENT_CODES = new Set([-1, 45009, 45011]);
 const TOKEN_CODES = new Set([40001, 40014, 42001]);
 const REPLAYABLE = new Set([

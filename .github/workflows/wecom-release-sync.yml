@@ -21,6 +21,10 @@ on:
         description: Base64 PEM RSA public key for encrypted target handoff (bootstrap only)
         required: false
         type: string
+      bootstrap_reuse_only:
+        description: Bootstrap recovery must only reuse the configured application space and never create another
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -89,6 +93,7 @@ jobs:
       - name: Check required WeCom settings
         env:
           WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
           WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
           WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
           WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
@@ -145,6 +150,7 @@ jobs:
       - name: Inspect access or upload and verify the three installers
         env:
           WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
           WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
           WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
           BOOTSTRAP_HANDOFF: ${{ runner.temp }}/wecom-encrypted-target.json

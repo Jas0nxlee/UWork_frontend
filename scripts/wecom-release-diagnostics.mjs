@@ -2,12 +2,13 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWecomConfig } from "./sync-wecom-release.mjs";
-import { createWecomClient } from "./wecom-release-client.mjs";
+import { createWecomClient, isWecomIdentifier } from "./wecom-release-client.mjs";
 
 export async function inspectWecomAccess({ config, client = createWecomClient({ config }) }) {
   const report = {
     kind: "wecom-access-diagnostic",
-    targetFormatValid: /^s\.\d+\.[\w-]+$/.test(config.space),
+    targetFormatValid:
+      isWecomIdentifier(config.space) && !/^WECOM_(SPACE|FOLDER)_ID=/.test(config.space),
     folderIsSpaceRoot: config.folder === config.space,
   };
   async function read(operation, body, summarize) {

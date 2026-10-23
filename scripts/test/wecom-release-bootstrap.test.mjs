@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, privateDecrypt, constants } from "node:crypto";
+import { generateKeyPairSync, privateDecrypt, constants, createDecipheriv } from "node:crypto";
 import test from "node:test";
 import { bootstrapWecomSpace, resolveBootstrapConfig } from "../wecom-release-bootstrap.mjs";
 import { createWecomClient } from "../wecom-release-client.mjs";
@@ -8,6 +8,18 @@ const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 20
 const key = publicKey.export({ type: "spki", format: "pem" }).toString();
 const config = { adminName: "Synthetic Admin", oldSpace: "s.1.old", publicKey: key };
 const admin = { userid: "synthetic-member", name: "Synthetic Admin", status: 1 };
+function decryptHandoff(handoff) {
+  const envelope = JSON.parse(Buffer.from(handoff, "base64").toString());
+  const symmetric = privateDecrypt(
+    { key: privateKey, oaepHash: "sha256", padding: constants.RSA_PKCS1_OAEP_PADDING },
+    Buffer.from(envelope.wrappedKey, "base64"),
+  );
+  const decipher = createDecipheriv("aes-256-gcm", symmetric, Buffer.from(envelope.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
+  return JSON.parse(
+    Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, "base64")), decipher.final()]),
+  );
+}
 
 function fixture({
   members = [admin],
@@ -15,6 +27,7 @@ function fixture({
   failCreate = false,
   missingAdmin = false,
   explicitUsers = false,
+  newSpace = "s.1.new",
 } = {}) {
   const calls = [];
   const request = async (op, body) => {
@@ -34,7 +47,7 @@ function fixture({
         throw Object.assign(new Error("denied"), { code: 640008 });
       return {
         space_info: {
-          spaceid: "s.1.new",
+          spaceid: newSpace,
           space_name: "UWork 发布包",
           auth_list: {
             auth_info: missingAdmin ? [] : [{ type: 1, userid: admin.userid, auth: 7 }],
@@ -44,7 +57,7 @@ function fixture({
     }
     if (op === "space_create") {
       if (failCreate) throw new Error("ambiguous response private-token");
-      return { spaceid: "s.1.new" };
+      return { spaceid: newSpace };
     }
     if (op === "file_list") return { file_list: { item: [] }, has_more: false };
     throw new Error("unexpected operation");
@@ -67,15 +80,38 @@ test("初始化只授权唯一管理员，创建一次，回读并加密交接�
   assert.deepEqual(created[0].body.auth_info, [{ type: 1, userid: admin.userid, auth: 7 }]);
   assert.equal(report.status, "success");
   assert.equal(report.administratorVerified, true);
-  const target = JSON.parse(
-    privateDecrypt(
-      { key: privateKey, oaepHash: "sha256", padding: constants.RSA_PKCS1_OAEP_PADDING },
-      Buffer.from(handoff, "base64"),
-    ),
-  );
+  const target = decryptHandoff(handoff);
   assert.deepEqual(target, { space: "s.1.new", folder: "s.1.new", name: "UWork 发布包" });
   for (const value of [admin.userid, "s.1.new", "private-token"])
     assert.ok(!JSON.stringify(report).includes(value));
+});
+
+test("应用空间标识按不透明字符串处理，长标识仍可加密恢复", async () => {
+  const identifier = "opaque-application-space-" + "x".repeat(500);
+  const client = fixture({ newSpace: identifier });
+  let handoff;
+  const result = await bootstrapWecomSpace({
+    config,
+    client,
+    saveHandoff: async (value) => {
+      handoff = value;
+    },
+  });
+  assert.equal(result.status, "success");
+  assert.equal(decryptHandoff(handoff).space, identifier);
+});
+
+test("只允许恢复时，旧空间无权访问也不能再次创建", async () => {
+  const client = fixture();
+  await assert.rejects(
+    bootstrapWecomSpace({
+      config: { ...config, reuseOnly: true },
+      client,
+      saveHandoff: async () => {},
+    }),
+    /恢复/,
+  );
+  assert.equal(client.calls.filter((x) => x.op === "space_create").length, 0);
 });
 
 test("应用仅允许显式成员时不查询未授权根部门，按可见账号查找管理员", async () => {

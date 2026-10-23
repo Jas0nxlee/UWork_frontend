@@ -1,8 +1,14 @@
-import { createPublicKey, publicEncrypt, constants } from "node:crypto";
+import {
+  createPublicKey,
+  publicEncrypt,
+  constants,
+  randomBytes,
+  createCipheriv,
+} from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createWecomClient } from "./wecom-release-client.mjs";
+import { createWecomClient, isWecomIdentifier } from "./wecom-release-client.mjs";
 
 const SPACE_NAME = "UWork 发布包";
 
@@ -35,6 +41,7 @@ export function resolveBootstrapConfig(env) {
     adminName: env.WECOM_SPACE_ADMIN_NAME.trim(),
     oldSpace: env.WECOM_SPACE_ID?.trim(),
     publicKey,
+    reuseOnly: env.WECOM_BOOTSTRAP_REUSE_ONLY === "true",
   };
 }
 
@@ -95,6 +102,7 @@ export async function bootstrapWecomSpace({
     }
   }
   const action = space ? "reused" : "created";
+  if (!space && config.reuseOnly) throw new Error("恢复模式未能确认已有应用空间，禁止再次创建");
   if (!space) {
     // 创建操作仅调用一次；响应不明时必须先恢复目标，不能靠重试制造第二个空间。
     const created = await client.request("space_create", {
@@ -102,13 +110,30 @@ export async function bootstrapWecomSpace({
       space_sub_type: 0,
       auth_info: [{ type: 1, userid: user.userid, auth: 7 }],
     });
-    if (typeof created.spaceid !== "string" || !/^s\.\d+\.[\w-]+$/.test(created.spaceid))
+    if (!isWecomIdentifier(created.spaceid))
       throw new Error("应用空间创建响应无效，停止并核查，禁止盲目重新创建");
     space = created.spaceid;
   }
-  const encrypted = publicEncrypt(
+  const symmetric = randomBytes(32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", symmetric, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(Buffer.from(JSON.stringify({ space, folder: space, name: SPACE_NAME }))),
+    cipher.final(),
+  ]);
+  // 只用 RSA 封装随机密钥，避免把不透明标识长度误当作 RSA 明文长度约束。
+  const wrappedKey = publicEncrypt(
     { key, oaepHash: "sha256", padding: constants.RSA_PKCS1_OAEP_PADDING },
-    Buffer.from(JSON.stringify({ space, folder: space, name: SPACE_NAME })),
+    symmetric,
+  );
+  const encrypted = Buffer.from(
+    JSON.stringify({
+      version: 1,
+      wrappedKey: wrappedKey.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ciphertext: ciphertext.toString("base64"),
+    }),
   ).toString("base64");
   await saveHandoff(encrypted);
   const { space_info: info } = await client.request("new_space_info", { spaceid: space });
