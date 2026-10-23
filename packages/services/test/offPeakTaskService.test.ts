@@ -1,3 +1,4 @@
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -176,8 +177,11 @@ describe("OffPeakTaskService 编排", () => {
     expect(await repo.list()).toEqual([]);
   });
 
-  const createTask = async () => {
-    const result = await service.createTask(createParams);
+  const createTask = async (workspaceIdentity?: string) => {
+    const result = await service.createTask({
+      ...createParams,
+      ...(workspaceIdentity ? { workspaceIdentity } : {}),
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected successful test fixture creation");
     return result.task;
@@ -230,7 +234,9 @@ describe("OffPeakTaskService 编排", () => {
 
   const makeLegacySelectionRow = async (offPeakTaskId: string) => {
     repo.close();
-    const db = new DatabaseSync(join(tempDir!, ".zcode", "v2", "tasks-index.sqlite"));
+    const db = new DatabaseSync(
+      join(tempDir!, UWORK_DATA_ROOT_DIR_NAME, "v2", "tasks-index.sqlite"),
+    );
     db.prepare(
       `UPDATE off_peak_tasks
        SET model = 'GLM-5.2', thought_level = 'high', model_selection = NULL
@@ -239,37 +245,70 @@ describe("OffPeakTaskService 编排", () => {
     db.close();
   };
 
+  const readPersistedTaskRow = (offPeakTaskId: string) => {
+    const db = new DatabaseSync(
+      join(tempDir!, UWORK_DATA_ROOT_DIR_NAME, "v2", "tasks-index.sqlite"),
+      { readOnly: true },
+    );
+    try {
+      return db
+        .prepare("SELECT * FROM off_peak_tasks WHERE off_peak_task_id = ?")
+        .get(offPeakTaskId);
+    } finally {
+      db.close();
+    }
+  };
+
   it("DB109-13：list 不用当前账号补旧身份，保留正文和 Ticket", async () => {
-    const created = await createTask();
+    const created = await createTask("remote:ssh:test-host:22:test:/tmp/ws");
     await makeLegacySelectionRow(created.offPeakTaskId);
+    const storedBefore = readPersistedTaskRow(created.offPeakTaskId);
 
     const listed = await service.list();
     expect(listed[0]?.modelSelection).toBeUndefined();
     expect(listed[0]).toMatchObject({
+      offPeakTaskId: created.offPeakTaskId,
       prompt: created.prompt,
+      workspaceKey: created.workspaceKey,
+      workspacePath: created.workspacePath,
+      workspaceIdentity: created.workspaceIdentity,
       serverTicketId: created.serverTicketId,
       modelSelectionIssue: { code: "repair-required" },
     });
     expect(listed[0]?.modelSelectionIssue).not.toHaveProperty("legacyModelId");
+    // 列表仅派生当前诊断，不能重写正文、旧快照、远端身份或票据。
+    expect(readPersistedTaskRow(created.offPeakTaskId)).toEqual(storedBefore);
     expect((await repo.get(created.offPeakTaskId))?.modelSelection).toEqual(
       listed[0]?.modelSelection,
     );
   });
 
   it("list：损坏配置不影响内容，也不从旧字段恢复执行选择", async () => {
-    const created = await createTask();
+    const created = await createTask("remote:ssh:test-host:22:test:/tmp/ws");
     repo.close();
-    const db = new DatabaseSync(join(tempDir!, ".zcode", "v2", "tasks-index.sqlite"));
+    const db = new DatabaseSync(
+      join(tempDir!, UWORK_DATA_ROOT_DIR_NAME, "v2", "tasks-index.sqlite"),
+    );
     db.prepare(
       `UPDATE off_peak_tasks
        SET model = 'GLM-5.2', thought_level = 'high', model_selection = '{invalid'
        WHERE off_peak_task_id = ?`,
     ).run(created.offPeakTaskId);
     db.close();
+    const storedBefore = readPersistedTaskRow(created.offPeakTaskId);
 
     const [task] = await service.list();
     expect(task?.modelSelection).toBeUndefined();
-    expect(task?.prompt).toBe(created.prompt);
+    expect(task).toMatchObject({
+      offPeakTaskId: created.offPeakTaskId,
+      prompt: created.prompt,
+      workspaceKey: created.workspaceKey,
+      workspacePath: created.workspacePath,
+      workspaceIdentity: created.workspaceIdentity,
+      serverTicketId: created.serverTicketId,
+      modelSelectionIssue: { code: "repair-required" },
+    });
+    expect(readPersistedTaskRow(created.offPeakTaskId)).toEqual(storedBefore);
   });
 
   it("list：暂时失效只返回诊断，保留原 Selection/Ticket，派发校验仍阻断且可恢复", async () => {

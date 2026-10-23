@@ -290,7 +290,7 @@ describe("saved workflow global scope", () => {
     });
 
     expect(written.scope).toBe("global");
-    expect(written.path).toBe(join(home, ".zcode/workflows/research.dwf.ts"));
+    expect(written.path).toBe(join(home, "workflows", "research.dwf.ts"));
 
     const resolved = resolveSavedWorkflow({ cwd, name: "research", homeDir: home });
     expect(resolved.ok).toBe(true);

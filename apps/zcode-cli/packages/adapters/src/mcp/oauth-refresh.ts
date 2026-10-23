@@ -18,6 +18,7 @@ import {
   loadCredentialPair,
   publishCanonicalCredentials,
   type CredentialPairSnapshot,
+  type CredentialGenerationObservation,
 } from "./oauth-credentials.js";
 import {
   createInteractiveAuthorizationRequiredError,
@@ -35,6 +36,7 @@ import { loadDiscoveryRecord, saveDiscoveryRecord } from "./oauth-shared.js";
 const REFRESH_LOCK_MAX_WAIT_MS = 45_000;
 
 export interface RefreshMcpOAuthTokensInput {
+  credentialObservation?: CredentialGenerationObservation;
   credentialStore: SharedZCodeCredentialStore;
   fetchFn?: FetchLike;
   keyPrefix: string;
@@ -69,14 +71,20 @@ export interface ResolvedAsMetadata {
 export async function refreshMcpOAuthTokensUnderLock(
   input: RefreshMcpOAuthTokensInput,
 ): Promise<string> {
-  const observedGeneration = (await loadCredentialPair(input.credentialStore, input.keyPrefix))
-    ?.generation;
+  // 锁外预读与实际抢锁之间可能换代；沿用发起请求时的观察，不能把新凭据重新定义成旧基线。
+  const observedGeneration = input.credentialObservation
+    ? input.credentialObservation.generation
+    : (await loadCredentialPair(input.credentialStore, input.keyPrefix))?.generation;
   const lockPath = resolveRefreshLockPath(input.credentialStore.filePath, input.keyPrefix);
 
   try {
-    return await withFileLock(lockPath, async () => await refreshLocked(input, observedGeneration), {
-      lockMaxWaitMs: REFRESH_LOCK_MAX_WAIT_MS,
-    });
+    return await withFileLock(
+      lockPath,
+      async () => await refreshLocked(input, observedGeneration),
+      {
+        lockMaxWaitMs: REFRESH_LOCK_MAX_WAIT_MS,
+      },
+    );
   } catch (error) {
     if (!isZCodeFileLockTimeoutError(error)) throw error;
     // 等锁超时不代表刷新失败：winner 可能已经发布结果。先重读，确认换代且有 token 就直接用。

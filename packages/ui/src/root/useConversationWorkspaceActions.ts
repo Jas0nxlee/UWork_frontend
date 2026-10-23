@@ -1,15 +1,14 @@
 import { useCallback } from "react";
-import type { IServiceAccessor } from "@zcode/services";
 import { logger } from "@/logger.js";
 import type { TabStoreState } from "@/store/tabStore.js";
 
 export function useConversationWorkspaceActions({
-  services,
+  prepareConversationDraft,
   addTab,
   createTask,
   setWorkspaceActionError,
 }: {
-  services: IServiceAccessor;
+  prepareConversationDraft: () => Promise<{ workspacePath: string }>;
   addTab: TabStoreState["addTab"];
   createTask: (source: string) => Promise<void>;
   setWorkspaceActionError: (error: string | null) => void;
@@ -27,17 +26,19 @@ export function useConversationWorkspaceActions({
 
   const handleResolveConversationWorkspace = useCallback(async () => {
     try {
-      if (!services.projectService) throw new Error("project.service-unavailable");
-      const result = await services.projectService.prepareSession();
+      // 菜单与任务加号必须登记同一 draftId，否则首发 ACK 无法消费旧目录引用。
+      const result = await prepareConversationDraft();
       setWorkspaceActionError(null);
       return result.workspacePath;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // 用户已切到其他任务时，旧菜单结果只撤销自身，不向新页面投递错误。
+      if (message === "project.creation-cancelled") throw error;
       logger.error("[Root] ensure conversation workspace failed", { error });
       setWorkspaceActionError(message);
       throw error;
     }
-  }, [services.projectService, setWorkspaceActionError]);
+  }, [prepareConversationDraft, setWorkspaceActionError]);
 
   const handleEnsureConversationWorkspace = useCallback(async () => {
     const path = await handleResolveConversationWorkspace();

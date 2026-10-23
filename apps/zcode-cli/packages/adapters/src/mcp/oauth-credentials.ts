@@ -47,6 +47,11 @@ export interface CanonicalCredentialSnapshot {
   tokens: OAuthTokens;
 }
 
+/** 本次请求观察到的凭据代际；对象内缺少 generation 表示确实观察到无 canonical 凭据。 */
+export interface CredentialGenerationObservation {
+  generation?: string;
+}
+
 export function mcpOAuthCredentialKey(keyPrefix: string, name: string): string {
   return `${keyPrefix}:${name}`;
 }

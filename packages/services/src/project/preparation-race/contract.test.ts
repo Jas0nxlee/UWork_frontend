@@ -20,7 +20,9 @@ it("PD07 同一草稿重复准备只分配一个目录，不影响无参调用",
     await expect(service.prepareSession({ draftId: "../../escape" })).rejects.toThrow();
     expect(await readdir(root)).toHaveLength(2);
     await rm(a.workspacePath, { recursive: true });
-    await expect(service.prepareSession({ draftId, reuseDraft: true })).rejects.toThrow();
+    await expect(service.prepareSession({ draftId, reuseDraft: true })).rejects.toThrow(
+      "project.draftDirectoryMissing",
+    );
     expect(await readdir(root)).toHaveLength(1);
   } finally {
     await rm(root, { recursive: true, force: true });

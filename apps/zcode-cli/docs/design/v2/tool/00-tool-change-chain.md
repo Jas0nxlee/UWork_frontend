@@ -1,5 +1,21 @@
 # Tool Change Chain Spec
 
+## MCP 初次授权与历史停止记录恢复（2026-10-23）
+
+MCP 授权先由文件 adapter 幂等创建凭据父目录，再经原 lease 互斥进入授权与 pending URL
+发布；权限错误仍上抛，不新增 auth、refresh 或锁 owner。fresh-user 回归从缺失目录开始。
+历史 transcript hydration 对精确的 `ZCode Protocol session stopped` 和
+`UWork Protocol session stopped` 均恢复 cancelled；普通相似错误仍为 error，
+不修改原始 transcript、实时消息顺序或会话执行所有权。
+
+## 插件 Agent 模型继承（2026-10-23）
+
+Settings → SubagentsService → agents-state.json → Host runtime snapshot / CLI loader →
+Agent profile 规范名及别名 → 父任务完整模型选择。`null` 显式继承，缺省恢复插件默认，
+结构化 Selection 保持显式指定；不改 Agent 输入 schema、执行队列或已运行子任务。
+验收覆盖状态 round-trip、真实插件定义扫描、UI 自动保存与 Desktop 重进回显，见
+`07-subagent.md` 和根目录 `specs/official-plugin-subagent-model-defaults.md`。
+
 ## Bash 临时输出路径隔离
 
 主应用及 workflow 子运行时装配 tmp 父目录 → execution adapter 实际准备具名输出文件 →

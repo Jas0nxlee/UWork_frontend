@@ -3079,7 +3079,7 @@ test("command center resolves plugin labels from listings by stable plugin id", 
   );
   assert.equal(
     items.find((item) => item.id === "zcode-cua@unlisted-marketplace")?.primary,
-    "○ ZCode Cua",
+    "○ UWork Cua",
   );
 });
 
@@ -4166,7 +4166,7 @@ export async function main() {
     assert.equal(exitCode, 1);
     assert.match(
       ctx.stderr.output(),
-      /Captured ZCode CUA broker credentials may only launch the trusted shared node_repl host/,
+      /Captured UWork CUA broker credentials may only launch the trusted shared node_repl host/,
     );
     await assert.rejects(readFile(outputPath, "utf8"), { code: "ENOENT" });
   } finally {
@@ -4339,7 +4339,7 @@ export async function main() {
     assert.equal(await run(ctx), 1);
     assert.match(
       ctx.stderr.output(),
-      /Captured ZCode CUA broker credentials may only launch the trusted shared node_repl host/,
+      /Captured UWork CUA broker credentials may only launch the trusted shared node_repl host/,
     );
     await assert.rejects(readFile(outputPath, "utf8"), { code: "ENOENT" });
   } finally {
@@ -5804,7 +5804,7 @@ test("prints human doctor details with verbose diagnostics", async () => {
 
     assert.equal(exitCode, 0);
     assert.match(output, /zcode doctor/);
-    assert.match(output, /process: zcode-cli/);
+    assert.match(output, /process: uwork-cli/);
     assert.match(output, /execPath:/);
     assert.match(output, /cwd:/);
     assert.equal(output.includes("["), false);

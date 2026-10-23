@@ -34,9 +34,9 @@ describe("createRuntimeAiSdkModelExecutionConfig", () => {
     );
     expect(config).toMatchObject({
       defaultHeaders: {
-        "User-Agent": "ZCode/3.9.0",
+        "User-Agent": "UWork/3.9.0",
         "X-ZCode-App-Version": "3.9.0",
-        "X-Title": "Z Code@electron",
+        "X-Title": "UWork@electron",
       },
       endpointRoutingPort,
       network: {
@@ -62,8 +62,8 @@ describe("buildCliZCodeSourceHeaders", () => {
         { sourceTitle: "cli" },
       ),
     ).toMatchObject({
-      "User-Agent": "ZCode/3.9.0",
-      "X-Title": "Z Code@cli",
+      "User-Agent": "UWork/3.9.0",
+      "X-Title": "UWork@cli",
       "X-ZCode-App-Version": "3.9.0",
     });
   });

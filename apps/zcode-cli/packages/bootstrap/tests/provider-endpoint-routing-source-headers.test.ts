@@ -7,16 +7,12 @@ import { createProviderEndpointRoutingSourceHeaders } from "../src/provider-endp
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(
-    tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })),
-  );
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })));
 });
 
 describe("createProviderEndpointRoutingSourceHeaders", () => {
   it("adds runtime attribution and reuses an existing deviceMid for the config GET", async () => {
-    const dataBaseDir = await mkdtemp(
-      join(tmpdir(), "zcode-routing-source-headers-"),
-    );
+    const dataBaseDir = await mkdtemp(join(tmpdir(), "zcode-routing-source-headers-"));
     tempDirs.push(dataBaseDir);
     const stateDir = join(dataBaseDir, ".zcode", "v2");
     await mkdir(stateDir, { recursive: true });
@@ -38,7 +34,7 @@ describe("createProviderEndpointRoutingSourceHeaders", () => {
 
     expect(headers).toMatchObject({
       "HTTP-Referer": "https://routing-config.example.test",
-      "User-Agent": "ZCode/1.2.3",
+      "User-Agent": "UWork/1.2.3",
       "X-Client-Language": expect.any(String),
       "X-Client-Timezone": expect.any(String),
       "X-Device-Mid": "mid-routing-1",
@@ -46,16 +42,14 @@ describe("createProviderEndpointRoutingSourceHeaders", () => {
       "X-Os-Version": readOsRelease(),
       "X-Platform": `${process.platform}-${readOsArch()}`,
       "X-Release-Channel": "test",
-      "X-Title": "Z Code@electron",
+      "X-Title": "UWork@electron",
       "X-ZCode-App-Version": "1.2.3",
     });
     expect(headers).not.toHaveProperty("Authorization");
   });
 
   it("defaults to CLI attribution and does not create a missing device identity", async () => {
-    const dataBaseDir = await mkdtemp(
-      join(tmpdir(), "zcode-routing-no-device-mid-"),
-    );
+    const dataBaseDir = await mkdtemp(join(tmpdir(), "zcode-routing-no-device-mid-"));
     tempDirs.push(dataBaseDir);
 
     const headers = await createProviderEndpointRoutingSourceHeaders({
@@ -68,9 +62,9 @@ describe("createProviderEndpointRoutingSourceHeaders", () => {
 
     expect(headers).toMatchObject({
       "HTTP-Referer": "https://zcode.z.ai",
-      "User-Agent": "ZCode/2.0.0",
+      "User-Agent": "UWork/2.0.0",
       "X-Release-Channel": "production",
-      "X-Title": "Z Code@cli",
+      "X-Title": "UWork@cli",
     });
     expect(headers).not.toHaveProperty("X-Device-Mid");
   });

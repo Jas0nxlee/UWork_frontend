@@ -83,15 +83,25 @@ describe("Todo95 专用 Map 合法请求等价", () => {
             rule.apiTypeMatch === reference.apiMatch &&
             rule.baseUrlMatch === reference.baseURLMatch,
         );
-        expect(matches).toHaveLength(1);
-        const rule = matches[0]!;
+        // DeepSeek Flash 专属 Responses 站点规则已由通用 API 映射承接，仍验证最终请求等价。
+        const usesApiFallback =
+          reference.scope === "providerSiteRules" && reference.modelMatch === "deepseek-v4-flash";
+        expect(matches).toHaveLength(usesApiFallback ? 0 : 1);
+        const map = usesApiFallback
+          ? snapshot.models.resolve({
+              providerId: "compatibility",
+              modelId: reference.modelMatch,
+              apiType: "openai-responses",
+              baseUrl: "https://api.deepseek.com/v1",
+            }).optionSpecs!.reasoningLevel!.map!
+          : matches[0]!.config.optionSpecs!.reasoningLevel!.map!;
         const compile = (map: string) =>
           compileModelOptionMaps({
             reasoningLevel: { map },
             maxOutputTokens: { map: outputMaps[reference.apiMatch]! },
           });
         const before = compile(entry.map);
-        const after = compile(rule.config.optionSpecs!.reasoningLevel!.map!);
+        const after = compile(map);
         for (const reasoningLevel of levels[group]!) {
           for (const base of bases) {
             const options = { reasoningLevel, maxOutputTokens: 32000 };
@@ -135,25 +145,57 @@ describe("Todo95 专用 Map 合法请求等价", () => {
       // 独立覆盖见同目录 mimo-templates.test.ts（含 thinking.type / max_tokens 请求映射）。
       ".*mimo-v2\\.6-(?:pro|flash).*",
     ]);
+    const boundedSuffix = "(?:[.\\-:/\\[].*)?";
+    const normalizedHistoricalMatcher = (rule: Rule) => {
+      if (!rule.modelMatch.endsWith(boundedSuffix)) return rule.modelMatch;
+      const stem = rule.modelMatch.slice(0, -boundedSuffix.length);
+      const renamed: Record<string, string> = {
+        ".*glm-5\\.3(?:-flash)?": ".*glm-5\\.3.*",
+        ".*gpt-5\\.6(?:-(?:sol|terra|luna))?": ".*gpt-5\\.6.*",
+        ".*glm-4\\.6": ".*glm-4\\.6(?!v).*",
+      };
+      const previousMatcher = renamed[stem] ?? `${stem}.*`;
+      const previous = rules.modelApiRules!.find(
+        (candidate) =>
+          candidate.modelMatch === previousMatcher && candidate.apiTypeMatch === rule.apiTypeMatch,
+      );
+      // 仅放行当前保留旧 matcher 的有界等价项，新增无来源 Map 仍会失败。
+      expect(previous, rule.modelMatch).toBeDefined();
+      expect(rule.config.optionSpecs?.reasoningLevel?.map, rule.modelMatch).toBe(
+        previous!.config.optionSpecs?.reasoningLevel?.map,
+      );
+      return previousMatcher;
+    };
     const current = ["modelApiRules", "providerSiteRules"].flatMap((scope) =>
       rules[scope]!.flatMap((rule) =>
         rule.modelMatch !== ".*" &&
         !newModelMatchers.has(rule.modelMatch) &&
-        // Go 新站点不属于 Todo95 历史基线；成员/档位/请求由 opencode-go 独立用例验证。
         !(
           scope === "providerSiteRules" && rule.baseUrlMatch === "https://opencode\\.ai/zen/go/v1/?"
         ) &&
         rule.config.optionSpecs?.reasoningLevel?.map
-          ? [JSON.stringify([scope, rule.modelMatch, rule.apiTypeMatch, rule.baseUrlMatch])]
+          ? [
+              JSON.stringify([
+                scope,
+                scope === "modelApiRules" ? normalizedHistoricalMatcher(rule) : rule.modelMatch,
+                rule.apiTypeMatch,
+                rule.baseUrlMatch,
+              ]),
+            ]
           : [],
       ),
     );
-    expect(current.sort()).toEqual(
+    expect([...new Set(current)].sort()).toEqual(
       baseline
         .flatMap((group) =>
-          group.rules.map((rule) =>
-            JSON.stringify([rule.scope, rule.modelMatch, rule.apiMatch, rule.baseURLMatch]),
-          ),
+          group.rules
+            .filter(
+              (rule) =>
+                !(rule.scope === "providerSiteRules" && rule.modelMatch === "deepseek-v4-flash"),
+            )
+            .map((rule) =>
+              JSON.stringify([rule.scope, rule.modelMatch, rule.apiMatch, rule.baseURLMatch]),
+            ),
         )
         .sort(),
     );
@@ -194,7 +236,9 @@ describe("Todo95 API Schema 兜底", () => {
       const selectionModel = {
         config: {
           optionSpecs: {
-            reasoningLevel: { values: configured.optionSpecs!.reasoningLevel!.values! },
+            reasoningLevel: {
+              values: configured.optionSpecs!.reasoningLevel!.values!,
+            },
           },
         },
       };

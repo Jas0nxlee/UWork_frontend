@@ -143,7 +143,8 @@ export function resolvePluginAgentProfiles(
     // 先替换完整选择再展开别名，避免同一插件的两个调用入口使用不同模型/档位。
     const canonical = {
       ...namespacePluginAgentProfile(parsed),
-      ...(override ? { modelSelection: override } : {}),
+      // 显式继承必须移除插件模型及其档位，不能因 null 为假而重新使用账号固定模型。
+      ...(override !== undefined ? { modelSelection: override ?? undefined } : {}),
     };
     profiles.push(canonical);
 

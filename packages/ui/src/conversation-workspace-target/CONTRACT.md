@@ -2,6 +2,8 @@
 
 模块组合 Root 提供的操作端口，解析“在项目外工作”的目录和身份。窗口 tab store 是 tab 的唯一 owner，Registry / SourceManager 是远程连接和 Source 归属的唯一 owner；解析器只读取事实，不保存副本。
 
+本地始终调用 Root 注入的未归类草稿准备端口，包括当前 tab 已是 conversation 的情况。tab 只表示分类，不证明目录仍是未发送草稿；目录复用与首次接纳后的换代由同一个草稿 owner 决定。
+
 远端不能解除项目绑定，直接拒绝无项目目标。路径相同不能代表设备相同；Source 解析只消费持久化 alias，含糊结果不猜。workbenchTarget 仅解析分屏焦点，最终创建仍交给 ProjectService 按显式项目准入。本地继续使用既有目录解析端口。调用方只使用公开入口和契约。
 
 修复原因：原解析文件落在未受管的 ui 模块，阻塞 pre-push。现在用独立 app 层承载端口编排，契约采用最小只读 tab 视图，避免反向依赖 Root / Zustand。

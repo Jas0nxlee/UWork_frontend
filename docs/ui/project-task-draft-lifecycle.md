@@ -41,6 +41,43 @@
 重复点击和并发准备复用同一个准备结果；不能只挡住导航而仍创建多个目录。
 不得全局改变无参 prepareSession 的语义，Bots、自动化及其他调用方仍有自己的目录准备语义。
 
+### 2026-10-23 无项目入口一致性与失效草稿恢复
+
+- 侧栏新建、快捷键和项目菜单「不在项目中工作」共用 Root 的未归类草稿准备路径。菜单保留原有正文/附件交接，但不得无参分配另一目录，也不得根据 conversation tab 直接复用已发送任务的 cwd。
+- 菜单解析成功即绑定同一 scope 的 draftId 与目录；首次真实输入接纳后由 pendingCommandRegistry 消费它。下一次新建不等待模型回复完成，原任务仍由 CLI/runtime 继续运行。
+- Host 对已交付未归类目录的 ENOENT 返回明确的 `project.draftDirectoryMissing`，不在原路径 mkdir。权限错误、路径非目录、项目主目录错误不属于可换代条件。
+- Root 仅在原 draftId 仍匹配、没有 commandId、当前导航意图仍有效且 Host 明确报告目录缺失时，以 CAS 换新 draftId 并准备新目录；同 scope 的正文、模型/权限与 Recent 保留，附件继续执行原有可用性校验。新旧目录均不扫描、不删除。
+- 含 commandId 的待发送草稿可能已被接纳，不能因缺目录、超时或重启释放身份；保留命令查询线索并显示错误。换代过程中出现更新的草稿或导航时，旧结果不得覆盖它。
+- 新建失败由 Root 展示可见错误，仍保留当前任务与草稿。相同草稿的并发准备保持幂等，不添加超时同步或第二份运行状态。
+
+```mermaid
+sequenceDiagram
+    participant UI as 菜单 / 侧栏 / 快捷键
+    participant Root as Root 草稿导航 owner
+    participant Host as Project Service 目录 owner
+    participant Registry as PendingCommandRegistry
+    participant CLI as CLI/runtime
+    UI->>Root: 新建无项目任务
+    Root->>Host: prepareSession(draftId, reuseDraft)
+    alt 旧目录缺失且草稿未发送
+        Host-->>Root: project.draftDirectoryMissing
+        Root->>Root: 复验导航 + CAS 换代 draftId
+        Root->>Host: prepareSession(newDraftId)
+    end
+    Host-->>Root: 同一草稿的真实目录
+    Root->>Root: 绑定 draftId 与目录
+    UI->>Registry: 首次发送，登记 draftId + commandId
+    Registry->>CLI: 原有 command admission
+    CLI-->>Registry: accepted / 可核实 duplicate
+    Registry->>Registry: 消费匹配草稿引用
+    UI->>Root: 原任务运行中再次新建
+    Root->>Host: 新 draftId、新目录
+```
+
+回归：菜单与侧栏互换复用未发送目录；菜单首发接纳后原任务 streaming 时可再新建并发送第二任务；无 commandId 的缺失目录换代且保留正文；含 commandId、权限错误、迟到响应均不误换代；失败对用户可见。
+
+Desktop E2E 的隔离 HOME 不变，WDIO bootstrap、配置 helper 与 runtime-path helper 必须共用当前产品的 `UWORK_DATA_ROOT_DIR_NAME`，不能把夹具写到 `.zcode` 再让实际 UWork 从 `.uwork` 读取。仅工作区内的 `.zcode` 项目配置继续保留原有约定。
+
 ### 默认配置
 
 仅真实用户发送被接纳时更新 Recent；模型回复完成不是边界。改菜单、预热、权限确认、读取历史、打开设置、失败发送不更新 Recent。
@@ -93,7 +130,7 @@ flowchart TD
 ## 目录变化、导入及兼容
 
 项目换主要目录后，文字与 Recent 留在项目；预热需在目标目录重新准备，文件引用与附件按现有校验重检，不把旧运行实例换 cwd。
-目录缺失/不可用时保留草稿并报告现有目录错误，不静默复活目录或选其他 root。
+项目目录或含待确认命令的草稿目录缺失/不可用时保留草稿并报告现有目录错误，不静默复活目录或选其他 root。未发送且目录明确缺失的未归类草稿按 2026-10-23 小节换代身份，正文仍留在原作用域。
 移动正式 session 只改组织归属，不搬项目新建草稿和 Recent；后续发送按提交时的归属记录默认配置。
 首次分享导入、模板预填、显式项目切换沿用已有明确交接动作；普通导航不自动将一个项目正文搬到另一项目，也不覆盖目标已有草稿。
 旧文字记录保留。仅草稿保存的 projectId 与目标匹配时允许认领；未归类旧草稿必须有明确当前上下文，不能扫描最新目录猜测。
@@ -200,3 +237,29 @@ PD06 的 rejected/unknown/duplicate、刷新重建账本、TTL 与旧 ACK，PD07
 | 类型与门禁         | 根及 E2E 类型检查、Lint（0 error）、架构（0 violation）、数据库 schema 与架构脚本测试通过                                                                                                                                               |
 
 初次手机运行在主干新增的分组长按菜单等待超时；运行时触摸事件采样验证菜单可正常打开。CDP 坐标输入前补充 Playwright 可交互检查，保留真实 touch 长按，最终完整流程通过。最初集成构建因 rebase 后依赖未刷新缺少字体包，重新按当前 lockfile 安装后完成。失败记录保留，不以成功复跑掩盖环境与用例准备问题。截图已核对桌面权限继承、项目交接及手机正文/附件；本轮平台限制与前节相同。
+
+## 2026-10-23 无项目草稿回归验证
+
+确认的故障链：菜单无参准备目录或直接复用 conversation tab，没有绑定侧栏所用 pending draftId；路径不匹配时首发不会携带旧 draftId，因此旧引用保留。macOS 现场的旧引用没有 commandId，目录已不存在，后续侧栏新建一直复用失败。无法从现有证据确定目录何时、被谁移除，也不据此认定 macOS 专属缺陷；用户反馈 Windows 发布包未复现。
+
+最终源码在 macOS arm64、Node 24.14.0、Electron 41.10.7 上完整构建并回归：
+
+- 定向单测 11 文件 / 101 项通过，覆盖菜单与侧栏复用、缺失目录换代、正文保留、未知命令保护、权限错误和导航/草稿身份晚回。
+- Desktop E2E `PD01/02` 通过：注入隔离 profile 的失效未发送引用 → 菜单自动恢复 → 草稿切走恢复同目录及正文 → 首任务 streaming 时创建并发送第二任务（不同 session/cwd）→ 切回首任务仍 streaming、stopRequested=false。追加未知 commandId 的缺目录场景，引用保持、错误条可见且可关闭，当前任务保持不变。
+- 最终运行 `desktop-e2e-20261023053622128-p25855-2569fb718fae7d62`，summary、JSON 与四步截图保存在 `packages/desktop/.e2e-artifacts/` 对应运行目录。模型为既有受控 replay fixture，未调用真实模型。
+- 根 typecheck 通过；Lint 0 error / 331 warning；架构 0 violation；修改文件格式检查和 diff 空白检查通过。fixture 校验通过，未发送正文/项目名 marker 的既有 matcher 警告保留。
+- 初次 E2E 因缺少显式 pending replay 配置、依赖 workspace 链接缺失、旧 `.zcode` 夹具根、未处理的企业登录弹层而失败。补齐本机依赖链接、对齐 `.uwork` 数据根，并通过真实「跳过登录」按钮关闭测试 profile 的弹层后通过；未用 DOM click 绕开项目菜单 trigger 的指针交互。
+
+以上开发构建验证不覆盖 Windows/Linux 实机、真实企微登录或已安装客户端升级；对应记录时未发布安装包、未修改或重启原有已安装应用。
+
+### macOS 本机安装验收（2026-10-23）
+
+按用户后续授权重新生成 ARM64 DMG 与 ZIP，并从 DMG 替换本机旧版。版本号仍为 0.1.1，是包含本次未发布修复的本地构建；旧应用已备份，用户数据目录保持原样。安装后深度严格签名校验、DMG 校验和、ASAR header 完整性与包内四个组织配置均通过。签名为本机 ad-hoc，未宣称 Developer ID 签名或 Apple 公证。
+
+真实安装应用验收：已有任务 → 任务区新建 →「不在项目中工作」→ 发送安装验证 A；再次新建并发送一个持续执行 `sleep 90` 的任务。在其运行期间通过 Cmd+N 进入独立草稿并发送验证 B，B 返回 `INSTALL_VERIFY_B_DONE` 后切回 A，界面仍显示工作中（1 分 5 秒）、`sleep 90` 与停止按钮。Host 索引只读核对两个任务 projectId 均为空，session 与 workspacePath 均不同。
+
+本机依赖/生成目录存在历史副本，干净安装依赖并重新构建后完成打包。桌面文件提供程序会重新附加 Finder 元数据，故将生成应用复制到非同步构建目录，仅清除 FinderInfo/ResourceFork 后重新签名；afterPack 改写 ASAR 后重新计算其 header 摘要并再次签名，最终从 DMG 中验证同一应用字节再安装。安装包体积 196.4 MiB（上限 500 MiB）。本次只执行本机构建和安装，未公开发布或打标签。
+
+### PR 扩大验证中的夹具维护
+
+干净工作树以 PR 的 `origin/main` 为显式基线执行推送检查，affected 选择 582 个测试文件。发现三个 E2E helper 消费者仍按 `.zcode` 用户根准备/读取配置，已随 helper 合同同步改为 `.uwork`；工作区内 `.zcode/config.json` 保持不变。另在未修改的主干上复现五个文件、六项既有失败：四项文案仍期待旧 ZCode 品牌，静态路由两项测试在 HTTP listening 事件之前读取端口。按当前 UWork 文案和异步 listen 合同修正测试夹具，保留所有内容、路径隔离和 HTTP 响应断言，不跳过测试或降低门槛；未改变对应产品行为。Electron 缺失属于新工作树忽略安装脚本的环境准备，执行已有安装脚本恢复。

@@ -1,5 +1,5 @@
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import {
   BrowserCommandError,
@@ -1075,7 +1075,7 @@ describe("browser-client facade", () => {
   it("browser.documentation() and agent.documentation.get() load plugin docs", async () => {
     const { execute } = fakeExecute();
     const browsers = createFacade(execute, [IAB_INFO], {
-      documentationRoot: resolve(process.cwd(), "../browser-use-plugin/docs"),
+      documentationRoot: fileURLToPath(new URL("../../browser-use-plugin/docs", import.meta.url)),
     });
     const doc = await (await browsers.getDefault()).documentation();
     for (const kw of [
@@ -1113,7 +1113,7 @@ describe("browser-client facade", () => {
         list: async () => [IAB_INFO],
         execute: async () => ({ ok: true, elapsedMs: 0 }),
       },
-      documentationRoot: resolve(process.cwd(), "../browser-use-plugin/docs"),
+      documentationRoot: fileURLToPath(new URL("../../browser-use-plugin/docs", import.meta.url)),
     });
     const screenshots = await (
       globals.agent as { documentation: { get(name: string): Promise<string> } }
@@ -1136,7 +1136,7 @@ describe("browser-client facade", () => {
     };
     const browsers = createFacade(execute, [IAB_INFO], {
       assertAvailable,
-      documentationRoot: resolve(process.cwd(), "../browser-use-plugin/docs"),
+      documentationRoot: fileURLToPath(new URL("../../browser-use-plugin/docs", import.meta.url)),
     });
     const iab = await browsers.get("iab");
 

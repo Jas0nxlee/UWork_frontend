@@ -14,7 +14,7 @@ describe("useConversationWorkspaceActions", () => {
     const addTab = vi.fn();
     const { result } = renderHook(() =>
       useConversationWorkspaceActions({
-        services: { projectService: { prepareSession } } as never,
+        prepareConversationDraft: prepareSession,
         addTab,
         createTask,
         setWorkspaceActionError: vi.fn(),

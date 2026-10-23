@@ -11,6 +11,8 @@ import { configureCodingPlanApiKey } from "../src/auth-login.js";
 import { startProcessProviderRegistryRuntime } from "../src/app/process-provider-registry-runtime.js";
 import { importLegacyCliPersonalProviderConfig } from "../src/app/legacy-cli-personal-provider-config-importer.js";
 
+import legacyAccountProviders from "./fixtures/legacy-account-providers.json";
+
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -23,12 +25,20 @@ describe("Todo104 CLI 同文件默认选择", () => {
     const directory = await mkdtemp(join(tmpdir(), "todo104-cli-login-"));
     directories.push(directory);
     const personalPath = join(directory, "injected-personal.json");
+    // 保留登录的同文件事务测试，账号事实只来自本用例的历史目录。
+    const release = JSON.parse(
+      await readFile(
+        new URL("../../../../../config/provider/zcode-builtin.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    release.config.providerConfigRules.providerRules = legacyAccountProviders;
+    const builtinPath = join(directory, "legacy-builtin.json");
+    await writeFile(builtinPath, JSON.stringify(release));
     const env = {
       ZCODE_CREDENTIAL_SECRET: "todo104-fixture-only",
       ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: personalPath,
-      ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: fileURLToPath(
-        new URL("../../../../../config/provider/zcode-builtin.json", import.meta.url),
-      ),
+      ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: builtinPath,
     };
     const repository = new NodePersonalProviderConfigRepository({
       filePath: personalPath,

@@ -5,12 +5,7 @@ import {
   TID_COMPOSER_WORK_OUTSIDE_PROJECT,
   TID_COMPOSER_WORKSPACE_TRIGGER,
 } from "@zcode/shared/test-ids";
-import {
-  DEFAULT_CONVERSATION_WORKSPACE,
-  DEFAULT_WORKSPACE,
-  clearAppData,
-  waitForWorkspaceApp,
-} from "#e2e/helpers/desktop-app";
+import { DEFAULT_WORKSPACE, clearAppData, waitForWorkspaceApp } from "#e2e/helpers/desktop-app";
 
 const CASE_MARKER = "E2E_LOCAL_CONVERSATION_IDENTITY";
 const REMOTE_IDENTITY = buildServerRemoteWorkspaceIdentity({
@@ -50,10 +45,14 @@ async function readNavigation() {
   return browser.execute(() => {
     const state = (window as NavigationWindow).__zcodeTabStoreE2E?.getState();
     if (!state) throw new Error("导航 store 未就绪");
+    const pendingTaskDraft = JSON.parse(
+      localStorage.getItem('zcode-pending-task-draft:v1:["desktop","local",null]') ?? "null",
+    ) as { draftId?: string; workspacePath?: string } | null;
     return {
       activeTabId: state.activeTabId,
       activeWorkspacePath: state.activeWorkspacePath,
       activeWorkspaceIdentity: state.activeWorkspaceIdentity,
+      pendingTaskDraft,
       tabs: state.tabs.map((tab) => ({
         id: tab.id,
         workspacePath: tab.workspacePath ?? null,
@@ -121,16 +120,22 @@ describe(`${CASE_MARKER}: 本地项目解除绑定按完整工作区身份匹配
       async () => {
         const state = await readNavigation();
         return (
-          state.activeWorkspacePath === DEFAULT_CONVERSATION_WORKSPACE &&
+          Boolean(state.pendingTaskDraft?.draftId && state.pendingTaskDraft.workspacePath) &&
+          state.activeWorkspacePath === state.pendingTaskDraft?.workspacePath &&
           state.activeWorkspaceIdentity === null
         );
       },
       { timeout: 10_000, timeoutMsg: `${CASE_MARKER}: 点击后没有进入本地 conversation workspace` },
     );
-    await waitForWorkspaceApp(DEFAULT_CONVERSATION_WORKSPACE, 10_000);
-
     const after = await readNavigation();
+    // 无项目菜单已统一到待发送草稿 owner；固定 default 目录会漏掉身份绑定或误判新目录。
+    const targetPath = after.pendingTaskDraft?.workspacePath;
+    if (!targetPath) throw new Error(`${CASE_MARKER}: 未登记本地待发送草稿目录`);
+    await waitForWorkspaceApp(targetPath, 10_000);
     facts.after = after;
+    expect(after.pendingTaskDraft?.draftId).toBeTruthy();
+    expect(after.activeWorkspacePath).toBe(targetPath);
+    expect(after.activeWorkspacePath).not.toBe(DEFAULT_WORKSPACE);
     expect(after.tabs.find((tab) => tab.id === after.activeTabId)?.workspacePurpose).toBe(
       "conversation",
     );

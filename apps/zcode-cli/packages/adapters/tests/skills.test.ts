@@ -1,8 +1,19 @@
 import { chmod, mkdtemp, rm, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { createNodeSkillAdapter } from "../src/skills/index.js";
+
+// homeDirectory 只控制共享 .agents 根；原生用户技能根由 Host 下发的 storage root 拥有。
+function createIsolatedSkillAdapter(options: Parameters<typeof createNodeSkillAdapter>[0] = {}) {
+  if (options.homeDirectory) {
+    vi.stubEnv("ZCODE_STORAGE_DIR", join(options.homeDirectory, UWORK_DATA_ROOT_DIR_NAME));
+  }
+  return createNodeSkillAdapter(options);
+}
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("NodeSkillAdapter", () => {
   it("discovers project skills from SKILL.md metadata", async () => {
@@ -23,7 +34,7 @@ describe("NodeSkillAdapter", () => {
         ].join("\n"),
       );
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
 
       expect(outcome.skills.map((skill) => skill.name)).toEqual(["demo-skill"]);
@@ -45,7 +56,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(keptDir, "kept-skill", "Stays available");
       await writeSkill(disabledDir, "disabled-skill", "Should be filtered");
 
-      const adapter = createNodeSkillAdapter({
+      const adapter = createIsolatedSkillAdapter({
         homeDirectory: join(dir, "home"),
         disabledPaths: [join(disabledDir, "SKILL.md")],
       });
@@ -81,7 +92,7 @@ describe("NodeSkillAdapter", () => {
         ].join("\n"),
       );
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const loaded = await adapter.loadSkill({ name: "agent-skill", workingDirectory: dir });
 
       expect(loaded.content).toContain("# Agent Skill");
@@ -96,7 +107,7 @@ describe("NodeSkillAdapter", () => {
   it("discovers user skills imported as directory symlinks", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-skills-"));
     const sourceSkill = join(dir, "external-skills", "linked-skill");
-    const userSkillRoot = join(dir, "home", ".zcode", "skills");
+    const userSkillRoot = join(dir, "home", UWORK_DATA_ROOT_DIR_NAME, "skills");
     const linkedSkill = join(userSkillRoot, "linked-skill");
 
     try {
@@ -105,7 +116,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(sourceSkill, "linked-skill", "Imported via symlink");
       await symlink(sourceSkill, linkedSkill, process.platform === "win32" ? "junction" : "dir");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
       const loaded = await adapter.loadSkill({ name: "linked-skill", workingDirectory: dir });
 
@@ -123,7 +134,7 @@ describe("NodeSkillAdapter", () => {
   it("filters disabled skills when the scanned skill is a symlink to the configured path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-skills-"));
     const sourceSkill = join(dir, "cloud-skills", "linked-disabled-skill");
-    const userSkillRoot = join(dir, "home", ".zcode", "skills");
+    const userSkillRoot = join(dir, "home", UWORK_DATA_ROOT_DIR_NAME, "skills");
     const linkedSkill = join(userSkillRoot, "linked-disabled-skill");
 
     try {
@@ -132,7 +143,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(sourceSkill, "linked-disabled-skill", "Disabled by real path");
       await symlink(sourceSkill, linkedSkill, process.platform === "win32" ? "junction" : "dir");
 
-      const adapter = createNodeSkillAdapter({
+      const adapter = createIsolatedSkillAdapter({
         homeDirectory: join(dir, "home"),
         disabledPaths: [join(sourceSkill, "SKILL.md")],
       });
@@ -155,7 +166,7 @@ describe("NodeSkillAdapter", () => {
       await mkdir(skillDir, { recursive: true });
       await writeFile(join(skillDir, "SKILL.md"), "# Plain Skill\nFollow this workflow.");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
       const loaded = await adapter.loadSkill({ name: "plain-skill", workingDirectory: dir });
 
@@ -172,7 +183,7 @@ describe("NodeSkillAdapter", () => {
   it("keeps same-name skills from different paths", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-skills-"));
     const projectSkill = join(dir, ".zcode", "skills", "same-skill");
-    const userSkill = join(dir, "home", ".zcode", "skills", "same-skill");
+    const userSkill = join(dir, "home", UWORK_DATA_ROOT_DIR_NAME, "skills", "same-skill");
 
     try {
       await mkdir(projectSkill, { recursive: true });
@@ -180,7 +191,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(projectSkill, "same-skill", "Project description");
       await writeSkill(userSkill, "same-skill", "User description");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
       const loaded = await adapter.loadSkill({ name: "same-skill", workingDirectory: dir });
 
@@ -208,7 +219,7 @@ describe("NodeSkillAdapter", () => {
       await mkdir(rootSkill, { recursive: true });
       await writeSkill(rootSkill, "root-skill", "Root-level agent skill");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: nestedDirectory });
 
       expect(outcome.skills.map((skill) => skill.name)).toEqual(["root-skill"]);
@@ -232,7 +243,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(ancestorSkill, "same-skill", "Ancestor description");
       await writeSkill(nearestSkill, "same-skill", "Nearest description");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: nestedDirectory });
 
       expect(outcome.skills.map((skill) => skill.description).toSorted()).toEqual([
@@ -255,7 +266,7 @@ describe("NodeSkillAdapter", () => {
       await mkdir(skillDir, { recursive: true });
       await writeSkill(skillDir, "agents-dir-skill", "Lives under .agents/skills");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
 
       expect(outcome.skills.map((skill) => skill.name)).toEqual(["agents-dir-skill"]);
@@ -289,7 +300,7 @@ describe("NodeSkillAdapter", () => {
       );
       await writeSkill(skillDir, "test-driven-development", "Superpowers TDD");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ roots, workingDirectory: dir });
       const skill = outcome.skills[0];
 
@@ -361,7 +372,7 @@ describe("NodeSkillAdapter", () => {
         ].join("\n"),
       );
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
       const byName = new Map(outcome.skills.map((skill) => [skill.name, skill]));
 
@@ -391,7 +402,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(agentsSkill, "dup", "From .agents");
       await writeSkill(agentsOnlySkill, "agents-only", "Agents only");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
       const loaded = await adapter.loadSkill({ name: "dup", workingDirectory: dir });
 
@@ -424,7 +435,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(rootOwnSkill, "tdd", "Root-own skill");
       await writeSkill(nestedSkill, "nested-skill", "Nested skill");
 
-      const outcome = await createNodeSkillAdapter().discoverSkills({
+      const outcome = await createIsolatedSkillAdapter().discoverSkills({
         roots: [
           { path: join(dir, "bundle"), priority: 0, scope: "user", source: "plugin" },
           { path: rootOwnSkill, priority: 1, scope: "user", source: "plugin" },
@@ -446,7 +457,7 @@ describe("NodeSkillAdapter", () => {
 
     try {
       await mkdir(emptyRoot, { recursive: true });
-      const outcome = await createNodeSkillAdapter().discoverSkills({
+      const outcome = await createIsolatedSkillAdapter().discoverSkills({
         roots: [{ path: emptyRoot, priority: 0, scope: "user", source: "plugin" }],
         workingDirectory: dir,
       });
@@ -474,7 +485,7 @@ describe("NodeSkillAdapter", () => {
         await writeSkill(skillDir, "hidden-skill", "Should stay hidden");
         await chmod(lockedRoot, 0o000);
 
-        const outcome = await createNodeSkillAdapter().discoverSkills({
+        const outcome = await createIsolatedSkillAdapter().discoverSkills({
           roots: [{ path: lockedRoot, priority: 0, scope: "user", source: "plugin" }],
           workingDirectory: dir,
         });
@@ -511,7 +522,7 @@ describe("NodeSkillAdapter", () => {
       await writeSkill(nodeModulesDir, "dep-skill", "Should be ignored");
       await writeSkill(dotDir, "cursor-skill", "Should be ignored");
 
-      const adapter = createNodeSkillAdapter({ homeDirectory: join(dir, "home") });
+      const adapter = createIsolatedSkillAdapter({ homeDirectory: join(dir, "home") });
       const outcome = await adapter.discoverSkills({ workingDirectory: dir });
 
       expect(outcome.skills.map((skill) => skill.name)).toEqual(["real-skill"]);
@@ -542,7 +553,7 @@ describe("附加目录技能", () => {
           `---\nname: review\ndescription: review\n---\n${dir}`,
         );
       }
-      const adapter = createNodeSkillAdapter({
+      const adapter = createIsolatedSkillAdapter({
         homeDirectory: join(root, "home"),
         additionalDirectories: [extra, extra, main],
       });

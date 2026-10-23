@@ -1,12 +1,14 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   loadPluginAgentTemplates,
   resolvePluginAgentProfiles,
   loadZCodeAgentProfiles,
 } from "../src/subagents.js";
+import { OFFICIAL_PLUGIN_DEFINITIONS } from "../src/app/official-plugin-definitions.js";
 import { loadPluginAgentProfiles } from "./helpers/subagents.js";
 
 function pluginMetadata(input: { enabled?: boolean; id: string; name: string; rootPath: string }) {
@@ -29,6 +31,60 @@ function pluginMetadata(input: { enabled?: boolean; id: string; name: string; ro
     version: "0.0.0",
   };
 }
+
+describe("official plugin agent model defaults", () => {
+  it("loads every shipped official agent without an account model or reasoning pin", async () => {
+    const reviewed: string[] = [];
+    for (const definition of OFFICIAL_PLUGIN_DEFINITIONS) {
+      const root = new URL(`../../../${definition.rootCandidates[0]}/`, import.meta.url);
+      const entries = await readdir(new URL("agents/", root), { withFileTypes: true }).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return [];
+          throw error;
+        },
+      );
+      for (const entry of entries.filter((entry) => entry.isFile() && entry.name.endsWith(".md"))) {
+        const content = await readFile(new URL(`agents/${entry.name}`, root), "utf8");
+        expect(content, `${definition.name}/${entry.name}`).not.toMatch(
+          /^\s*(?:model|thoughtLevel):/m,
+        );
+        reviewed.push(`${definition.name}/${entry.name}`);
+      }
+      if (entries.some((entry) => entry.isFile() && entry.name.endsWith(".md"))) {
+        const loaded = loadPluginAgentProfiles({
+          plugins: [
+            {
+              ...pluginMetadata({
+                id: `${definition.name}@zcode-plugins-official`,
+                name: definition.name,
+                rootPath: fileURLToPath(root),
+              }),
+              components: [
+                {
+                  kind: "agent",
+                  items: entries
+                    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+                    .map((entry) => ({ name: entry.name.slice(0, -3) })),
+                },
+              ],
+            },
+          ],
+        });
+        expect(loaded.diagnostics).toEqual([]);
+        expect(loaded.profiles.length).toBeGreaterThan(0);
+        expect(loaded.profiles.every((profile) => profile.modelSelection === undefined)).toBe(true);
+      }
+    }
+    expect(reviewed).toEqual(
+      expect.arrayContaining([
+        "documents/visual-judge.md",
+        "pdf/visual-judge.md",
+        "presentations/visual-judge.md",
+        "spreadsheets/visual-judge.md",
+      ]),
+    );
+  });
+});
 
 describe("loadZCodeAgentProfiles", () => {
   it("一次读取迁移后的插件覆盖注入规范名和别名，不修改插件文件或串用另一插件覆盖", async () => {
@@ -82,6 +138,21 @@ describe("loadZCodeAgentProfiles", () => {
         ["fixture:code-architect", selection],
         ["code-architect", selection],
       ]);
+      // 显式 null 必须覆盖 Markdown 的账号模型，规范名与别名都不能复活原选择。
+      await writeFile(
+        join(storageRoot, "v2", "agents-state.json"),
+        JSON.stringify({
+          pluginAgentModelSelectionOverrides: { [agentId]: null },
+        }),
+      );
+      const inherited = await loadZCodeAgentProfiles({ storageRoot, workingDirectory: root });
+      expect(inherited.pluginAgentModelSelectionOverrides).toEqual({ [agentId]: null });
+      expect(
+        loadPluginAgentProfiles({
+          plugins,
+          modelSelectionOverrides: inherited.pluginAgentModelSelectionOverrides,
+        }).profiles.map((profile) => profile.modelSelection),
+      ).toEqual([undefined, undefined]);
       const modelOnly = { providerId: "p", modelId: "new" };
       expect(
         loadPluginAgentProfiles({ plugins, modelSelectionOverrides: { [agentId]: modelOnly } })

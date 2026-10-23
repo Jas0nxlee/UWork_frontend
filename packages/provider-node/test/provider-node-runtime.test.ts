@@ -36,7 +36,12 @@ afterEach(async () => {
       .splice(0)
       // Windows 上 runtime 句柄异步关闭，rm 立刻删会撞 EBUSY；带重试兜住句柄释放延迟
       .map((directory) =>
-        rm(directory, { force: true, recursive: true, maxRetries: 10, retryDelay: 200 }),
+        rm(directory, {
+          force: true,
+          recursive: true,
+          maxRetries: 10,
+          retryDelay: 200,
+        }),
       ),
   );
 });
@@ -69,7 +74,10 @@ describe("@zcode/provider-node", () => {
           anthropic.optionSpecs!.reasoningLevel!.map!,
           "reasoningLevel",
         ).evaluate("max"),
-      ).toEqual({ thinking: { type: "adaptive" }, output_config: { effort: "max" } });
+      ).toEqual({
+        thinking: { type: "adaptive" },
+        output_config: { effort: "max" },
+      });
 
       const openAiCompatible = snapshot.models.resolve({
         providerId: "custom",
@@ -124,8 +132,9 @@ describe("@zcode/provider-node", () => {
         baseUrl: "https://api.z.ai/api/anthropic",
       }).properties,
     ).toMatchObject({
-      supportsMidConversationSystem: true,
-      supportsNativeWebSearch: true,
+      // 退役站点不再提供账号专属覆盖，手动 URL 沿用模型事实。
+      supportsMidConversationSystem: false,
+      supportsNativeWebSearch: false,
     });
     expect(
       snapshot.models.resolve({
@@ -152,16 +161,8 @@ describe("@zcode/provider-node", () => {
       supportsMidConversationSystem: true,
       supportsNativeWebSearch: false,
     });
-    expect(snapshot.providers.get("account:zai-start-plan")?.access).toMatchObject({
-      type: "zhipu-account",
-      accountType: "zai",
-      mode: "start-plan",
-    });
-    expect(snapshot.providers.get("account:zai-offpeak-idle-plan")?.access).toMatchObject({
-      type: "zhipu-account",
-      accountType: "zai",
-      mode: "off-peak",
-    });
+    expect(snapshot.providers.has("account:zai-start-plan")).toBe(false);
+    expect(snapshot.providers.has("account:zai-offpeak-idle-plan")).toBe(false);
     expect(snapshot.providerTemplates?.get("deepseek")?.config.access).toMatchObject({
       type: "api-key",
     });
@@ -287,7 +288,9 @@ describe("@zcode/provider-node", () => {
     const root = await temporaryDirectory();
     const filePath = join(root, "zcodeBuiltin.json");
     await writeZCodeBuiltin(filePath, "model-a");
-    const source = new NodeZCodeBuiltinProviderConfigSource({ bundledFilePath: filePath });
+    const source = new NodeZCodeBuiltinProviderConfigSource({
+      bundledFilePath: filePath,
+    });
     const reasons: string[] = [];
     source.onDidChange((reason) => reasons.push(reason));
     await source.read();
@@ -297,7 +300,9 @@ describe("@zcode/provider-node", () => {
     expect(reasons).toEqual([]);
 
     await writeZCodeBuiltin(filePath, "model-b");
-    await vi.waitFor(() => expect(reasons).toContain("file-changed"), { timeout: 10_000 });
+    await vi.waitFor(() => expect(reasons).toContain("file-changed"), {
+      timeout: 10_000,
+    });
     await settleFileWatcher();
 
     expect(reasons).toEqual(["file-changed"]);
@@ -311,8 +316,14 @@ describe("@zcode/provider-node", () => {
     const root = await temporaryDirectory();
     const filePath = join(root, "provider-config.json");
     await writeFile(filePath, JSON.stringify(storedConfig(emptyUpdate())), "utf8");
-    const first = new NodePersonalProviderConfigRepository({ filePath, watch: false });
-    const second = new NodePersonalProviderConfigRepository({ filePath, watch: false });
+    const first = new NodePersonalProviderConfigRepository({
+      filePath,
+      watch: false,
+    });
+    const second = new NodePersonalProviderConfigRepository({
+      filePath,
+      watch: false,
+    });
 
     await Promise.all([
       first.update((current) => ({
@@ -372,7 +383,9 @@ describe("@zcode/provider-node", () => {
       providers: new ProviderConfigMap([["external", personalProviderConfig(false)]]),
       models: ModelConfigRules.empty(),
     }));
-    await vi.waitFor(() => expect(reasons).toContain("poll-changed"), { timeout: 10_000 });
+    await vi.waitFor(() => expect(reasons).toContain("poll-changed"), {
+      timeout: 10_000,
+    });
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     expect(reasons).toEqual(["poll-changed"]);
@@ -397,7 +410,9 @@ describe("@zcode/provider-node", () => {
     repository.onDidChange((reason) => reasons.push(reason));
     await repository.read();
 
-    await vi.waitFor(() => expect(pollingErrors).toHaveLength(1), { timeout: 10_000 });
+    await vi.waitFor(() => expect(pollingErrors).toHaveLength(1), {
+      timeout: 10_000,
+    });
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(pollingErrors).toHaveLength(1);
 
@@ -412,7 +427,9 @@ describe("@zcode/provider-node", () => {
       ),
       "utf8",
     );
-    await vi.waitFor(() => expect(reasons).toContain("poll-changed"), { timeout: 10_000 });
+    await vi.waitFor(() => expect(reasons).toContain("poll-changed"), {
+      timeout: 10_000,
+    });
     expect((await repository.read()).providers.keys()).toEqual(["recovered"]);
     repository.dispose();
   });

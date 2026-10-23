@@ -158,6 +158,9 @@ const enUS: Record<string, string> = {
   "project.browse": "Choose folder",
   "project.noFolders": "No source folders in this project",
   "project.primaryRootMissing": "This project's main folder has been deleted or moved",
+  "project.draftDirectoryMissing":
+    "The task draft folder was deleted or moved. The first submission is still awaiting confirmation. Keep the current task and retry after recovery.",
+  "root.workspaceActionFailed": "Unable to open the task workspace",
   "project.primaryRootUnavailable": "This project's main folder cannot be accessed",
   "project.cancel": "Cancel",
   "project.save": "Save",
@@ -4935,7 +4938,7 @@ const enUS: Record<string, string> = {
   "settings.subagents.group.user": "Installed",
   "settings.subagents.group.plugin": "Plugin subagents",
   "settings.subagents.group.plugin.hint":
-    "Plugin profiles are loaded from enabled plugins; only the model and reasoning effort can be overridden here.",
+    "Choose a model or inherit the parent task's model and reasoning level. Use plugin default restores the plugin configuration. Changes save automatically and apply to new subtasks; other fields are read-only.",
   "settings.subagents.group.builtIn": "Built-in subagents",
   "settings.subagents.group.builtIn.hint":
     "Built-in profiles are runtime defaults and cannot be edited here.",
@@ -4991,8 +4994,10 @@ const enUS: Record<string, string> = {
   "settings.subagents.form.validation.thoughtLevelUnavailable":
     "Select a reasoning effort supported by this model",
   "settings.subagents.reasoningUnavailable": "Reasoning effort unavailable",
-  "settings.subagents.model.inherit": "Inherit",
-  "settings.subagents.model.defaultMain": "Inherit default",
+  "settings.subagents.model.inherit": "Inherit parent task model",
+  "settings.subagents.model.defaultMain": "Inherit parent task model",
+  "settings.subagents.model.pluginDefault": "Use plugin default",
+  "settings.subagents.model.pluginDefaultValue": "Plugin default: {model}",
   "settings.subagents.model.select": "Select model",
   "settings.subagents.model.main": "Main",
   "settings.subagents.model.lite": "Lite",

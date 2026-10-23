@@ -29,8 +29,12 @@ describe("发布模型规则的前后缀与覆盖顺序", () => {
               baseUrl: "https://example.test/v1",
             });
           const fallback = get("future-unknown-model");
-          expect(fallback.properties?.contextWindow).toBe(1_000_000);
-          expect(fallback.optionSpecs?.maxOutputTokens?.max).toBe(128_000);
+          expect(fallback.properties?.contextWindow).toBe(
+            filename === "zcode-builtin.json" ? 200_000 : 1_000_000,
+          );
+          expect(fallback.optionSpecs?.maxOutputTokens?.max).toBe(
+            filename === "zcode-builtin.json" ? 32_000 : 128_000,
+          );
           expect(get("claude-haiku-4-5").properties?.contextWindow).toBe(200_000);
           expect(get("qwen3.8-omni-flash").optionSpecs?.maxOutputTokens?.max).toBe(16_384);
           const personal = fallback.overlay(
@@ -56,18 +60,15 @@ describe("发布模型规则的前后缀与覆盖顺序", () => {
                 : "max_completion_tokens";
           expect(request[field]).toBe(1000);
         }
-        expect(
-          snapshot.models
-            .rules()
-            .filter((r) => r.type === "model")
-            .map((r) => r.modelMatch),
-        ).not.toContain(".*\\[1m\\]");
-        expect(
-          snapshot.models
-            .rules()
-            .filter((r) => r.type === "model")
-            .map((r) => r.modelMatch),
-        ).not.toContain(".*(?:ox-alpha|glm-x-preview-f|x-preview-f-free).*");
+        const modelMatchers = snapshot.models
+          .rules()
+          .filter((rule) => rule.type === "model")
+          .map((rule) => rule.modelMatch);
+        // 两种随包环境的静态基线不同；明确检查现有容量和预览别名，而非禁止合法规则。
+        expect(modelMatchers.includes(".*\\[1m\\]")).toBe(filename === "zcode-builtin.json");
+        expect(modelMatchers.includes(".*(?:ox-alpha|glm-x-preview-f|x-preview-f-free).*")).toBe(
+          filename === "zcode-builtin.json",
+        );
       } finally {
         source.dispose();
       }
@@ -157,11 +158,13 @@ describe("发布模型规则的前后缀与覆盖顺序", () => {
             `${modelId}-20250901`,
             `gateway/${modelId}-20250901`,
             `gateway/${modelId}:free`,
-            `gateway/${modelId}_custom`,
           ]) {
             expect(get(alias), alias).toEqual(expected);
           }
         }
+        // 下划线后缀不是通用别名边界；保留正常命名后缀和明确的负向合同。
+        expect(get("gateway/GLM-5.3_custom")).not.toEqual(get("GLM-5.3"));
+        expect(get("gateway/claude-opus-5_custom")).not.toEqual(get("claude-opus-5"));
         // 先族基线、后具体变体：不能把匹配范围扩大后让族规则重新盖掉具体配置。
         expect(get("gateway/GLM-5.3-Flash-20250901").properties?.inputFormat?.supportsImage).toBe(
           true,

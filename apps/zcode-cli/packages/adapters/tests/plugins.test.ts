@@ -31,6 +31,8 @@ import {
   recoverAtomicTargetSync,
   replaceDirectoryAtomically,
 } from "../src/plugins/atomic-directory.js";
+import * as atomicDirectory from "../src/plugins/atomic-directory.js";
+import * as githubArchiveSource from "../src/plugins/github-archive-source.js";
 import { createArchiveFetchError } from "../src/plugins/source-errors.js";
 import {
   buildGitHubArchiveUrl,
@@ -45,6 +47,7 @@ import {
 import { createNodeCustomCommandAdapter } from "../src/commands/index.js";
 import { createNodeSkillAdapter } from "../src/skills/index.js";
 import {
+  DEFAULT_PLUGIN_MARKETPLACES,
   ZCODE_AGENT_CA_CERT_ENV_KEY,
   ZCODE_HTTP_PROXY_ENV_KEY,
   ZCODE_NO_PROXY_ENV_KEY,
@@ -52,9 +55,31 @@ import {
 } from "@zcode/shared";
 
 const execFileAsync = promisify(execFile);
+const CLAUDE_MARKETPLACE_SOURCE = {
+  source: "github" as const,
+  repo: DEFAULT_PLUGIN_MARKETPLACES.find((entry) => entry.id === "claude-plugins-official")!
+    .source!,
+};
+const OFFICIAL_MARKETPLACE_SOURCE = {
+  source: "url" as const,
+  url: DEFAULT_PLUGIN_MARKETPLACES.find((entry) => entry.id === "zcode-plugins-official")!.source!,
+};
+
+function stubCanonicalClaudeMarketplace(sourceRoot: string) {
+  // 可信来源校验仍走生产规则，只在已校验后的归档 I/O 边界提供受控目录。
+  const actualResolve = githubArchiveSource.resolveGitHubArchiveSource;
+  vi.spyOn(githubArchiveSource, "resolveGitHubArchiveSource").mockImplementation(async (input) => {
+    if (input.url === `https://github.com/${CLAUDE_MARKETPLACE_SOURCE.repo}.git`) {
+      return { path: sourceRoot, cleanup: async () => {} };
+    }
+    return actualResolve(input);
+  });
+  return CLAUDE_MARKETPLACE_SOURCE;
+}
 
 describe("NodePluginAdapter", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
@@ -202,36 +227,8 @@ describe("NodePluginAdapter", () => {
       });
       await writeKnownMarketplaces(storageRoot, [
         {
-          id: "zcode-plugins-official",
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "zcode-plugins-official",
-              plugins: [],
-              raw: { name: "zcode-plugins-official", plugins: [] },
-            },
-          },
-          name: "zcode-plugins-official",
-          addedAt: "2026-01-01T00:00:00.000Z",
-          pluginCount: 0,
-        },
-        {
           id: "claude-plugins-official",
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "claude-plugins-official",
-              plugins: [],
-              raw: { name: "claude-plugins-official", plugins: [] },
-            },
-          },
-          name: "claude-plugins-official",
-          addedAt: "2026-01-01T00:00:00.000Z",
-          pluginCount: 0,
-        },
-        {
-          id: "claude-plugins-official",
-          source: { source: "directory", path: sourceDir },
+          source: stubCanonicalClaudeMarketplace(sourceDir),
           name: "claude-plugins-official",
           addedAt: "2026-01-01T00:00:00.000Z",
           pluginCount: 1,
@@ -358,7 +355,7 @@ describe("NodePluginAdapter", () => {
       await writeKnownMarketplaces(storageRoot, [
         {
           id: "claude-plugins-official",
-          source: { source: "directory", path: sourceDir },
+          source: stubCanonicalClaudeMarketplace(sourceDir),
           name: "claude-plugins-official",
           addedAt: "2026-01-01T00:00:00.000Z",
           pluginCount: 1,
@@ -558,16 +555,13 @@ describe("NodePluginAdapter", () => {
     const storageRoot = join(dir, "storage");
 
     try {
-      // Both reserved ids must be protected via the untrusted (user-facing) path.
-      // claude-plugins-official is a DEFAULT marketplace (always seeded as "known"),
-      // so a known-state heuristic would never fire for it — the explicit trusted
-      // flag is what closes that hole.
-      for (const reservedId of ["zcode-plugins-official", "claude-plugins-official"]) {
+      // 所有默认市场都必须校验规范来源；已知 ID 或 trustedId 均不能授权任意本地目录。
+      for (const reservedId of DEFAULT_PLUGIN_MARKETPLACES.map((definition) => definition.id)) {
         const sourceDir = join(dir, `evil-${reservedId}`);
         await writeMarketplaceManifest(sourceDir, { name: reservedId, plugins: [] });
         await expect(
           addMarketplace({ source: { source: "directory", path: sourceDir }, storageRoot }),
-        ).rejects.toThrow(/official marketplace/i);
+        ).rejects.toThrow(`Reserved marketplace ${reservedId} has an untrusted source`);
       }
     } finally {
       await rm(dir, { force: true, recursive: true });
@@ -593,7 +587,7 @@ describe("NodePluginAdapter", () => {
       await writeMarketplaceManifest(sourceDir, { name: "claude-plugins-official", plugins: [] });
       await expect(
         addMarketplace({ source: { source: "directory", path: sourceDir }, storageRoot }),
-      ).rejects.toThrow(/official marketplace/i);
+      ).rejects.toThrow(/Reserved marketplace .* has an untrusted source/u);
 
       // The guard must run BEFORE persistence: the original dir + sentinel survive intact.
       expect(await readFile(join(officialDir, "SENTINEL"), "utf8")).toBe("real-official");
@@ -634,12 +628,39 @@ describe("NodePluginAdapter", () => {
           ?.lastRefreshFailure,
       ).toMatchObject({
         code: "plugin_marketplace_invalid",
-        message: expect.stringMatching(/official marketplace/i),
+        message: "Reserved marketplace claude-plugins-official has an untrusted source",
       });
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
+
+  it.each(DEFAULT_PLUGIN_MARKETPLACES.map((definition) => definition.id))(
+    "rejects a tampered known source for %s without rewriting authority state",
+    async (id) => {
+      const dir = await mkdtemp(join(tmpdir(), "zcode-plugin-tampered-known-"));
+      const storageRoot = join(dir, "storage");
+      try {
+        await writeKnownMarketplaces(storageRoot, [
+          {
+            id,
+            name: id,
+            source: { source: "directory", path: join(dir, "untrusted-mirror") },
+            addedAt: "2026-01-01T00:00:00.000Z",
+            pluginCount: 123,
+          },
+        ]);
+        const authorityPath = join(storageRoot, "known_marketplaces.json");
+        const original = await readFile(authorityPath, "utf8");
+        expect(() => ensureDefaultPluginMarketplaces(storageRoot)).toThrow(
+          `Reserved marketplace ${id} has an untrusted source`,
+        );
+        expect(await readFile(authorityPath, "utf8")).toBe(original);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    },
+  );
 
   it("seeds Claude official marketplace without overwriting an existing record", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-plugin-default-marketplace-"));
@@ -649,9 +670,9 @@ describe("NodePluginAdapter", () => {
       await writeKnownMarketplaces(storageRoot, [
         {
           id: "claude-plugins-official",
-          source: { source: "directory", path: join(dir, "custom-claude") },
+          source: CLAUDE_MARKETPLACE_SOURCE,
           name: "claude-plugins-official",
-          description: "Custom Claude mirror",
+          description: "Retained Claude metadata",
           addedAt: "2026-01-01T00:00:00.000Z",
           lastUpdated: "2026-01-02T00:00:00.000Z",
           pluginCount: 123,
@@ -660,27 +681,27 @@ describe("NodePluginAdapter", () => {
 
       const known = ensureDefaultPluginMarketplaces(storageRoot);
 
-      // 默认市场现在有两个：claude-plugins-official（已有记录不被覆盖）+ 唯一 ZCode
-      // 官方市场 zcode-plugins-official（缺失时补种）。
-      expect(known).toHaveLength(2);
+      // 现有可信记录的元数据保留，缺失的公开与公司市场按当前声明补种。
+      expect(known.map((record) => record.id).toSorted()).toEqual(
+        DEFAULT_PLUGIN_MARKETPLACES.map((definition) => definition.id).toSorted(),
+      );
       const claude = known.find((record) => record.id === "claude-plugins-official");
       expect(claude).toMatchObject({
-        description: "Custom Claude mirror",
+        description: "Retained Claude metadata",
         lastUpdated: "2026-01-02T00:00:00.000Z",
         pluginCount: 123,
-        source: { source: "directory", path: join(dir, "custom-claude") },
+        source: CLAUDE_MARKETPLACE_SOURCE,
       });
       expect(
         JSON.parse(await readFile(join(storageRoot, "known_marketplaces.json"), "utf8")),
       ).toMatchObject({
         marketplaces: [
           {
-            description: "Custom Claude mirror",
+            description: "Retained Claude metadata",
             pluginCount: 123,
           },
-          {
-            id: "zcode-plugins-official",
-          },
+          { id: "zcode-plugins-official" },
+          { id: "ucas-aihub" },
         ],
       });
     } finally {
@@ -895,10 +916,9 @@ describe("NodePluginAdapter", () => {
         await writeTripletPluginFixture(join(marketplaceRoot, "plugins", fixture.name), fixture);
       }
 
-      // trusted: this fixture legitimately stands up the official catalog from a local dir,
-      // mirroring the internal refresh path; the official-id lock only blocks untrusted adds.
+      // 官方身份仍使用固定 GitHub 来源；临时目录只替代归档物化结果，不绕过来源校验。
       await addMarketplace({
-        source: { source: "directory", path: marketplaceRoot },
+        source: stubCanonicalClaudeMarketplace(marketplaceRoot),
         storageRoot,
         trustedId: "claude-plugins-official",
       });
@@ -1010,7 +1030,7 @@ describe("NodePluginAdapter", () => {
       });
       await writeTripletPluginFixture(join(marketplaceRoot, "plugins", fixture.name), fixture);
       await addMarketplace({
-        source: { source: "directory", path: marketplaceRoot },
+        source: stubCanonicalClaudeMarketplace(marketplaceRoot),
         storageRoot,
         trustedId: "claude-plugins-official",
       });
@@ -1175,7 +1195,7 @@ describe("NodePluginAdapter", () => {
         }),
       );
       await addMarketplace({
-        source: { source: "directory", path: marketplaceRoot },
+        source: stubCanonicalClaudeMarketplace(marketplaceRoot),
         storageRoot,
         trustedId: "claude-plugins-official",
       });
@@ -1552,7 +1572,7 @@ describe("NodePluginAdapter", () => {
       });
 
       await addMarketplace({
-        source: { source: "directory", path: marketplaceRoot },
+        source: stubCanonicalClaudeMarketplace(marketplaceRoot),
         storageRoot,
         trustedId: "claude-plugins-official",
       });
@@ -2604,7 +2624,7 @@ describe("NodePluginAdapter", () => {
     }
   });
 
-  it("keeps the previous Claude settings snapshot when timeout fires during manifest persistence", async () => {
+  it("keeps the previous Claude catalog snapshot when timeout fires during manifest persistence", async () => {
     vi.useFakeTimers();
     const dir = await mkdtemp(join(tmpdir(), "zcode-plugin-claude-settings-timeout-"));
     const storageRoot = join(dir, "storage");
@@ -2622,14 +2642,7 @@ describe("NodePluginAdapter", () => {
       await writeKnownMarketplaces(storageRoot, [
         {
           id: "claude-plugins-official",
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "claude-plugins-official",
-              plugins: [],
-              raw: { name: "claude-plugins-official", plugins: [] },
-            },
-          },
+          source: CLAUDE_MARKETPLACE_SOURCE,
           name: "claude-plugins-official",
           addedAt: "2026-01-01T00:00:00.000Z",
           lastUpdated: "2026-01-02T00:00:00.000Z",
@@ -2655,39 +2668,35 @@ describe("NodePluginAdapter", () => {
         vi.fn(async () => new Response("[]", { status: 200 })),
       );
 
-      const freshRaw = {
+      const sourceRoot = join(dir, "canonical-claude-source");
+      await writeMarketplaceManifest(sourceRoot, {
         name: "claude-plugins-official",
         plugins: [{ name: "fresh", source: "./fresh" }],
-        // 回归触发点：旧实现会在序列化 active manifest 时触发 deadline，但仍覆盖旧文件。
-        toJSON: () => {
+      });
+      stubCanonicalClaudeMarketplace(sourceRoot);
+      const actualWrite = atomicDirectory.writeFileAtomically;
+      let deadlineTriggered = false;
+      vi.spyOn(atomicDirectory, "writeFileAtomically").mockImplementation(async (path, data) => {
+        await actualWrite(path, data);
+        // 规范来源通过信任校验后，在真实持久化边界触发 deadline，继续验证原子回滚。
+        if (
+          !deadlineTriggered &&
+          path.includes(".claude-plugins-official.stage-") &&
+          path.endsWith("marketplace.json")
+        ) {
+          deadlineTriggered = true;
           vi.advanceTimersByTime(30_000);
-          return {
-            name: "claude-plugins-official",
-            plugins: [{ name: "fresh", source: "./fresh" }],
-          };
-        },
-      };
+        }
+      });
 
       await expect(
         addMarketplace({
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "claude-plugins-official",
-              plugins: [
-                {
-                  name: "fresh",
-                  source: "./fresh",
-                  raw: { name: "fresh", source: "./fresh" },
-                },
-              ],
-              raw: freshRaw,
-            },
-          },
+          source: CLAUDE_MARKETPLACE_SOURCE,
           storageRoot,
           trustedId: "claude-plugins-official",
         }),
       ).rejects.toThrow("30 seconds");
+      expect(deadlineTriggered).toBe(true);
 
       expect(
         loadMarketplaceManifestSync(storageRoot, "claude-plugins-official")?.plugins[0]?.name,
@@ -2806,14 +2815,7 @@ describe("NodePluginAdapter", () => {
       await writeKnownMarketplaces(storageRoot, [
         {
           id: "claude-plugins-official",
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "claude-plugins-official",
-              plugins: [],
-              raw: { name: "claude-plugins-official", plugins: [] },
-            },
-          },
+          source: CLAUDE_MARKETPLACE_SOURCE,
           name: "claude-plugins-official",
           addedAt: "2026-01-01T00:00:00.000Z",
           lastUpdated: "2026-01-02T00:00:00.000Z",
@@ -2839,43 +2841,31 @@ describe("NodePluginAdapter", () => {
         vi.fn(async () => new Response("[]", { status: 200 })),
       );
 
-      let serializationCount = 0;
-      const freshRaw = {
+      const sourceRoot = join(dir, "canonical-claude-source");
+      await writeMarketplaceManifest(sourceRoot, {
         name: "claude-plugins-official",
         plugins: [{ name: "fresh", source: "./fresh" }],
-        toJSON: () => {
-          serializationCount += 1;
-          // 第一次序列化 staging manifest，第二次序列化 authority state。
-          if (serializationCount === 2) {
-            vi.advanceTimersByTime(30_000);
-          }
-          return {
-            name: "claude-plugins-official",
-            plugins: [{ name: "fresh", source: "./fresh" }],
-          };
-        },
-      };
+      });
+      stubCanonicalClaudeMarketplace(sourceRoot);
+      const actualWrite = atomicDirectory.writeFileAtomically;
+      let deadlineTriggered = false;
+      vi.spyOn(atomicDirectory, "writeFileAtomically").mockImplementation(async (path, data) => {
+        await actualWrite(path, data);
+        // 规范来源通过信任校验后，在真实持久化边界触发 deadline，继续验证原子回滚。
+        if (!deadlineTriggered && path === join(storageRoot, "known_marketplaces.json")) {
+          deadlineTriggered = true;
+          vi.advanceTimersByTime(30_000);
+        }
+      });
 
       await expect(
         addMarketplace({
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "claude-plugins-official",
-              plugins: [
-                {
-                  name: "fresh",
-                  source: "./fresh",
-                  raw: { name: "fresh", source: "./fresh" },
-                },
-              ],
-              raw: freshRaw,
-            },
-          },
+          source: CLAUDE_MARKETPLACE_SOURCE,
           storageRoot,
           trustedId: "claude-plugins-official",
         }),
       ).rejects.toThrow("30 seconds");
+      expect(deadlineTriggered).toBe(true);
 
       expect(
         loadMarketplaceManifestSync(storageRoot, "claude-plugins-official")?.plugins[0]?.name,
@@ -2936,14 +2926,7 @@ describe("NodePluginAdapter", () => {
         },
         {
           id: "zcode-plugins-official",
-          source: {
-            source: "settings",
-            marketplace: {
-              name: "zcode-plugins-official",
-              plugins: [],
-              raw: { name: "zcode-plugins-official", plugins: [] },
-            },
-          },
+          source: OFFICIAL_MARKETPLACE_SOURCE,
           name: "zcode-plugins-official",
           addedAt: "2026-01-01T00:00:00.000Z",
           pluginCount: 0,
@@ -2952,17 +2935,40 @@ describe("NodePluginAdapter", () => {
 
       vi.stubGlobal(
         "fetch",
-        vi.fn(
-          (_input: RequestInfo | URL, init?: RequestInit) =>
-            new Promise<Response>((_resolve, reject) => {
-              const signal = init?.signal;
-              if (signal?.aborted) {
-                reject(signal.reason);
-                return;
-              }
-              signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
-            }),
-        ),
+        vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          if (url === OFFICIAL_MARKETPLACE_SOURCE.url) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  name: "zcode-plugins-official",
+                  plugins: [],
+                }),
+                { status: 200 },
+              ),
+            );
+          }
+          if (!url.includes("github.com") && !url.endsWith("icon-sources.json")) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  items: [],
+                  nextCursor: null,
+                }),
+                { status: 200 },
+              ),
+            );
+          }
+          // 只挂起被测 Claude 归档及其可选图标，其余规范来源有独立的快速应答。
+          return new Promise<Response>((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal?.aborted) {
+              reject(signal.reason);
+              return;
+            }
+            signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        }),
       );
 
       const refresh = updateMarketplace({ storageRoot });
@@ -3656,7 +3662,7 @@ describe("NodePluginAdapter", () => {
         }),
       );
       await addMarketplace({
-        source: { source: "directory", path: marketplaceRoot },
+        source: stubCanonicalClaudeMarketplace(marketplaceRoot),
         storageRoot,
         trustedId: "claude-plugins-official",
       });

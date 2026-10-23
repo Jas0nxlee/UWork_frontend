@@ -1,9 +1,9 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_PLUGIN_MARKETPLACES } from "@zcode/shared";
 import {
   writeBundledOfficialMarketplacePartitionSync,
   writeCdnOfficialMarketplacePartitionSync,
@@ -14,6 +14,7 @@ describe("ZCode official marketplace partitions", () => {
   const cleanups: string[] = [];
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     await Promise.all(cleanups.splice(0).map((dir) => rm(dir, { force: true, recursive: true })));
   });
 
@@ -159,56 +160,54 @@ describe("ZCode official marketplace partitions", () => {
       storageRoot,
     });
 
-    const server = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify({
-          name: "zcode-plugins-official",
-          plugins: [{ name: "remote", source: { source: "url", type: "zip" } }],
-        }),
-      );
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-    try {
-      const address = server.address();
-      if (!address || typeof address === "string") throw new Error("test server address missing");
-      await writeFile(
-        join(storageRoot, "known_marketplaces.json"),
-        JSON.stringify({
-          version: 1,
-          marketplaces: [
-            {
-              id: "zcode-plugins-official",
-              source: { source: "url", url: `http://127.0.0.1:${address.port}/marketplace.json` },
-              name: "zcode-plugins-official",
-              addedAt: "2026-01-01T00:00:00.000Z",
-              pluginCount: 1,
-            },
-          ],
-        }),
-      );
-
-      const [updated] = await updateMarketplace({
-        marketplace: "zcode-plugins-official",
-        storageRoot,
-      });
-      expect(updated).toMatchObject({
-        id: "zcode-plugins-official",
-        pluginCount: 2,
-      });
-
-      const merged = JSON.parse(
-        await readFile(
-          join(storageRoot, "marketplaces", "zcode-plugins-official", "marketplace.json"),
-          "utf8",
+    const officialSource = DEFAULT_PLUGIN_MARKETPLACES.find(
+      (marketplace) => marketplace.id === "zcode-plugins-official",
+    )!.source!;
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify({
+            name: "zcode-plugins-official",
+            plugins: [{ name: "remote", source: { source: "url", type: "zip" } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
-      ) as { plugins: Array<{ name: string }> };
-      expect(merged.plugins.map((plugin) => plugin.name)).toEqual(["remote", "bundled"]);
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
-    }
+    );
+    // 保留规范可信 URL，仅替换网络 I/O；本地服务器地址不能冒用官方市场身份。
+    vi.stubGlobal("fetch", fetchMock);
+    await writeFile(
+      join(storageRoot, "known_marketplaces.json"),
+      JSON.stringify({
+        version: 1,
+        marketplaces: [
+          {
+            id: "zcode-plugins-official",
+            source: { source: "url", url: officialSource },
+            name: "zcode-plugins-official",
+            addedAt: "2026-01-01T00:00:00.000Z",
+            pluginCount: 1,
+          },
+        ],
+      }),
+    );
+
+    const [updated] = await updateMarketplace({
+      marketplace: "zcode-plugins-official",
+      storageRoot,
+    });
+    expect(updated).toMatchObject({
+      id: "zcode-plugins-official",
+      pluginCount: 2,
+    });
+
+    const merged = JSON.parse(
+      await readFile(
+        join(storageRoot, "marketplaces", "zcode-plugins-official", "marketplace.json"),
+        "utf8",
+      ),
+    ) as { plugins: Array<{ name: string }> };
+    expect(merged.plugins.map((plugin) => plugin.name)).toEqual(["remote", "bundled"]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(officialSource);
   });
 });

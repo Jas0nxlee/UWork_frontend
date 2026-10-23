@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  UWORK_DATA_ROOT_DIR_NAME,
   ZCODE_AGENT_RUNTIME,
   ZCODE_RUNTIME_ENV_KEY,
   hostResponseMessageSchema,
@@ -411,11 +412,13 @@ describe("resolveDefaultZCodeAgentCommand", () => {
     await vi.waitFor(() => expect(gate.isRecovering()).toBe(true));
 
     const duplicate = manager.getClient({ workspacePath });
+    // dispose 会异步拒绝两个 waiter，断言必须先接住拒绝，不能等 dispose 结束才监听。
+    const cancelled = [starting, duplicate].map((promise) =>
+      expect(promise).rejects.toThrow("UWork agent process start was cancelled."),
+    );
     await manager.disposeWorkspace({ workspacePath });
     gate.commitRecovery(recoveryEpoch);
-
-    await expect(starting).rejects.toThrow("ZCode agent process start was cancelled.");
-    await expect(duplicate).rejects.toThrow("ZCode agent process start was cancelled.");
+    await Promise.all(cancelled);
     await expect(manager.getClient({ workspacePath })).resolves.toBeDefined();
 
     await manager.disposeAllAndWait();
@@ -469,7 +472,7 @@ describe("resolveDefaultZCodeAgentCommand", () => {
     expect(commandResolver).toHaveBeenCalledTimes(2);
     expect(
       errorSpy.mock.calls.some((args) =>
-        args.some((arg) => String(arg).includes("ZCode agent process cleanup failed")),
+        args.some((arg) => String(arg).includes("UWork agent process cleanup failed")),
       ),
     ).toBe(false);
 
@@ -532,7 +535,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
     }));
     const manager = new ZCodeAgentProcessManager({ commandResolver });
     await expect(manager.getRuntimeIdentity({ workspacePath })).rejects.toThrow(
-      "ZCode agent runtime identity is unavailable.",
+      "UWork agent runtime identity is unavailable.",
     );
     expect(commandResolver).not.toHaveBeenCalled();
 
@@ -686,7 +689,7 @@ setInterval(() => {}, 1000);
 
     // Bugfix: app 关闭期间 warmup 仍可能卡在 command/env resolve。
     // disposeAllAndWait 之后不允许这个启动 promise 继续 spawn，否则会绕过关闭快照留下孤儿进程。
-    await expect(starting).rejects.toThrow("ZCode agent process manager is disposed.");
+    await expect(starting).rejects.toThrow("UWork agent process manager is disposed.");
     expect(existsSync(markerPath)).toBe(false);
   });
 
@@ -999,7 +1002,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
       await vi.waitFor(() => expect(cleanupAttemptCount).toBe(2));
       expect(
         errorSpy.mock.calls.some((args) =>
-          args.some((arg) => String(arg).includes("ZCode agent process cleanup failed")),
+          args.some((arg) => String(arg).includes("UWork agent process cleanup failed")),
         ),
       ).toBe(false);
     } finally {
@@ -1195,7 +1198,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
       await exited.promise;
       expect(errorSpy).toHaveBeenCalledWith(
         expect.any(String),
-        `ZCode agent process exited unexpectedly ${ZCODE_AGENT_LIFECYCLE_LOG_MARKER}`,
+        `UWork agent process exited unexpectedly ${ZCODE_AGENT_LIFECYCLE_LOG_MARKER}`,
         expect.objectContaining({
           workspaceKey: workspacePath,
           code: 1,
@@ -1339,7 +1342,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
       await vi.waitFor(() =>
         expect(logSpy).toHaveBeenCalledWith(
           expect.any(String),
-          "ZCode agent spawn preflight",
+          "UWork agent spawn preflight",
           expect.objectContaining({
             workspaceKey: workspacePath,
             spawnPreflight: expect.objectContaining({
@@ -1357,7 +1360,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
       await vi.waitFor(() =>
         expect(errorSpy).toHaveBeenCalledWith(
           expect.any(String),
-          "ZCode agent process error",
+          "UWork agent process error",
           expect.objectContaining({
             workspaceKey: workspacePath,
             errorMessage: expect.stringContaining("ENOENT"),
@@ -1503,6 +1506,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
         args: ["app-server", "--stdio"],
         cwd: "/repo/workspace",
         env: { CUSTOM_ENV: "1" },
+        supportsStorageStartup: true,
       },
       "/repo/workspace",
     );
@@ -1514,13 +1518,14 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
         "--workspace-key",
         "/repo/workspace",
         "--log-dir",
-        join(sandboxRoot, ".zcode", "v2", "dev", "stdio-traffic"),
+        join(sandboxRoot, UWORK_DATA_ROOT_DIR_NAME, "v2", "dev", "stdio-traffic"),
         "--",
         "zcode-agent",
         "app-server",
         "--stdio",
       ],
       cwd: "/repo/workspace",
+      supportsStorageStartup: true,
       env: {
         CUSTOM_ENV: "1",
         ELECTRON_RUN_AS_NODE: "1",
@@ -1555,7 +1560,7 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", li
         "--workspace-key",
         "/repo/workspace",
         "--log-dir",
-        join(sandboxRoot, ".zcode", "v2", "dev", "stdio-traffic"),
+        join(sandboxRoot, UWORK_DATA_ROOT_DIR_NAME, "v2", "dev", "stdio-traffic"),
         "--",
         "zcode-agent",
         ...expected,

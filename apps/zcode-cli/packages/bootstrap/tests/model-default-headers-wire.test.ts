@@ -185,9 +185,9 @@ describe("模型请求默认 Header：Bootstrap → Adapter → 真实 SDK", () 
         } else await model.generateText(requestInput);
         expect(requests).toHaveLength(1);
         const headers = requests[0]!.headers;
-        expect(headers.get("user-agent")).toContain(`ZCode/${CLIENT_VERSION}`);
+        expect(headers.get("user-agent")).toContain(`UWork/${CLIENT_VERSION}`);
         expect(headers.get("x-zcode-app-version")).toBe(CLIENT_VERSION);
-        expect(headers.get("x-title")).toBe("Z Code@electron");
+        expect(headers.get("x-title")).toBe("UWork@electron");
         expect(headers.get("http-referer")).toBe("https://zcode.z.ai");
         expect(headers.get("x-zcode-agent")).toBe("glm");
         expect(headers.get("x-release-channel")).toBe("production");
@@ -215,7 +215,7 @@ describe("模型请求默认 Header：Bootstrap → Adapter → 真实 SDK", () 
   ])("按真实 URL 匹配 OpenRouter，不按 Provider 名称：%s", async (baseUrl, matches) => {
     const { model, requests } = createFixture({ baseUrl, apiType: "openai-chat-completions" });
     await model.generateText(requestInput);
-    expect(requests[0]!.headers.get("x-openrouter-title")).toBe(matches ? "ZCode" : null);
+    expect(requests[0]!.headers.get("x-openrouter-title")).toBe(matches ? "UWork" : null);
     expect(requests[0]!.headers.get("x-openrouter-categories")).toBe(
       matches ? "programming-app" : null,
     );
@@ -232,7 +232,7 @@ describe("模型请求默认 Header：Bootstrap → Adapter → 真实 SDK", () 
     await model.generateText(requestInput);
     expect(requests[0]!.headers.get("x-title")).toBe("User Title");
     expect(requests[0]!.headers.get("user-agent")).toMatch(/^Custom\/1(?: |$)/);
-    expect(requests[0]!.headers.get("user-agent")).not.toContain("ZCode/");
+    expect(requests[0]!.headers.get("user-agent")).not.toContain("UWork/");
     expect(requests[0]!.headers.get("x-openrouter-title")).toBe("User Router");
     expect(requests[0]!.headers.get("http-referer")).toBe("https://user.example.test");
     expect(headers["x-title"]).toBe("User Title");
@@ -257,10 +257,10 @@ describe("模型请求默认 Header：Bootstrap → Adapter → 真实 SDK", () 
     const { model, requests } = createFixture(options);
     await model.generateText(requestInput);
     expect(requests[0]!.headers.get("user-agent")).toContain(
-      `ZCode/${options.expected ?? "unknown"}`,
+      `UWork/${options.expected ?? "unknown"}`,
     );
     expect(requests[0]!.headers.get("x-zcode-app-version")).toBe(options.expected ?? null);
-    expect(requests[0]!.headers.get("x-title")).toBe(`Z Code@${options.sourceTitle}`);
+    expect(requests[0]!.headers.get("x-title")).toBe(`UWork@${options.sourceTitle}`);
   });
 
   it("真实 Runtime 标题 sidecar 沿公共工厂携带版本、宿主类型和会话追踪", async () => {

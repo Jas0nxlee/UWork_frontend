@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { AddressInfo } from "node:net";
+import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -80,6 +81,8 @@ describe("static route path containment", () => {
       spaFallback: true,
     });
     servers.push(server);
+    // listen 是异步的，返回 Server 不代表端口已绑定；等待事件而非读取暂时为 null 的 address。
+    if (!server.listening) await once(server, "listening");
     return (server.address() as AddressInfo).port;
   }
 

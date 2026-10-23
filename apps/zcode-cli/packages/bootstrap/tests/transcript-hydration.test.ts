@@ -656,6 +656,10 @@ describe("transcript→event 合成", () => {
       },
     },
     {
+      name: "current protocol session stop",
+      error: { name: "Error", data: { message: "UWork Protocol session stopped" } },
+    },
+    {
       name: "legacy protocol session stop",
       error: {
         name: "Error",
@@ -686,6 +690,26 @@ describe("transcript→event 合成", () => {
     expect(projection.getSnapshot().rows.window).toContainEqual(
       expect.objectContaining({ kind: "turnHeader", state: "completedInterrupted" }),
     );
+  });
+
+  it.each([
+    "Provider stopped unexpectedly",
+    "ZCode Protocol session stopped because upstream failed",
+    "UWork Protocol session stopped because upstream failed",
+  ])("cold ordinary error containing stop is not cancellation: %s", (message) => {
+    const failed = assistantMessage("a-stop-error", "u-stop-error", "partial", 1001);
+    const { events, projection } = reduce([
+      userMessage("u-stop-error", "run task", 1000),
+      {
+        ...failed,
+        info: { ...failed.info, error: { name: "Error", data: { message } } },
+      } satisfies MessageWithParts,
+    ]);
+    expect(events.some((event) => event.type === SessionEventType.TurnError)).toBe(true);
+    expect(projection.getSnapshot().control).toMatchObject({
+      phase: "error",
+      lastError: { message },
+    });
   });
 
   function streamRecoveryDiscardedMessage(id: string, parentId: string, created: number) {

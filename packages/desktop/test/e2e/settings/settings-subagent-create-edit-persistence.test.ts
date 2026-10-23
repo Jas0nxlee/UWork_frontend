@@ -23,8 +23,10 @@ import {
   readAgentsState,
   readModelProvider,
   waitForTestIdByDom,
+  waitForWorkspaceApp,
 } from "../helpers/desktop-app.js";
 import {
+  ensureUpstreamProviderForE2E,
   UPSTREAM_ALTERNATE_MODEL,
   UPSTREAM_ALTERNATE_PROVIDER_ID,
   UPSTREAM_MODEL,
@@ -101,8 +103,17 @@ describe("Settings subagent 创建/编辑文件持久化 E2E", () => {
   before(async function () {
     this.timeout(CASE_TIMEOUT_MS);
 
+    // 隔离 HOME 首次启动会显示可跳过的企业登录层；通过真实按钮关闭后再操作设置。
+    const enterpriseLoginSkip = $('[data-testid="enterprise-login-skip"]');
+    await enterpriseLoginSkip.waitForClickable({ timeout: 30_000 });
+    await enterpriseLoginSkip.click();
+    await enterpriseLoginSkip.waitForExist({ reverse: true, timeout: 15_000 });
+    // 当前引导用 Escape 退出；复用工作区就绪 helper，避免等待旧版三步 Skip 按钮。
+    await waitForWorkspaceApp(DEFAULT_WORKSPACE, 30_000);
     // 模型选择控件和 Subagent 的 model overlay 都依赖已初始化的 Provider/Registry。
-    await prepareV4ConversationE2E();
+    // 本例只验证设置，不需要选择被当前办公模式隐藏的主任务 Composer 模型。
+    await prepareV4ConversationE2E({ skipProvider: true });
+    await ensureUpstreamProviderForE2E({ skipToolbarSelection: true });
     await setRendererLocale("en-US");
     await openSubagentSettings();
   });
@@ -205,6 +216,39 @@ describe("Settings subagent 创建/编辑文件持久化 E2E", () => {
       judgeRowTestId,
     );
     expect(await $(SUBAGENT_FORM_SELECTOR).isExisting()).toBe(false);
+    for (const artifact of artifacts) {
+      if (artifact) expect(await readFile(artifact.path, "utf8")).toBe(artifact.content);
+    }
+    // 继承不等于清除覆盖：保存 null，重进后仍继承；恢复插件默认才删除键。
+    const modelTrigger = $(scope).$(sel(TID_CHAT_MODEL_SELECT_TRIGGER));
+    await modelTrigger.click();
+    await $('[data-model-footer-action="subagent-model:built-in-default"]').click();
+    await waitForAgentsState(
+      (state) =>
+        (state.pluginAgentModelSelectionOverrides as Record<string, unknown>)?.[
+          PLUGIN_JUDGE_AGENT_ID
+        ] === null,
+      "继承主任务模型没有保存为显式 null",
+    );
+    await clickTestIdByDom(testId(TID_SETTINGS_SECTION_NAV, "appearance"));
+    await openSubagentSettingsSection();
+    expect(await $(scope).$(sel(TID_CHAT_MODEL_SELECT_TRIGGER)).getText()).toContain(
+      "Inherit parent task model",
+    );
+    expect(await $(scope).$(sel(TID_CHAT_THOUGHT_LEVEL_SELECT_TRIGGER)).isExisting()).toBe(false);
+    await $(scope).$(sel(TID_CHAT_MODEL_SELECT_TRIGGER)).click();
+    await $('[data-model-footer-action="subagent-model:plugin-default"]').click();
+    await waitForAgentsState(
+      (state) =>
+        !Object.hasOwn(
+          (state.pluginAgentModelSelectionOverrides ?? {}) as Record<string, unknown>,
+          PLUGIN_JUDGE_AGENT_ID,
+        ),
+      "使用插件默认没有删除用户覆盖",
+    );
+    expect(await $(scope).$(sel(TID_CHAT_MODEL_SELECT_TRIGGER)).getText()).toContain(
+      "Plugin default: Inherit parent task model",
+    );
     for (const artifact of artifacts) {
       if (artifact) expect(await readFile(artifact.path, "utf8")).toBe(artifact.content);
     }

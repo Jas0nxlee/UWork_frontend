@@ -176,8 +176,8 @@ describe("plugins/referenceCatalog protocol", () => {
         result.plugins.map((x) => x.pluginId),
       );
       expect(() => zcodePluginsReferenceCatalogResultSchema.parse(enriched)).not.toThrow();
-      expect(zcodeGuide?.displayName).toBe("ZCode Guide");
-      expect(zcodeGuide?.displayNameI18n?.["zh-CN"]).toBe("ZCode 使用指南");
+      expect(zcodeGuide?.displayName).toBe("UWork Guide");
+      expect(zcodeGuide?.displayNameI18n?.["zh-CN"]).toBe("UWork 使用指南");
       expect(zcodeGuide?.description).toEqual(expect.any(String));
       expect(zcodeGuide?.descriptionI18n?.["zh-CN"]).toEqual(expect.any(String));
       expect(

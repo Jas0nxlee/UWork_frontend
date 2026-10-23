@@ -1,5 +1,46 @@
 # MCP Minimal Integration
 
+## Fresh credential directory (2026-10-23)
+
+Before acquiring the cross-process interactive authorization lease, the filesystem adapter
+creates the explicit credential file's parent directory asynchronously and idempotently.
+The existing store and lease remain the only credential and leader/follower owners. This does
+not prewrite credentials or change issuer binding, PKCE, pending URLs, refresh locking or lock
+recovery budgets. EACCES/EPERM and other filesystem errors still propagate.
+Regression coverage starts authorization from a missing nested credential directory and verifies
+pending URL publication without relying on a developer's existing HOME state.
+
+### Late unauthorized responses and authorization generations
+
+Phase 1 records the credential generation actually observed by `token()` (including an observed
+absence) and carries that observation into Phase 2. An absent observation retains the existing
+entry-time baseline for direct callers. Under the existing lease, Phase 2 compares the current
+canonical publication with the failed request's observation: a newer publication reconnects
+through Phase 1, while an unchanged or still-absent credential requires normal authorization.
+Late 401 responses must not refresh a newer canonical publication. This is request-local
+diagnostic state, not a second credential owner; issuer binding and the single reconnect budget
+remain in force. Generation values are opaque and contain no access token or client secret.
+Insufficient-scope (403) step-up keeps its existing entry-time baseline and forced reauthorization:
+a newly published token with the same insufficient scope cannot satisfy the expanded scope request.
+The same request observation is carried into the existing refresh lock for both proactive and
+reactive refresh. The locked reader compares against that observation, so a publication between
+the provider's read and lock admission is reused rather than rotated again. The provider's
+pre-lock check is only an optimization; the locked check is authoritative.
+
+```mermaid
+sequenceDiagram
+  participant A as Phase 1 request A
+  participant Store as Canonical credential store
+  participant B as Other authorization transaction
+  participant Phase2 as Phase 2 / existing lease
+  A->>Store: token() observes generation A or absence
+  B->>Store: publishes generation B
+  A->>Phase2: late 401 + observed generation
+  Phase2->>Store: re-read under lease
+  Store-->>Phase2: newer B
+  Phase2-->>A: reconnect using Phase 1; no new DCR
+```
+
 ## Goal
 
 Add a minimal Model Context Protocol integration that lets configured MCP servers expose tools to the agent loop. The first version is intentionally narrow:

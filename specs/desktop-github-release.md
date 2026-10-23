@@ -2,6 +2,8 @@
 
 ## 发布规则
 
+- `v0.1.2` 发布 PR #2：修复运行任务中新建项目外任务的草稿生命周期、官方 Office 插件子智能体的主任务模型继承与设置提示、设备身份目录分叉、MCP 首次授权及迟到 401 的凭据代际竞态，并兼容历史取消记录。根 `package.json` 是版本唯一所有者，`docs/releases/0.1.2.md` 提供本版说明；先合并已验证的 PR，再将不可变标签指向合并提交。沿用五平台原生构建、安装包真实 Renderer 启动验收、签名校验、依赖审计和全部 16 个应用产物的摘要门禁。GitLab 继续按当前同步合同分发 macOS ARM64 DMG、Windows x64 EXE、Linux/Ubuntu x64 DEB；不分发源码。已有版本和标签不覆盖。
+
 - `v0.1.1` 发布客户端品牌残留和资源管理器数据根修正，市场插件与技能内容不变。Windows 与 Linux 在原安装格式外增加 ZIP，五平台安装包、源提交和摘要的完整发布门禁继续生效（共 16 个应用产物）。GitLab 下游只分发 macOS ARM64、Windows x64、Linux/Ubuntu x64 三个 ZIP，选择合同见 `specs/gitlab-release-sync.md`。根版本、`docs/releases/0.1.1.md` 与不可变 `v0.1.1` 标签一致后才发布。
 
 - 发布目标为用户 fork `Jas0nxlee/UWork_frontend`，默认分支 `main`；正式客户端身份为 `UWork` / `dev.zcode.app`，构建显式使用 `ZCODE_ENV=production` 和 `ZCODE_PREVIEW_IDENTITY=0`。

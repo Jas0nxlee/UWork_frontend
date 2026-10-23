@@ -175,7 +175,7 @@ describe("runServerCore startup wiring", () => {
     vi.stubGlobal("__ZCODE_BUILTIN_PROVIDER_CONFIG_JSON__", undefined);
 
     await expect(runServerCore(1)).rejects.toThrow(
-      /ZCode Built-in Provider Config.*ZCODE_BUILTIN_PROVIDER_CONFIG_FILE/u,
+      /UWork Built-in Provider Config.*ZCODE_BUILTIN_PROVIDER_CONFIG_FILE/u,
     );
     expect(createServerHostServices).not.toHaveBeenCalled();
   });

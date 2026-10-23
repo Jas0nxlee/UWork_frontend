@@ -21,6 +21,25 @@ UWork 使用自己的用户级数据根，**不迁移**上游 ZCode 的任何既
 
 ## 验收
 
+### 遥测显式 home 与默认数据根（2026-10-23）
+
+Telemetry 显式 `homeDir` 是数据基准目录，状态及锁均位于其 `.uwork/v2`，与相同基准下的
+`getAppConfigDir()` 共用同一个 deviceMid owner。之前显式 home 分支硬编码 `.zcode`，
+造成来源头与上报路径可能各生成一个身份。修复只统一路径，不迁移、读取或删除上游 `.zcode`。
+
+```mermaid
+sequenceDiagram
+  participant Header as 来源头 ensureTelemetryDeviceMid
+  participant Report as 显式 home 上报
+  participant Owner as 同一 .uwork/v2 状态锁
+  Header->>Owner: ensure deviceMid
+  Report->>Owner: ensure deviceMid
+  Owner-->>Header: 同一个持久化身份
+  Owner-->>Report: 同一个持久化身份
+```
+
+并发验收默认与显式 home 得到相同 mid、来源头与上报 payload 一致，旧 `.zcode` 不被创建。
+
 ### 2026-10-18 测试装配约束
 
 主进程测试通过受控环境变量为 `resolveDesktopHomePath` 提供临时基准目录；服务测试同时使用 `setDataBaseDir`，清理时恢复全部覆盖。bootstrap 不再接受废弃的 home 参数。用户级 fixture 与断言均使用 `.uwork`，项目级 `.zcode` 保留。手动导出归档标签使用 `.uwork`，反馈归档既有 `.zcode/cli`、`.zcode/computer-use/run` 标签暂保留兼容；两者均从 UWork 源目录提供数据。手动导出的 3 天 CLI 日志窗口同时识别当前与历史归档前缀，继续验证脱敏、凭据排除和时间窗口，不能通过跳过验证或恢复上游目录使测试变绿。

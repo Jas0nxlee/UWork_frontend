@@ -12,7 +12,7 @@ export const subagentRuntimeStateSchema = z
         "general-purpose": modelSelectionSchema.optional(),
       })
       .strict(),
-    pluginAgentModelSelectionOverrides: z.record(z.string(), modelSelectionSchema),
+    pluginAgentModelSelectionOverrides: z.record(z.string(), modelSelectionSchema.nullable()),
   })
   .strict();
 export type SubagentRuntimeState = z.infer<typeof subagentRuntimeStateSchema>;

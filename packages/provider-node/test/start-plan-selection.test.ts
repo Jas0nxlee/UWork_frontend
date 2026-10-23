@@ -1,7 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   AccountProviderService,
   ProviderConfig,
@@ -17,10 +16,33 @@ it("Host/Worker 共用 facade：Start 与付费并存，Start 不映射或迁移
   const root = await mkdtemp(join(tmpdir(), "start154-selection-"));
   let available = true;
   let account!: AccountProviderService;
+  const release = JSON.parse(
+    await readFile(new URL("../../../config/provider/zcode-builtin.json", import.meta.url), "utf8"),
+  );
+  // Start/付费兼容合同属于底层能力，测试夹具不应要求发布配置恢复账号。
+  release.config.providerConfigRules.providerRules = [
+    ids.bigmodelStartPlan,
+    ids.bigmodelTeamCodingPlan,
+  ].map((providerId) => ({
+    providerId,
+    config: {
+      group: "bigmodel-family",
+      access: {
+        type: "zhipu-account",
+        accountType: "bigmodel",
+        mode: providerId === ids.bigmodelStartPlan ? "start-plan" : "team-coding-plan",
+      },
+      api: {
+        type: "anthropic-messages",
+        baseUrl: "https://fixture.example/anthropic",
+      },
+      builtinModelIds: ["GLM-5.2"],
+    },
+  }));
+  const bundledFilePath = join(root, "bundled.json");
+  await writeFile(bundledFilePath, JSON.stringify(release));
   const runtime = new NodeProviderRegistryRuntime({
-    zcodeBuiltinFilePath: fileURLToPath(
-      new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
-    ),
+    zcodeBuiltinFilePath: bundledFilePath,
     personalFilePath: join(root, "personal.json"),
     personalPollingIntervalMs: false,
     createAccountSource(configSource) {
@@ -79,7 +101,9 @@ it("Host/Worker 共用 facade：Start 与付费并存，Start 不映射或迁移
       }),
       states: runtime.registryService.getSnapshot()?.account.states,
     }).toMatchObject({
-      result: { effectiveSelection: { providerId: ids.bigmodelTeamCodingPlan } },
+      result: {
+        effectiveSelection: { providerId: ids.bigmodelTeamCodingPlan },
+      },
     });
     expect(
       facade.getView(undefined, undefined, {

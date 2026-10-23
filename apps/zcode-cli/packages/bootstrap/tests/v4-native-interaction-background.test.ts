@@ -23,7 +23,10 @@ import type {
   DynamicWorkflowRunWorkspaceNode,
   DynamicWorkflowRunWorkspaceNodeResult,
 } from "@zcode/contracts";
-import { SessionEventType } from "@zcode/contracts";
+import { SessionEventType, createSessionId } from "@zcode/contracts";
+// 真实 runtime 属于测试夹具；模块初始化应在收集阶段完成，不占用 cancel 合同的 5 秒限时。
+import { AgentRuntime, InMemoryRuntimeTaskRegistry } from "@zcode/core";
+import { createInMemorySessionEventStore } from "@zcode/adapters/storage";
 import { V4CommandExecutor } from "../src/zcode-protocol-v4/commands/executor.js";
 import { ConversationV4Gateway } from "../src/zcode-protocol-v4/v4-gateway.js";
 import { V4CapabilityUnsupportedError } from "../src/zcode-protocol-v4/commands/handlers/interaction-background.js";
@@ -749,10 +752,6 @@ describe("v4 原生 cancelBackgroundWork", () => {
   // 没有第二条 cancel RPC。这里用**真实** AgentRuntime 走完整条链，证明 workId 一路直达
   // DynamicWorkflowRunPort.cancel 且不经任何身份映射表（workId ≡ taskId ≡ runId）。
   it("dwf run：workId 一路打到 DynamicWorkflowRunPort.cancel", async () => {
-    const { AgentRuntime, InMemoryRuntimeTaskRegistry } = await import("@zcode/core");
-    const { createSessionId } = await import("@zcode/contracts");
-    const { createInMemorySessionEventStore } = await import("@zcode/adapters/storage");
-
     const cancelled: string[] = [];
     const runtimeTaskRegistry = new InMemoryRuntimeTaskRegistry();
     runtimeTaskRegistry.register({
