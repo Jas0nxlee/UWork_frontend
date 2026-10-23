@@ -7,6 +7,7 @@
 - 数据存储路径说明必须与实际 `.uwork/v2` 一致；清除数据确认显示传入的真实配置目录，仍由既有命令执行删除。资源管理器扫描根由 storage 的 `RootsResolverPort` 唯一解析为 HOME 与自定义 base 下的 `.uwork`，不再扫描或清理上游 `.zcode`。扫描、清理分类和作业时序保持原合同。
 - scheduler 的 Electron serviceName 使用 `uwork-cron-scheduler`，保留内部 `ZCODE_PROCESS_LABEL` 与协议字段。不修改 Bundle ID、`zcode://`、内部包名、请求头、服务 URL、`.zcodeignore`、Finder workflow 安装文件名及上游作者/许可归属；这些不是普通展示文字。打包版权显式使用 UWork，不再从上游作者名推导。
 - 验收：新项目与信任确认中英文使用 UWork；常规设置说明 `.uwork/v2`；升级和权限提示不自称 ZCode；scheduler 显示名为 UWork；同一 HOME 同时有 `.uwork` 与 `.zcode` 时只扫描和清理前者；自定义 base 同样适用且不迁移文件。市场、技能和兼容标识维持原值。
+- 打包版权中的年份在加载 JS 配置时计算，不使用 electron-builder 不支持的 `${year}` 宏。回归必须调用真实 AppInfo.copyright 展开过程，不能只检索配置字符串；同时保留上游 author 归属。
 
 ```mermaid
 flowchart LR

@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { resolvePackagedDesktopExecutable } from "../../packages/desktop/scripts/packaged-desktop-executable.mjs";
 import { resolveDesktopProductIdentity } from "../../packages/desktop/scripts/desktop-product-identity.mjs";
 import {
@@ -43,6 +44,20 @@ test("packaged Electron runtime uses the version pinned in the desktop manifest"
   assert.equal(config.electronVersion, manifest.devDependencies.electron);
   assert.ok(config.win.target.includes("zip"));
   assert.ok(config.linux.target.includes("zip"));
+});
+
+test("packaged copyright expands in electron-builder without changing upstream attribution", async () => {
+  const fromDesktop = createRequire(
+    new URL("../../packages/desktop/package.json", import.meta.url),
+  );
+  const { AppInfo } = fromDesktop("electron-builder");
+  const manifest = JSON.parse(
+    await readFile(new URL("../../packages/desktop/package.json", import.meta.url)),
+  );
+  const { default: config } = await import("../../packages/desktop/electron-builder.config.js");
+  const appInfo = new AppInfo({ config, metadata: { ...manifest, ...config.extraMetadata } });
+  assert.equal(appInfo.copyright, `Copyright © ${new Date().getFullYear()} UWork`);
+  assert.equal(appInfo.companyName, "ZCode");
 });
 test("Linux startup validation uses the retained executable from the production identity", () => {
   const identity = resolveDesktopProductIdentity({

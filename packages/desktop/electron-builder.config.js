@@ -559,7 +559,8 @@ export default {
   },
   productName: desktopProductIdentity.productName,
   // 作者保留上游归属；产品版权须显式指定，避免 builder 再从 author 推导出 ZCode。
-  copyright: "Copyright © ${year} UWork",
+  // electron-builder 的模板不支持 year 宏；在 JS 配置中计算，避免正式打包阶段才失败。
+  copyright: `Copyright © ${new Date().getFullYear()} UWork`,
   directories: {
     // macOS arm64/x64 CI 可能共享同一个 checkout 并行打包。
     // 输出根目录允许按架构隔离，避免一个 job 清理 dist 时删除另一个 job 正在签名的 .app。
