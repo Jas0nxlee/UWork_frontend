@@ -1,5 +1,10 @@
 # 发布依赖安全修复
 
+## 0.1.1 发布审计（2026-10-23）
+
+- 发布审计发现分享 UI 的 Mermaid 间接依赖 `dompurify@3.3.3` 命中高危公告 [GHSA-mrv2-3pqr-j5jr](https://github.com/cure53/DOMPurify/security/advisories/GHSA-mrv2-3pqr-j5jr)。按上游修复版本将根 workspace override 固定为 `3.4.17`，保持 DOMPurify 3 系列，不改变渲染配置、HTML 信任边界或 sanitizer 调用方式。
+- 由现有 pnpm 策略唯一控制并生成锁文件，冻结安装后重新执行生产审计，high/critical 必须为零；更新第三方版本与原始许可材料，保留所有安全检查。
+
 ## 上游 v3.15.1 同步后的依赖一致性
 
 - 依赖策略唯一所有者仍为根 `pnpm-workspace.yaml`；不得重新引入 `package.json.pnpm` 的并行 overrides / patches。保留 UWork 的安全解压 packageExtensions、全部安全 overrides，并合入仍在实际使用的上游测试工具补丁。
