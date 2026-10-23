@@ -4,13 +4,13 @@
 
 ## 当前同步内容
 
-GitLab 只分发当前版本三个 ZIP：
+GitLab 只分发当前版本三个安装文件：
 
-- `UWork-<version>-mac-arm64.zip`：macOS Apple Silicon。
-- `UWork-<version>-win-x64.zip`：Windows x64。
-- `UWork-<version>-linux-x64.zip`：Linux / Ubuntu x64。
+- `UWork-<version>-mac-arm64.dmg`：macOS Apple Silicon。
+- `UWork-<version>-win-x64.exe`：Windows x64。
+- `UWork-<version>-linux-amd64.deb`：Linux / Ubuntu x64。
 
-工作流通过 `selectGitLabReleaseAssets` 精确选择并下载，脚本用同一名单校验、上传和创建下载链接。缺失或重复任一目标、大小或 SHA-256 不一致时失败。GitLab 的文件链接全部指向 Generic Package Registry；保留 GitHub Release 来源页面链接。GitHub 自身继续发布全部五平台产物、安装格式、审计和摘要。
+工作流通过 `selectGitLabReleaseAssets` 精确选择并下载，脚本用同一名单校验、上传和创建下载链接。缺失或重复任一目标、大小或 SHA-256 不一致时失败，不回退到 ZIP。GitLab 的文件链接全部指向 Generic Package Registry；保留 GitHub Release 来源页面链接。GitHub 自身继续发布全部五平台产物、安装格式、审计和摘要。
 
 不推送应用源码、源码标签或源码分支。GitLab 发布标签引用单 README、无父提交的独立 `release-metadata` 根提交。正常同步不删除历史发布和人工链接，不移动已有标签。一次性源码清理仅保留显式 `cleanup_source` 迁移入口，自动发布关闭。
 
@@ -24,4 +24,4 @@ GitLab 只分发当前版本三个 ZIP：
 
 ## 验证
 
-`node --test scripts/test/gitlab-release-*.test.mjs` 验证三个 ZIP 的选择、缺失/重复拒绝、包校验、链接分页和源码隔离。运行报告保留前后引用及实际上传文件清单。
+`node --test scripts/test/gitlab-release-*.test.mjs` 验证三个安装文件的选择、缺失/重复拒绝、包校验、链接分页和源码隔离。运行报告保留前后引用及实际上传文件清单。

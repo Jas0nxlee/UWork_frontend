@@ -43,7 +43,7 @@ jobs:
       - run: node --test scripts/test/gitlab-release-*.test.mjs
 
   sync:
-    name: Publish packaged files to GitLab
+    name: Publish three installers to GitLab
     needs: contract
     runs-on: ${{ vars.GITLAB_SYNC_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 120
@@ -79,7 +79,7 @@ jobs:
           RELEASE_TAG: ${{ steps.options.outputs.tag }}
         run: gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
 
-      - name: Download release assets
+      - name: Download release installers (DMG, EXE, DEB)
         if: inputs.inspect_only != true
         env:
           GH_TOKEN: ${{ github.token }}

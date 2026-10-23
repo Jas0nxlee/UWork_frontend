@@ -43,12 +43,13 @@ export function validateRelease(release, tag) {
 export function selectGitLabReleaseAssets(release, tag = release?.tag_name) {
   validateRelease(release, tag);
   const version = String(tag).replace(/^v(?=\d)/, "");
-  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("ZIP 分发要求明确的发布版本");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("安装文件分发要求明确的发布版本");
   // 下载、校验、上传与链接必须消费同一白名单，避免其它架构/安装格式混入 GitLab。
-  const assets = ["mac-arm64", "win-x64", "linux-x64"].map((target) => {
-    const name = `UWork-${version}-${target}.zip`;
+  // ZIP 是便携归档，安装分发改为平台安装文件；Ubuntu x64 的 DEB 使用 amd64 命名。
+  const assets = ["mac-arm64.dmg", "win-x64.exe", "linux-amd64.deb"].map((installer) => {
+    const name = `UWork-${version}-${installer}`;
     const matches = release.assets.filter((asset) => asset?.name === name);
-    if (matches.length !== 1) throw new Error(`必需 ZIP 缺失或重复：${name}`);
+    if (matches.length !== 1) throw new Error(`必需安装文件缺失或重复：${name}`);
     return matches[0];
   });
   return { ...release, assets };

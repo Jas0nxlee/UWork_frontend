@@ -36,37 +36,50 @@ const release = {
 const ok = (data = {}, status = 200) => ({ ok: true, status, data });
 const config = () => resolveSyncConfig(baseEnv);
 
-const zipNames = ["mac-arm64", "win-x64", "linux-x64"].map((target) => `UWork-0.1.0-${target}.zip`);
+const installerNames = [
+  "UWork-0.1.0-mac-arm64.dmg",
+  "UWork-0.1.0-win-x64.exe",
+  "UWork-0.1.0-linux-amd64.deb",
+];
 const fullRelease = {
   ...release,
   assets: [
     ...release.assets,
     ...[
-      ...zipNames,
+      ...installerNames,
+      "UWork-0.1.0-mac-arm64.zip",
+      "UWork-0.1.0-win-x64.zip",
+      "UWork-0.1.0-linux-x64.zip",
       "UWork-0.1.0-mac-x64.zip",
       "UWork-0.1.0-linux-arm64.zip",
-      "UWork-0.1.0-win-x64.exe",
+      "UWork-0.1.0-mac-x64.dmg",
+      "UWork-0.1.0-linux-arm64.deb",
+      "UWork-0.1.0-linux-x86_64.AppImage",
+      "UWork-0.1.0-linux-x86_64.rpm",
     ].map((name) => ({ ...release.assets[0], name })),
   ],
 };
 
-test("GitLab 只选择当前版本的 mac ARM、Windows x64、Ubuntu x64 ZIP", () => {
+test("GitLab 只选择当前版本的 mac ARM DMG、Windows x64 EXE、Ubuntu x64 DEB", () => {
   const selected = selectGitLabReleaseAssets(fullRelease);
   assert.deepEqual(
     selected.assets.map((asset) => asset.name),
-    zipNames,
+    installerNames,
   );
   assert.equal(selected.body, fullRelease.body);
-  assert.equal(fullRelease.assets.length, 7, "选择不能改写 GitHub 原始资产清单");
+  assert.equal(fullRelease.assets.length, 13, "选择不能改写 GitHub 原始资产清单");
 });
 
-test("指定 ZIP 缺失、重复或只有其它版本时拒绝同步", () => {
+test("指定安装文件缺失、重复或只有其它版本时拒绝同步，不回退到 ZIP", () => {
   for (const assets of [
-    fullRelease.assets.filter((asset) => asset.name !== zipNames[1]),
-    [...fullRelease.assets, fullRelease.assets.find((asset) => asset.name === zipNames[0])],
+    ...installerNames.map((name) => fullRelease.assets.filter((asset) => asset.name !== name)),
+    ...installerNames.map((name) => [
+      ...fullRelease.assets,
+      fullRelease.assets.find((asset) => asset.name === name),
+    ]),
     fullRelease.assets.map((asset) => ({ ...asset, name: asset.name.replace("0.1.0", "0.1.1") })),
   ]) {
-    assert.throws(() => selectGitLabReleaseAssets({ ...fullRelease, assets }), /ZIP/);
+    assert.throws(() => selectGitLabReleaseAssets({ ...fullRelease, assets }), /安装文件/);
   }
 });
 
@@ -227,7 +240,7 @@ test("工作流总是下载附件、不检出源码历史，自动入口不暴�
     workflow,
     /upload_assets:|force_branch:|fetch-tags:|fetch-depth: 0|SYNC_BRANCH:/,
   );
-  assert.match(workflow, /Download release assets/);
+  assert.match(workflow, /Download release installers/);
   assert.match(workflow, /selectGitLabReleaseAssets/);
   assert.match(workflow, /--pattern "\$asset"/);
   assert.match(workflow, /cleanup_source:/);
