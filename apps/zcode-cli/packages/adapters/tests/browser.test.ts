@@ -41,7 +41,7 @@ describe("managed CDP browser adapter", () => {
     expect(descriptors).toHaveLength(1);
     expect(descriptors[0]).toMatchObject({
       type: "cdp",
-      name: "ZCode Headless Chromium",
+      name: "UWork Headless Chromium",
       metadata: { headless: "true", launchMode: "managed", provider: "zcode-cli" },
     });
     expect(descriptors[0]?.id).toMatch(/^cdp:/u);

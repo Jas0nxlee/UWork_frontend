@@ -1,113 +1,101 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ICredentialService } from "../src/credential/credential.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCredentialService } from "../src/credential/credentialService.js";
+import { getAppConfigDir, setDataBaseDir } from "../src/paths.js";
 
-const originalHome = process.env.HOME;
-const tempHomes: string[] = [];
-
-function makeTempHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "zcode-credential-home-"));
-  tempHomes.push(home);
-  return home;
-}
-
-async function createCredentialServiceInHome(
-  home: string,
-  onDidMutate?: (event: { operation: "save" | "delete"; key: string }) => void,
-): Promise<ICredentialService> {
-  process.env.HOME = home;
-  vi.resetModules();
-  const mod = await import("../src/credential/credentialService.js");
-  return mod.createCredentialService({ onDidMutate });
-}
-
-afterEach(() => {
-  process.env.HOME = originalHome;
-
-  while (tempHomes.length > 0) {
-    const home = tempHomes.pop();
-    if (home) {
-      rmSync(home, { recursive: true, force: true });
-    }
-  }
+let home: string;
+let credentialsFile: string;
+beforeEach(async () => {
+  home = await mkdtemp(join(tmpdir(), "uwork-credential-home-"));
+  setDataBaseDir(home);
+  credentialsFile = join(getAppConfigDir(), "credentials.json");
+});
+afterEach(async () => {
+  setDataBaseDir(null);
+  vi.restoreAllMocks();
+  await rm(home, { recursive: true, force: true });
 });
 
+// 加密/并发/损坏恢复继续属于自定义 API Key 的有效合同；历史账号只验收不可读且磁盘保留。
 describe("credentialService encryption", () => {
   it("notifies Host listeners only after a credential mutation is persisted", async () => {
-    const home = makeTempHome();
-    const onDidMutate = vi.fn();
-    const service = await createCredentialServiceInHome(home, onDidMutate);
-
-    await service.save("account-provider:demo:api-key", "secret");
-    await service.delete("account-provider:demo:api-key");
-
-    expect(onDidMutate.mock.calls).toEqual([
-      [{ operation: "save", key: "account-provider:demo:api-key" }],
-      [{ operation: "delete", key: "account-provider:demo:api-key" }],
+    const observed: unknown[] = [];
+    const key = "personal-provider:demo:api-key";
+    const service = createCredentialService({ onDidMutate: (event) => observed.push(event) });
+    await service.save(key, "secret");
+    expect(
+      (JSON.parse(await readFile(credentialsFile, "utf8")) as Record<string, string>)[key],
+    ).toMatch(/^enc:v1:/);
+    expect(observed).toEqual([{ operation: "save", key }]);
+    await service.delete(key);
+    expect(JSON.parse(await readFile(credentialsFile, "utf8"))).toEqual({});
+    expect(observed).toEqual([
+      { operation: "save", key },
+      { operation: "delete", key },
     ]);
   });
 
   it("encrypts value before persisting and decrypts transparently on load", async () => {
-    const home = makeTempHome();
-    const service = await createCredentialServiceInHome(home);
-    const credentialKey = "oauth:bigmodel:access_token";
-
-    await service.save(credentialKey, "plain-access-token");
-
-    const credentialsFile = join(home, ".zcode", "v2", "credentials.json");
-    const rawStore = JSON.parse(readFileSync(credentialsFile, "utf-8")) as Record<string, string>;
-    const storedValue = rawStore[credentialKey];
-
-    expect(storedValue).toBeDefined();
-    expect(storedValue).toMatch(/^enc:v1:/);
-    expect(storedValue).not.toContain("plain-access-token");
-    await expect(service.load(credentialKey)).resolves.toBe("plain-access-token");
+    const service = createCredentialService();
+    const key = "personal-provider:demo:api-key";
+    await service.save(key, "plain-api-key");
+    const rawStore = JSON.parse(await readFile(credentialsFile, "utf8")) as Record<string, string>;
+    expect(rawStore[key]).toMatch(/^enc:v1:/);
+    expect(rawStore[key]).not.toContain("plain-api-key");
+    await expect(service.load(key)).resolves.toBe("plain-api-key");
   });
 
   it("round-trips an encrypted empty value", async () => {
-    const home = makeTempHome();
-    const service = await createCredentialServiceInHome(home);
-    const credentialKey = "provider-sync:empty-api-key";
-
-    await service.save(credentialKey, "");
-
-    const credentialsFile = join(home, ".zcode", "v2", "credentials.json");
-    const rawStore = JSON.parse(readFileSync(credentialsFile, "utf-8")) as Record<string, string>;
-    expect(rawStore[credentialKey]).toMatch(/^enc:v1:/);
-    await expect(service.load(credentialKey)).resolves.toBe("");
+    const service = createCredentialService();
+    const key = "provider-sync:empty-api-key";
+    await service.save(key, "");
+    const rawStore = JSON.parse(await readFile(credentialsFile, "utf8")) as Record<string, string>;
+    expect(rawStore[key]).toMatch(/^enc:v1:/);
+    await expect(service.load(key)).resolves.toBe("");
   });
 
-  it("keeps backward compatibility for legacy plaintext values", async () => {
-    const home = makeTempHome();
-    const credentialsDir = join(home, ".zcode", "v2");
-    const credentialsFile = join(credentialsDir, "credentials.json");
-    await mkdir(credentialsDir, { recursive: true });
-    writeFileSync(
-      credentialsFile,
-      JSON.stringify({ "oauth:bigmodel:access_token": "legacy-plaintext-token" }),
-      "utf-8",
-    );
-
-    const service = await createCredentialServiceInHome(home);
-
-    await expect(service.load("oauth:bigmodel:access_token")).resolves.toBe(
-      "legacy-plaintext-token",
+  it("keeps backward compatibility for legacy plaintext custom API keys", async () => {
+    await mkdir(getAppConfigDir(), { recursive: true });
+    const key = "personal-provider:demo:api-key";
+    await writeFile(credentialsFile, JSON.stringify({ [key]: "legacy-plaintext-key" }));
+    const service = createCredentialService();
+    await expect(service.load(key)).resolves.toBe("legacy-plaintext-key");
+    expect(await readFile(credentialsFile, "utf8")).toBe(
+      JSON.stringify({ [key]: "legacy-plaintext-key" }),
     );
   });
 
-  it("preserves all keys when host callers save concurrently", async () => {
-    const home = makeTempHome();
-    const service = await createCredentialServiceInHome(home);
+  it.each([
+    "oauth:bigmodel:access_token",
+    "oauth:zai:user_info",
+    "account-provider:demo:api-key",
+    "zcodejwttoken",
+  ])("isolates historical %s without decrypting, deleting or modifying it", async (key) => {
+    const service = createCredentialService();
+    await service.save(key, "historical-secret");
+    await service.save("personal-provider:demo:api-key", "current-api-key");
+    const before = await readFile(credentialsFile, "utf8");
+    const decrypt = vi.fn(() => {
+      throw new Error("must not decrypt historical account");
+    });
+    const isolated = createCredentialService({
+      cipherProvider: { encrypt: (value) => value, decrypt },
+    });
+    await expect(isolated.load(key)).resolves.toBeNull();
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(await readFile(credentialsFile, "utf8")).toBe(before);
+    await expect(service.load("personal-provider:demo:api-key")).resolves.toBe("current-api-key");
+  });
+
+  it("preserves all custom API keys when host callers save concurrently", async () => {
+    const service = createCredentialService();
     const entries = Array.from(
       { length: 30 },
-      (_, index) => [`oauth:test:key-${index}`, `value-${index}`] as const,
+      (_, index) => [`personal-provider:test-${index}:api-key`, `value-${index}`] as const,
     );
-
     await Promise.all(entries.map(([key, value]) => service.save(key, value)));
-
     await Promise.all(
       entries.map(async ([key, value]) => {
         await expect(service.load(key)).resolves.toBe(value);
@@ -116,35 +104,29 @@ describe("credentialService encryption", () => {
   });
 
   it("backs up corrupt JSON and refuses to erase it during save", async () => {
-    const home = makeTempHome();
-    const credentialsDir = join(home, ".zcode", "v2");
-    const credentialsFile = join(credentialsDir, "credentials.json");
-    await mkdir(credentialsDir, { recursive: true });
-    writeFileSync(credentialsFile, "{not-json", "utf-8");
-    const service = await createCredentialServiceInHome(home);
+    await mkdir(getAppConfigDir(), { recursive: true });
+    await writeFile(credentialsFile, "{not-json");
+    const service = createCredentialService();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    try {
-      await Promise.all(
-        Array.from({ length: 8 }, () =>
-          expect(service.load("oauth:test:new")).rejects.toThrow("ZCode credentials are corrupt"),
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        expect(service.load("personal-provider:new:api-key")).rejects.toThrow(
+          "UWork credentials are corrupt",
         ),
-      );
-      await expect(service.save("oauth:test:new", "value")).rejects.toThrow(
-        "ZCode credentials are corrupt",
-      );
-      expect(readFileSync(credentialsFile, "utf-8")).toBe("{not-json");
-      const backups = readdirSync(credentialsDir).filter((file) =>
-        /^credentials\.json\.corrupt-.*\.bak$/.test(file),
-      );
-      expect(backups).toHaveLength(1);
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining("[credentialService"),
-        "read failed; refusing to overwrite corrupt credential store",
-        expect.objectContaining({ credentialsFile }),
-      );
-    } finally {
-      warn.mockRestore();
-    }
+      ),
+    );
+    await expect(service.save("personal-provider:new:api-key", "value")).rejects.toThrow(
+      "UWork credentials are corrupt",
+    );
+    expect(await readFile(credentialsFile, "utf8")).toBe("{not-json");
+    const backups = (await readdir(getAppConfigDir())).filter((file) =>
+      /^credentials\.json\.corrupt-.*\.bak$/.test(file),
+    );
+    expect(backups).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("[credentialService"),
+      "read failed; refusing to overwrite corrupt credential store",
+      expect.objectContaining({ credentialsFile }),
+    );
   });
 });

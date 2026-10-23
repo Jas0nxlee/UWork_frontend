@@ -11,9 +11,12 @@ import {
   ProviderRegistry,
   ZhipuAccountAccessConfig,
   parseModelConfig,
+  parseZCodeBuiltinProviderConfigRules,
+  parseZCodeBuiltinModelConfigRules,
 } from "@zcode/provider";
 import { describe, expect, it } from "vitest";
 import { NodeZCodeBuiltinProviderConfigSource } from "../src/index.js";
+import legacyAccountConfig from "./fixtures/legacy-account-config.json";
 
 // 发布验证必须指向最终上传的那份文件，而不是默认悄悄检查仓库源文件。
 const zcodeBuiltinProviderConfigFilePath =
@@ -21,10 +24,10 @@ const zcodeBuiltinProviderConfigFilePath =
   fileURLToPath(new URL("../../../config/provider/zcode-builtin.json", import.meta.url));
 
 function reasoningPatch(map: string, reasoningLevel: string) {
-  return compileModelOptionMaps({ reasoningLevel: { map }, maxOutputTokens: { map: "{}" } }).apply(
-    {},
-    { reasoningLevel, maxOutputTokens: 32000 },
-  );
+  return compileModelOptionMaps({
+    reasoningLevel: { map },
+    maxOutputTokens: { map: "{}" },
+  }).apply({}, { reasoningLevel, maxOutputTokens: 32000 });
 }
 
 describe("ZCode Built-in Provider Config 完整性", () => {
@@ -44,7 +47,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
           baseUrl: "https://unknown.example/v1",
         });
         expect(model.validateComplete()).toEqual([]);
-        expect(model.optionSpecs?.maxOutputTokens?.max).toBe(128_000);
+        expect(model.optionSpecs?.maxOutputTokens?.max).toBe(32_000);
         expect(model.optionSpecs?.reasoningLevel?.values).toEqual(["disabled", "enabled"]);
         expect(model.properties?.inputFormat.supportsImage).toBe(false);
         const result = new ProviderConfigResolver().resolve({
@@ -85,7 +88,19 @@ describe("ZCode Built-in Provider Config 完整性", () => {
     });
 
     try {
-      const snapshot = await source.read();
+      const published = await source.read();
+      // 套餐桥接只验证显式历史输入；当前发布账号目录必须保持退役。
+      expect(published.providers.keys()).toEqual([]);
+      const legacy = parseZCodeBuiltinProviderConfigRules(legacyAccountConfig.providerConfigRules);
+      const snapshot = {
+        ...published,
+        providers: legacy.providers,
+        providerTemplates: legacy.providerTemplates,
+        models: new ModelConfigRules([
+          ...published.models.rules(),
+          ...parseZCodeBuiltinModelConfigRules(legacyAccountConfig.modelConfigRules).rules(),
+        ]),
+      };
       const rawRelease = JSON.parse(await readFile(zcodeBuiltinProviderConfigFilePath, "utf8")) as {
         revision: number;
         config: { modelConfigRules: Record<string, unknown> };
@@ -525,7 +540,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
     }
   });
 
-  it("按产品分组声明 Zhipu 系统 Provider 与外部主流 Provider", async () => {
+  it("随包不发布退役账号和智谱模板，保留 UCAS 与主流模板", async () => {
     const source = new NodeZCodeBuiltinProviderConfigSource({
       bundledFilePath: zcodeBuiltinProviderConfigFilePath,
       watch: false,
@@ -533,23 +548,8 @@ describe("ZCode Built-in Provider Config 完整性", () => {
 
     try {
       const snapshot = await source.read();
-      expect(snapshot.providers.keys()).toEqual([
-        "account:zai-individual-coding-plan",
-        "account:zai-team-coding-plan",
-        "account:zai-start-plan",
-        "account:bigmodel-individual-coding-plan",
-        "account:bigmodel-team-coding-plan",
-        "account:bigmodel-start-plan",
-        "account:zai-offpeak-idle-plan",
-        "account:bigmodel-offpeak-idle-plan",
-        "account:zai-highspeed-card",
-        "account:bigmodel-highspeed-card",
-      ]);
+      expect(snapshot.providers.keys()).toEqual([]);
       expect(snapshot.providerTemplates?.keys()).toEqual([
-        "zai-api",
-        "zai-standard-api",
-        "bigmodel-api",
-        "bigmodel-standard-api",
         "moonshot-kimi",
         "minimax",
         "deepseek",
@@ -567,6 +567,7 @@ describe("ZCode Built-in Provider Config 完整性", () => {
         "opencode-zen-responses",
         "opencode-zen-messages",
         "opencode-zen-chat",
+        "ucas",
       ]);
       for (const [templateId, template] of snapshot.providerTemplates?.entries() ?? []) {
         expect(
@@ -577,9 +578,14 @@ describe("ZCode Built-in Provider Config 完整性", () => {
           template.templateNameMap["en-US"]?.trim(),
           `${templateId} 缺少英文 Template 名称`,
         ).toBeTruthy();
-        expect(template.config.logo, `${templateId} 缺少 Built-in Logo 引用`).toMatchObject({
-          type: "builtin",
-        });
+        if (templateId === "ucas") {
+          // UCAS 由本地自定义供应商模板播种，没有随包 Logo 引用。
+          expect(template.config.logo).toBeUndefined();
+        } else {
+          expect(template.config.logo, `${templateId} 缺少 Built-in Logo 引用`).toMatchObject({
+            type: "builtin",
+          });
+        }
       }
       for (const [providerId, provider] of snapshot.providers.entries()) {
         expect(provider.logo, `${providerId} 缺少 Built-in Logo 引用`).toMatchObject({
@@ -634,7 +640,10 @@ describe("ZCode Built-in Provider Config 完整性", () => {
           type: "api-key",
           apiKeyManagementUrl: "https://console.anthropic.com/settings/keys",
         },
-        api: { type: "anthropic-messages", baseUrl: "https://api.anthropic.com/v1" },
+        api: {
+          type: "anthropic-messages",
+          baseUrl: "https://api.anthropic.com/v1",
+        },
       });
       expect(snapshot.providerTemplates?.get("xai")?.config.toJSON()).toMatchObject({
         builtinModelIds: ["grok-4.6", "grok-build-0.1", "grok-4.3"],
@@ -644,12 +653,14 @@ describe("ZCode Built-in Provider Config 完整性", () => {
         },
         api: { type: "openai-responses", baseUrl: "https://api.x.ai/v1" },
       });
-      expect(snapshot.providerTemplates?.get("zai-api")?.config.toJSON()).toMatchObject({
-        access: { type: "zhipu-coding-plan-api-key" },
-      });
-      expect(snapshot.providerTemplates?.get("bigmodel-api")?.config.toJSON()).toMatchObject({
-        access: { type: "zhipu-coding-plan-api-key" },
-      });
+      for (const templateId of [
+        "zai-api",
+        "bigmodel-api",
+        "zai-standard-api",
+        "bigmodel-standard-api",
+      ])
+        expect(snapshot.providerTemplates?.has(templateId)).toBe(false);
+      expect(snapshot.providerTemplates?.get("ucas")?.config.access?.type).toBe("api-key");
     } finally {
       source.dispose();
     }
@@ -979,20 +990,6 @@ describe("ZCode Built-in Provider Config 完整性", () => {
 
       expect(resolution.issues).toEqual([]);
       expect(resolution.registryProviders.map(({ providerId }) => providerId)).toEqual([
-        "account:zai-individual-coding-plan",
-        "account:zai-team-coding-plan",
-        "account:zai-start-plan",
-        "account:bigmodel-individual-coding-plan",
-        "account:bigmodel-team-coding-plan",
-        "account:bigmodel-start-plan",
-        "account:zai-offpeak-idle-plan",
-        "account:bigmodel-offpeak-idle-plan",
-        "account:zai-highspeed-card",
-        "account:bigmodel-highspeed-card",
-        "template:zai-api",
-        "template:zai-standard-api",
-        "template:bigmodel-api",
-        "template:bigmodel-standard-api",
         "template:moonshot-kimi",
         "template:minimax",
         "template:deepseek",
@@ -1029,18 +1026,10 @@ describe("ZCode Built-in Provider Config 完整性", () => {
         }
       }
 
-      for (const providerId of [
-        "account:zai-offpeak-idle-plan",
-        "account:bigmodel-offpeak-idle-plan",
-      ]) {
-        const offPeak = resolution.resolvedProviders.find(
-          (provider) => provider.providerId === providerId,
-        );
-        expect(offPeak?.models).not.toHaveLength(0);
-        for (const model of offPeak?.models ?? []) {
-          expect(model).toMatchObject({ executable: true, selectable: false });
-        }
-      }
+      // 发布配置没有隐藏账号；其显式历史输入投影由 offPeakModelSelectionView 单测覆盖。
+      expect(
+        resolution.resolvedProviders.some((provider) => provider.providerId.startsWith("account:")),
+      ).toBe(false);
     } finally {
       source.dispose();
     }
@@ -1062,9 +1051,18 @@ describe("ZCode Built-in Provider Config 完整性", () => {
 
       const unknownModelId = "b03-unknown-model-x";
       const scenarios = [
-        { providerId: "custom-chat", apiType: "openai-chat-completions" as const },
-        { providerId: "custom-messages", apiType: "anthropic-messages" as const },
-        { providerId: "custom-responses", apiType: "openai-responses" as const },
+        {
+          providerId: "custom-chat",
+          apiType: "openai-chat-completions" as const,
+        },
+        {
+          providerId: "custom-messages",
+          apiType: "anthropic-messages" as const,
+        },
+        {
+          providerId: "custom-responses",
+          apiType: "openai-responses" as const,
+        },
         {
           providerId: "custom-deepseek",
           templateId: "deepseek",
@@ -1075,10 +1073,10 @@ describe("ZCode Built-in Provider Config 完整性", () => {
           knownModelId: "deepseek-v4-pro",
         },
         {
-          providerId: "custom-zai",
-          templateId: "zai-api",
+          providerId: "custom-ucas",
+          templateId: "ucas",
           apiType: "anthropic-messages" as const,
-          baseURL: "https://api.z.ai/api/anthropic",
+          baseURL: "https://custom.example.com/anthropic",
           knownModelId: "glm-5.3",
         },
       ];
@@ -1087,7 +1085,9 @@ describe("ZCode Built-in Provider Config 完整性", () => {
         ...(scenario.templateId ? { templateId: scenario.templateId } : {}),
         config: new ProviderConfig({
           group: "standard-personal",
-          access: new ApiKeyAccessConfig({ apiKey: `test-key-for-${scenario.providerId}` }),
+          access: new ApiKeyAccessConfig({
+            apiKey: `test-key-for-${scenario.providerId}`,
+          }),
           api: new ProviderApiConfig({
             type: scenario.apiType,
             baseUrl: scenario.baseURL ?? "https://custom.example.com/v1",

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { HttpClientPort, HttpClientRequest, HttpClientResponse } from "@zcode/contracts";
 import {
   SHARED_ZCODE_CREDENTIAL_KEYS,
@@ -21,12 +21,27 @@ import {
   logoutZCodeCli,
 } from "../src/auth-login.js";
 
+import legacyAccountProviders from "./fixtures/legacy-account-providers.json";
+
 const TEST_ENV = {
   ZCODE_CREDENTIAL_SECRET: "bootstrap-test-secret",
   ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: fileURLToPath(
     new URL("../../../../../config/provider/zcode-builtin.json", import.meta.url),
   ),
 };
+
+// 独立 CLI 兼容测试显式提供账号目录；随包配置不再默认发布这些账号。
+let catalogRoot: string;
+beforeAll(async () => {
+  catalogRoot = await mkdtemp(join(tmpdir(), "bootstrap-legacy-login-catalog-"));
+  const release = JSON.parse(await readFile(TEST_ENV.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE, "utf8"));
+  release.config.providerConfigRules.providerRules = legacyAccountProviders;
+  TEST_ENV.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE = join(catalogRoot, "builtin.json");
+  await writeFile(TEST_ENV.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE, JSON.stringify(release));
+});
+afterAll(async () => {
+  await rm(catalogRoot, { recursive: true, force: true });
+});
 
 describe("ZCode CLI login", () => {
   it("没有任何 Standalone 账号凭据时不会误报已配置 Coding Plan", async () => {

@@ -1268,7 +1268,7 @@ describe("createZCodeAgentService provider registry", () => {
     };
     const firstRequest = vi.fn(async (method: string) => {
       if (method === zcodeProtocolMethods.workspaceReadPresentation) {
-        throw new Error("ZCode agent stdio transport is closed");
+        throw new Error("UWork agent stdio transport is closed");
       }
       return {
         workspace: workspacePresentation.workspace,

@@ -1,7 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   ProviderConfig,
   ProviderConfigMap,
@@ -29,6 +28,8 @@ import {
   standaloneAccountIdentityCredentialKey,
   standaloneAccountProviderCredentialKey,
 } from "../src/app/standalone-account-provider-runtime.js";
+
+import legacyAccountProviders from "./fixtures/legacy-account-providers.json";
 
 const temporaryDirectories: string[] = [];
 
@@ -148,10 +149,18 @@ describe("process provider registry runtime", () => {
   });
   it("真实 Built-in 下完整状态跨协议往返；仅切 current 即更新 Worker 的有效选择", async () => {
     const root = await temporaryDirectory();
-    const runtime = await startProcessProviderRegistryRuntime({
-      [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: fileURLToPath(
+    // 协议往返使用显式账号目录，测试不依赖随包退役账号。
+    const release = JSON.parse(
+      await readFile(
         new URL("../../../../../config/provider/zcode-builtin.json", import.meta.url),
+        "utf8",
       ),
+    );
+    release.config.providerConfigRules.providerRules = legacyAccountProviders;
+    const builtinPath = join(root, "legacy-builtin.json");
+    await writeFile(builtinPath, JSON.stringify(release));
+    const runtime = await startProcessProviderRegistryRuntime({
+      [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: builtinPath,
       [ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]: join(root, "personal.json"),
     });
     const personal = "account:bigmodel-individual-coding-plan";

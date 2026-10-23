@@ -7,6 +7,7 @@ import {
   ProviderConfig,
   ProviderConfigMap,
   ProviderConfigResolver,
+  parseZCodeBuiltinProviderConfigRules,
   ProviderRegistry,
   ZhipuAccountAccessConfig,
   type ProviderId,
@@ -17,6 +18,8 @@ import {
 } from "@zcode/provider-node";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ApiProviderModelRuntime } from "../src/app/provider-registry-model-runtime.js";
+
+import legacyAccountProviders from "./fixtures/legacy-account-providers.json";
 
 const zcodeBuiltinProviderConfigFilePath = fileURLToPath(
   new URL("../../../../../config/provider/zcode-builtin.json", import.meta.url),
@@ -35,7 +38,7 @@ afterAll(() => source.dispose());
 
 describe("真实 ZCode Built-in Config 到 Active Model", () => {
   it("API Key Personal Overlay 经 Registry 原样装配到 Adapter", () => {
-    const providerId = "zai-api";
+    const providerId = "personal-anthropic";
     const modelId = "glm-5.3";
     const registry = resolveOneBuiltinProvider(providerId, {
       personalProviders: new ProviderConfigMap([
@@ -43,7 +46,7 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
           providerId,
           // 实例在创建时复制模板；Resolver 不会从已退场的 templateId 字段隐式继承。
           zcodeBuiltin.providerTemplates
-            .get("zai-api")!
+            .get("anthropic")!
             .config.withPersonalModelIds([modelId])
             .overlay(
               new ProviderConfig({
@@ -71,8 +74,8 @@ describe("真实 ZCode Built-in Config 到 Active Model", () => {
       providerConfig: {
         access: { type: "api-key", apiKey: "test-zai-api-key" },
         api: {
-          type: zcodeBuiltin.providerTemplates.get("zai-api")?.config.api?.type,
-          baseUrl: zcodeBuiltin.providerTemplates.get("zai-api")?.config.api?.baseUrl,
+          type: zcodeBuiltin.providerTemplates.get("anthropic")?.config.api?.type,
+          baseUrl: zcodeBuiltin.providerTemplates.get("anthropic")?.config.api?.baseUrl,
         },
       },
     });
@@ -169,7 +172,12 @@ function resolveOneBuiltinProvider(
     models?: ModelConfigRules;
   } = {},
 ): ProviderRegistry {
-  const provider = zcodeBuiltin.providers.get(providerId);
+  // 账号算法接收测试显式历史配置；发布目录中不存在账号不是算法失效。
+  const legacyProviders = parseZCodeBuiltinProviderConfigRules({
+    providerRules: legacyAccountProviders,
+    templateRules: [],
+  }).providers;
+  const provider = zcodeBuiltin.providers.get(providerId) ?? legacyProviders.get(providerId);
   const personalProvider = overlays.personalProviders?.get(providerId);
   if (!provider && !personalProvider) {
     throw new Error(`测试引用的 Built-in Provider 或 Personal 实例不存在: ${providerId}`);

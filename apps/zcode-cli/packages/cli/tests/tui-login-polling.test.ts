@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { HttpClientPort, HttpClientResponse, SessionEvent } from "@zcode/contracts";
@@ -62,7 +62,16 @@ function response(data: unknown, status = 200): HttpClientResponse {
 }
 async function fixture(t: TestContext, providerId: "zai" | "bigmodel" = "bigmodel") {
   const dir = await mkdtemp(join(tmpdir(), "zcode-login-test-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  const cleanups: Array<() => void | Promise<void>> = [];
+  // Node after hook 按注册顺序执行；目录清理原先早于后注册的 runtime.dispose，
+  // Registry/文件监听仍可能写锁文件而触发 ENOTEMPTY。先等待真实生命周期 barrier 再删目录。
+  t.after(async () => {
+    try {
+      for (const cleanup of cleanups.toReversed()) await cleanup();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   const personalFile = join(dir, "provider_config.json");
   const personal = new NodePersonalProviderConfigRepository({
     filePath: personalFile,
@@ -70,13 +79,29 @@ async function fixture(t: TestContext, providerId: "zai" | "bigmodel" = "bigmode
   });
   await personal.update((current) => current);
   personal.dispose();
+  // 发布目录已移除账号；独立 CLI 的 OAuth polling 算法用显式历史配置覆盖，
+  // 继续验证真实凭据持久化、Registry 刷新及取消边界，不恢复产品默认账号。
+  const release = JSON.parse(
+    await readFile(
+      resolve(import.meta.dirname, "../../../../../config/provider/zcode-builtin.json"),
+      "utf8",
+    ),
+  );
+  release.config.providerConfigRules.providerRules = ["zai", "bigmodel"].map((family) => ({
+    providerId: `account:${family}-individual-coding-plan`,
+    config: {
+      group: family === "zai" ? "zai-family" : "bigmodel-family",
+      access: { type: "zhipu-account", accountType: family, mode: "individual-coding-plan" },
+      api: { type: "anthropic-messages", baseUrl: "https://model.example.test/anthropic" },
+      builtinModelIds: ["GLM-5.3"],
+    },
+  }));
+  const builtinFile = join(dir, "legacy-login-builtin.json");
+  await writeFile(builtinFile, JSON.stringify(release));
   const env = {
     ZCODE_DATA_BASE_DIR: dir,
     ZCODE_CREDENTIAL_SECRET: "test-encryption-key",
-    ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: resolve(
-      import.meta.dirname,
-      "../../../../../config/provider/zcode-builtin.json",
-    ),
+    ZCODE_BUILTIN_PROVIDER_CONFIG_FILE: builtinFile,
     ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: personalFile,
   };
   const store = createSharedZCodeCredentialStore({ env });
@@ -84,6 +109,9 @@ async function fixture(t: TestContext, providerId: "zai" | "bigmodel" = "bigmode
   const sleeps: number[] = [];
   const requests: Parameters<HttpClientPort["request"]>[0][] = [];
   const f = {
+    addCleanup: (cleanup: () => void | Promise<void>) => {
+      cleanups.push(cleanup);
+    },
     env,
     store,
     sleeps,
@@ -148,7 +176,13 @@ for (const providerId of ["zai", "bigmodel"] as const) {
     const runtime = await startProcessProviderRegistryRuntime(f.env, {
       standalone: { credentialStore: f.store },
     });
-    t.after(() => runtime.dispose());
+    f.addCleanup(async () => {
+      try {
+        await runtime.runtime.registryService.refresh("test-cleanup-barrier");
+      } finally {
+        runtime.dispose();
+      }
+    });
     const configured = await resolveStandaloneCodingPlanProvider(providerId, f.env);
     assert.equal(runtime.runtime.registryService.getProvider(configured.providerId), undefined);
     let attempts = 0;
@@ -378,7 +412,13 @@ test(
       createCliModeState(),
       "test",
     );
-    t.after(() => handler.close?.());
+    f.addCleanup(async () => {
+      try {
+        await runtime.runtime.registryService.refresh("test-cleanup-barrier");
+      } finally {
+        await handler.close?.();
+      }
+    });
     const React = await import("react");
     const { createTestRenderer } = await import("@mbears/opentui-core/testing");
     const { createRoot } = await import("@mbears/opentui-react");

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { atomicWritePrivateTextFile, withFileLock } from "@zcode/shared/node";
 import { createCredentialService } from "#src/credential/credentialService.js";
-import { setDataBaseDir } from "#src/paths.js";
+import { getAppConfigDir, setDataBaseDir } from "#src/paths.js";
 
 const key = "project-key-location:v1:synthetic-scope";
 const location = JSON.stringify({ organizationId: "org", projectId: "project", apiKeyId: "key" });
@@ -21,7 +21,7 @@ const deferred = () => {
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "zcode-cache-recovery-"));
   setDataBaseDir(root);
-  file = join(root, ".zcode", "v2", "credentials.json");
+  file = join(getAppConfigDir(), "credentials.json");
 });
 afterEach(async () => {
   setDataBaseDir(null);
@@ -76,15 +76,16 @@ describe("本地缓存恢复的原子边界", () => {
     expect(f.onDidMutate).not.toHaveBeenCalled();
   });
 
-  it("另一实例提交新登录并修复位置后，旧恢复不修改任何记录", async () => {
+  it("另一实例更新自定义 API Key 并修复位置后，旧恢复不修改任何记录", async () => {
     const f = await fixture();
     const other = createCredentialService();
-    await other.save("oauth:bigmodel:access_token", "new-login");
+    await other.save("personal-provider:demo:api-key", "replacement-api-key");
     await other.save(key, location);
     const before = await readFile(file, "utf8");
     expect(await f.service.recoverUnreadable(key, () => {})).toBe(location);
     expect(await readFile(file, "utf8")).toBe(before);
-    expect(await other.load("oauth:bigmodel:access_token")).toBe("new-login");
+    expect(await other.load("personal-provider:demo:api-key")).toBe("replacement-api-key");
+    expect(await other.load("oauth:bigmodel:access_token")).toBeNull();
   });
 
   it("等待锁期间请求失效，提交前拒绝恢复且文件不变", async () => {

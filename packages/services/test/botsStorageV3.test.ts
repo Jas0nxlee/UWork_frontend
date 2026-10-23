@@ -1,3 +1,4 @@
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { mkdtemp, mkdir, readFile, writeFile, rm, access } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ describe("Bot v3 单向导入与回滚文件隔离", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "bot-v3-"));
     setDataBaseDir(root);
-    dir = join(root, ".zcode", "v2");
+    dir = join(root, UWORK_DATA_ROOT_DIR_NAME, "v2");
     await mkdir(dir, { recursive: true });
   });
   afterEach(async () => {

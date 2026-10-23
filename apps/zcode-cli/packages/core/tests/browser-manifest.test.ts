@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,14 +13,15 @@ import {
 import { loadBrowserDocumentation } from "../src/browser-client/documentation.js";
 import { NodeReplSession } from "../src/repl/node-repl-session.js";
 
-const docsRoot = resolve(process.cwd(), "../browser-use-plugin/docs");
-const skillPath = resolve(process.cwd(), "../browser-use-plugin/skills/control-browser/SKILL.md");
+const docsRoot = fileURLToPath(new URL("../../browser-use-plugin/docs", import.meta.url));
+const skillPath = fileURLToPath(
+  new URL("../../browser-use-plugin/skills/control-browser/SKILL.md", import.meta.url),
+);
 const overviewPath = resolve(docsRoot, "overview.md");
 const workflowPath = resolve(docsRoot, "workflow.md");
 const playwrightPath = resolve(docsRoot, "playwright.md");
-const testerSkillPath = resolve(
-  process.cwd(),
-  "../browser-use-plugin/skills/web-gui-tester/SKILL.md",
+const testerSkillPath = fileURLToPath(
+  new URL("../../browser-use-plugin/skills/web-gui-tester/SKILL.md", import.meta.url),
 );
 const iab: BrowserInfo = {
   id: "iab-runtime-1",

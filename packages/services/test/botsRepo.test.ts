@@ -1,3 +1,4 @@
+import { UWORK_DATA_ROOT_DIR_NAME } from "@zcode/shared";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +23,7 @@ describe("BotsRepo", () => {
   });
 
   it("reads legacy bot-state.json but writes bot-state.v3.json", async () => {
-    const dataDir = join(tempDir!, ".zcode", "v2");
+    const dataDir = join(tempDir!, UWORK_DATA_ROOT_DIR_NAME, "v2");
     mkdirSync(dataDir, { recursive: true });
     writeFileSync(
       join(dataDir, "bot-state.json"),

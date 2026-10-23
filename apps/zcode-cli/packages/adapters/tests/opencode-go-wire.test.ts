@@ -29,7 +29,7 @@ describe("Todo149 OpenCode Go 正式 SDK 请求", () => {
   it.each([
     ["glm-5.3", "openai-chat-completions", ["low", "high", "max"], "effort"],
     ["glm-5.3-flash", "openai-chat-completions", ["low", "high", "max"], "effort"],
-    ["deepseek-v4-pro", "openai-chat-completions", ["high", "max"], "effort"],
+    ["deepseek-v4-pro", "openai-chat-completions", ["high", "max"], "deepseek-effort"],
     ["hy3", "openai-chat-completions", ["none", "low", "high"], "effort"],
     ["kimi-k2.7-code", "openai-chat-completions", ["enabled"], "fixed"],
     ["mimo-v2.5", "openai-chat-completions", ["enabled"], "fixed"],
@@ -117,32 +117,45 @@ describe("Todo149 OpenCode Go 正式 SDK 请求", () => {
       expect(request.headers.get("x-opencode-session")).toBe("go-wire-session");
       expect(body.model).toBe(modelId);
       expect(body.enable_thinking).toBeUndefined();
-      expect(body.max_completion_tokens).toBeUndefined();
-      expect(body[mode === "responses" ? "max_output_tokens" : "max_tokens"]).toBe(maxOutputTokens);
+      // DeepSeek Go 当前走通用 Chat 映射；不能按旧站点规则强制 max_tokens。
+      const tokenField =
+        mode === "responses"
+          ? "max_output_tokens"
+          : modelId === "deepseek-v4-pro"
+            ? "max_completion_tokens"
+            : "max_tokens";
+      expect(body[tokenField]).toBe(maxOutputTokens);
+      for (const other of ["max_output_tokens", "max_tokens", "max_completion_tokens"].filter(
+        (key) => key !== tokenField,
+      )) {
+        expect(body[other]).toBeUndefined();
+      }
       const reasoning = Object.fromEntries(
         ["reasoning_effort", "reasoning", "thinking", "output_config"]
           .filter((k) => k in body)
           .map((k) => [k, body[k]]),
       );
       expect(reasoning).toEqual(
-        mode === "effort"
-          ? { reasoning_effort: reasoningLevel }
-          : mode === "responses"
-            ? { reasoning: { effort: reasoningLevel } }
-            : mode === "fixed"
-              ? {}
-              : mode === "qwen-effort"
-                ? { thinking: { type: "enabled" }, output_config: { effort: reasoningLevel } }
-                : {
-                    thinking: {
-                      type:
-                        reasoningLevel === "disabled"
-                          ? "disabled"
-                          : mode === "adaptive"
-                            ? "adaptive"
-                            : "enabled",
+        mode === "deepseek-effort"
+          ? { thinking: { type: "enabled" }, reasoning_effort: reasoningLevel }
+          : mode === "effort"
+            ? { reasoning_effort: reasoningLevel }
+            : mode === "responses"
+              ? { reasoning: { effort: reasoningLevel } }
+              : mode === "fixed"
+                ? {}
+                : mode === "qwen-effort"
+                  ? { thinking: { type: "enabled" }, output_config: { effort: reasoningLevel } }
+                  : {
+                      thinking: {
+                        type:
+                          reasoningLevel === "disabled"
+                            ? "disabled"
+                            : mode === "adaptive"
+                              ? "adaptive"
+                              : "enabled",
+                      },
                     },
-                  },
       );
     }
     expect(requests).toHaveLength(levels.length * 2);

@@ -53,49 +53,52 @@ async function capture(
   );
   if (!config.ok || !provider.ok) throw new Error("incomplete fixture");
   let body: Record<string, unknown> | undefined;
-  vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
-    body = await new Request(url, init).json();
-    const text = schema ? '{"ok":true}' : "ok";
-    if (apiType === "anthropic-messages")
-      return Response.json({
-        id: "fixture",
-        type: "message",
-        role: "assistant",
-        model: modelId,
-        content: [{ type: "text", text }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 1, output_tokens: 1 },
-      });
-    if (apiType === "openai-chat-completions")
-      return Response.json({
-        id: "fixture",
-        object: "chat.completion",
-        created: 1,
-        model: modelId,
-        choices: [
-          { index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" },
-        ],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      });
-    return Response.json({
-      id: "resp_fixture",
-      object: "response",
-      created_at: 1,
-      status: "completed",
-      model: modelId,
-      output: [
-        {
-          id: "msg_fixture",
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      body = await new Request(url, init).json();
+      const text = schema ? '{"ok":true}' : "ok";
+      if (apiType === "anthropic-messages")
+        return Response.json({
+          id: "fixture",
           type: "message",
           role: "assistant",
-          status: "completed",
-          content: [{ type: "output_text", text, annotations: [] }],
-        },
-      ],
-      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
-    });
-  });
+          model: modelId,
+          content: [{ type: "text", text }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        });
+      if (apiType === "openai-chat-completions")
+        return Response.json({
+          id: "fixture",
+          object: "chat.completion",
+          created: 1,
+          model: modelId,
+          choices: [
+            { index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        });
+      return Response.json({
+        id: "resp_fixture",
+        object: "response",
+        created_at: 1,
+        status: "completed",
+        model: modelId,
+        output: [
+          {
+            id: "msg_fixture",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text, annotations: [] }],
+          },
+        ],
+        usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+      });
+    }),
+  );
   const adapter = new AiSdkModelAdapter({ env: {}, retry: { maxAttempts: 1 } });
   const model = adapter.createModel({
     providerId: "fixture",
@@ -280,7 +283,7 @@ describe("Todo113 第二轮真实 SDK 序列化，不请求付费模型", () => 
     },
   );
   it.each(["disabled", "max"])(
-    "OpenRouter V4.1 Flash Chat %s，统一 reasoning 与 Schema",
+    "OpenRouter V4.1 Flash Chat %s，统一 reasoning 且不伪造 Schema 能力",
     async (level) => {
       expect(
         await capture(
@@ -289,12 +292,22 @@ describe("Todo113 第二轮真实 SDK 序列化，不请求付费模型", () => 
           "https://openrouter.ai/api/v1",
           level,
           [image],
-          true,
         ),
       ).toMatchObject({
         reasoning: level === "disabled" ? { enabled: false } : { effort: "max" },
-        response_format: { type: "json_schema" },
       });
+      // 当前目录声明不支持结构化输出：必须在本地拒绝，不能把 Schema 悄悄发送出去。
+      await expect(
+        capture(
+          "deepseek/deepseek-v4.1-flash",
+          "openai-chat-completions",
+          "https://openrouter.ai/api/v1",
+          level,
+          [image],
+          true,
+        ),
+      ).rejects.toThrow("Model does not support structured output");
+      expect(fetch).not.toHaveBeenCalled();
     },
   );
   it.each(["qwen3.6-plus", "qwen3.6-flash"])("OpenRouter %s 的 Schema 是网关能力", async (id) => {

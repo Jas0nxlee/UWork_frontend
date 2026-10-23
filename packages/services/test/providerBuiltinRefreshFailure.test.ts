@@ -23,6 +23,23 @@ async function setup(active = false) {
   const release = JSON.parse(
     await readFile(new URL("../../../config/provider/zcode-builtin.json", import.meta.url), "utf8"),
   );
+  // 远端失败/本地保留能力使用独立账号夹具，不依赖已退役的发布账号目录。
+  release.config.providerConfigRules.providerRules = plans.map((providerId) => ({
+    providerId,
+    config: {
+      group: "bigmodel-family",
+      access: {
+        type: "zhipu-account",
+        accountType: "bigmodel",
+        mode: providerId === plans[0] ? "team-coding-plan" : "start-plan",
+      },
+      api: {
+        type: "anthropic-messages",
+        baseUrl: "https://fixture.example/anthropic",
+      },
+      builtinModelIds: ["GLM-5.3-Flash"],
+    },
+  }));
   release.revision = 1;
   await writeFile(bundled, JSON.stringify(release));
   if (active) await writeFile(activePath, JSON.stringify({ ...release, revision: 2 }));
@@ -95,7 +112,11 @@ describe("Builtin 远端失败不阻断有效本地配置的业务刷新", () =>
       if (failure === "invalid-json") return new Response("not json");
       return Response.json({
         code: 0,
-        data: { configs: { builtin_provider_config_json: "http://cdn.example.com/release.json" } },
+        data: {
+          configs: {
+            builtin_provider_config_json: "http://cdn.example.com/release.json",
+          },
+        },
       });
     });
     fixture.download.mockImplementation(async () => {

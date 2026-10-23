@@ -7,6 +7,7 @@ import {
   ProviderConfigMap,
   ProviderConfigResolver,
   ProviderConfig,
+  ProviderApiConfig,
   ZhipuAccountAccessConfig,
   createRegistryModelConfig,
   createRegistryProviderConfig,
@@ -39,7 +40,22 @@ function view(
     revision: "c",
     zcodeBuiltinRevision: "b",
     personalRevision: "p",
-    zcodeBuiltinProviders: builtin.providers,
+    // 发布包没有账号 Provider；该只读迁移测试显式提供历史调用方输入。
+    zcodeBuiltinProviders: builtin.providers.set(
+      "account:bigmodel-individual-coding-plan",
+      new ProviderConfig({
+        group: "bigmodel-family",
+        api: new ProviderApiConfig({
+          type: "anthropic-messages",
+          baseUrl: "https://fixture.example/anthropic",
+        }),
+        access: new ZhipuAccountAccessConfig({
+          accountType: "bigmodel",
+          mode: "individual-coding-plan",
+        }),
+        builtinModelIds: [modelId],
+      }),
+    ),
     zcodeBuiltinProviderTemplates: builtin.templates,
     personalProviders: ProviderConfigMap.empty(),
     zcodeBuiltinModelRules: modelRules,
@@ -51,7 +67,9 @@ function view(
     providers: new ProviderConfigMap([
       [
         "account:bigmodel-individual-coding-plan",
-        new ProviderConfig({ access: new ZhipuAccountAccessConfig({ entitled: true }) }),
+        new ProviderConfig({
+          access: new ZhipuAccountAccessConfig({ entitled: true }),
+        }),
       ],
     ]),
     states: {
@@ -110,7 +128,11 @@ function view(
     modelId,
     options: Object.freeze({ reasoningLevel: level }),
   });
-  return { result: facade.getView(undefined, undefined, { selection }), selection, facade };
+  return {
+    result: facade.getView(undefined, undefined, { selection }),
+    selection,
+    facade,
+  };
 }
 
 describe("Todo95C 来源限定的只读关闭档位改名", () => {
@@ -194,7 +216,9 @@ describe("Todo95C 来源限定的只读关闭档位改名", () => {
           providerId: "account:bigmodel-individual-coding-plan",
           modelId: "GLM-5.2",
           config: new ModelConfig({
-            optionSpecs: new ModelOptionSpecsConfig({ reasoningLevel: { values } }),
+            optionSpecs: new ModelOptionSpecsConfig({
+              reasoningLevel: { values },
+            }),
           }),
         },
       ]);

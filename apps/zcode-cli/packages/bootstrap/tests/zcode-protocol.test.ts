@@ -4068,7 +4068,7 @@ describe("ZCodeProtocolAgentServer", () => {
       expect(logs).toContainEqual(
         expect.objectContaining({
           level: "warn",
-          message: "ZCode Protocol runtime preferences request timed out",
+          message: "UWork Protocol runtime preferences request timed out",
           context: expect.objectContaining({
             errorCode: -32022,
             scope: "runtime-materialization",
@@ -6426,7 +6426,7 @@ describe("ZCodeProtocolAgentServer", () => {
     );
 
     await vi.waitFor(() => {
-      expect(abortReasons).toContain("ZCode Protocol goal paused");
+      expect(abortReasons).toContain("UWork Protocol goal paused");
     });
     expect(target?.status).toBe("paused");
     expect(pauseResult).toMatchObject({
@@ -6546,7 +6546,7 @@ describe("ZCodeProtocolAgentServer", () => {
     });
 
     await vi.waitFor(() => {
-      expect(abortReasons).toContain("ZCode Protocol session stopped");
+      expect(abortReasons).toContain("UWork Protocol session stopped");
     });
     expect(goalResult.startedTurn).toBe(true);
     expect(target?.status).toBe("paused");

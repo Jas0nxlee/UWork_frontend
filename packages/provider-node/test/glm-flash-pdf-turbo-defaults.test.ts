@@ -1,9 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ModelConfig, ModelConfigRules } from "@zcode/provider";
+import { ModelConfig, ModelConfigRules, parseZCodeBuiltinModelConfigRules } from "@zcode/provider";
 import { NodeZCodeBuiltinProviderConfigSource } from "../src/index.js";
+import legacyAccountConfig from "./fixtures/legacy-account-config.json";
 
-describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
+describe("Flash PDF 与历史模板 Turbo 覆盖合同", () => {
   it.each(["zai-standard-api", "bigmodel-standard-api"])(
     "普通 API %s 的两个 Turbo 默认关闭，个人可开启",
     async (templateId) => {
@@ -15,14 +16,20 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
       });
       try {
         const snapshot = await source.read();
+        // 历史模板由测试输入提供；发布配置不应恢复智谱模板。
+        const models = new ModelConfigRules([
+          ...snapshot.models.rules(),
+          ...parseZCodeBuiltinModelConfigRules(legacyAccountConfig.modelConfigRules).rules(),
+        ]);
         for (const modelId of ["GLM-5-Turbo", "GLM-5V-Turbo"]) {
+          expect(snapshot.providerTemplates?.has(templateId)).toBe(false);
           const input = {
             providerId: "personal",
             templateId,
             modelId,
             apiType: "openai-chat-completions",
           };
-          expect(snapshot.models.resolve(input).enabled, modelId).toBe(false);
+          expect(models.resolve(input).enabled, modelId).toBe(false);
           const personal = new ModelConfigRules([
             {
               type: "provider-model",
@@ -31,14 +38,14 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
               config: new ModelConfig({ enabled: true }),
             },
           ]);
-          expect(
-            ModelConfigRules.composeEffective(snapshot.models, personal).resolve(input).enabled,
-          ).toBe(true);
-          expect(snapshot.models.resolve({ ...input, templateId: undefined }).enabled).toBe(true);
+          expect(ModelConfigRules.composeEffective(models, personal).resolve(input).enabled).toBe(
+            true,
+          );
+          expect(models.resolve({ ...input, templateId: undefined }).enabled).toBe(true);
         }
         for (const modelId of ["GLM-5.3", "GLM-5.3-Flash"]) {
           expect(
-            snapshot.models.resolve({
+            models.resolve({
               providerId: "personal",
               templateId,
               modelId,
@@ -66,7 +73,9 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
             type,
             providerId: "personal",
             modelId: "GLM-5.3-Flash",
-            config: new ModelConfig({ properties: { inputFormat: { supportsPdf: false } } }),
+            config: new ModelConfig({
+              properties: { inputFormat: { supportsPdf: false } },
+            }),
           },
         ]);
         const composed = ModelConfigRules.composeEffective(snapshot.models, personal);
@@ -102,7 +111,9 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
             ).toBe(true);
             expect(
               config.overlay(
-                new ModelConfig({ properties: { inputFormat: { supportsPdf: false } } }),
+                new ModelConfig({
+                  properties: { inputFormat: { supportsPdf: false } },
+                }),
               ).properties?.inputFormat?.supportsPdf,
             ).toBe(false);
           }
@@ -131,6 +142,10 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
     });
     try {
       const snapshot = await source.read();
+      const models = new ModelConfigRules([
+        ...snapshot.models.rules(),
+        ...parseZCodeBuiltinModelConfigRules(legacyAccountConfig.modelConfigRules).rules(),
+      ]);
       for (const templateId of [
         "zai-api",
         "bigmodel-api",
@@ -138,7 +153,7 @@ describe("Todo126 发布配置的 Flash PDF 和模板 Turbo 默认", () => {
         "bigmodel-standard-api",
         "custom",
       ]) {
-        const config = snapshot.models.resolve({
+        const config = models.resolve({
           providerId: "personal",
           templateId,
           modelId: "GLM-5-Turbo",

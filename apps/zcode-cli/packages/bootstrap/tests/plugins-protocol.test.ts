@@ -3,12 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// 协议 handler 只从 workspace 推导 storageRoot，user config 仍解析到 ~/.zcode/cli/config.json
-// （getDefaultConfigPath 无 env 覆盖）。为隔离 restore/overview 的 user-config 往返，把 node:os
-// 的 homedir 重定向到一次性临时目录；tmpdir 等其余实现保留原值。这样 resolvePath("~/.zcode/cli")
-// 落到隔离目录，绝不触碰真实 HOME。
-// 回归原因：vi.mock 会提升到普通 const 初始化之前；临时 HOME 也必须通过 vi.hoisted
-// 提前建立，否则 mock factory 读取 FAKE_HOME 时会命中 TDZ，导致整个 suite 无法收集。
+// 用户配置按公开 storage resolver 定位；仅 mock homedir 已不足以隔离读取，
+// 因为 resolver 读取 process.env。每个用例显式下发临时 UWork 根，路径随配置动态解析。
+// 工作区内 .zcode/config.json 仍是兼容配置，不能替换为用户目录名。
 const FAKE_HOME = await vi.hoisted(async () => {
   const [{ mkdtemp }, { tmpdir }, { join }] = await Promise.all([
     import("node:fs/promises"),
@@ -23,6 +20,8 @@ vi.mock("node:os", async (importOriginal) => {
 });
 
 import {
+  UWORK_DATA_ROOT_DIR_NAME,
+  resolveUserCliConfigPath,
   zcodeProtocolMethods,
   zcodePluginsConfigureParamsSchema,
   zcodePluginsInstallResultSchema,
@@ -50,6 +49,17 @@ import {
 } from "../src/zcode-protocol/plugins.js";
 import { withPluginStorageLock } from "../src/lib/plugin-storage-lock.js";
 import type { ZCodeProtocolAgentServerContext } from "../src/zcode-protocol/server-types.js";
+
+let previousUserStorageRoot: string | undefined;
+beforeEach(() => {
+  previousUserStorageRoot = process.env.ZCODE_STORAGE_DIR;
+  process.env.ZCODE_STORAGE_DIR = join(FAKE_HOME, UWORK_DATA_ROOT_DIR_NAME);
+});
+afterEach(async () => {
+  await rm(resolveUserCliConfigPath(), { force: true });
+  if (previousUserStorageRoot === undefined) delete process.env.ZCODE_STORAGE_DIR;
+  else process.env.ZCODE_STORAGE_DIR = previousUserStorageRoot;
+});
 
 afterAll(async () => {
   await rm(FAKE_HOME, { force: true, recursive: true });
@@ -262,9 +272,9 @@ describe("plugins protocol contracts", () => {
   });
 
   it("normalizes Windows plugin roots for Workspace ownership projection", () => {
-    expect(
-      normalizePluginRootForComparison("C:\\Repo\\Plugin", "win32"),
-    ).toBe(normalizePluginRootForComparison("c:/repo/plugin", "win32"));
+    expect(normalizePluginRootForComparison("C:\\Repo\\Plugin", "win32")).toBe(
+      normalizePluginRootForComparison("c:/repo/plugin", "win32"),
+    );
   });
 
   it("projects an inline plugin declared by the current Workspace into Workspace scope", async () => {
@@ -273,13 +283,26 @@ describe("plugins protocol contracts", () => {
     try {
       await writeTestFile(
         join(root, ".zcode", "config.json"),
-        JSON.stringify({ plugins: { dirs: [pluginRoot], enabledPlugins: { "workspace-demo@inline": false } } }),
+        JSON.stringify({
+          plugins: { dirs: [pluginRoot], enabledPlugins: { "workspace-demo@inline": false } },
+        }),
       );
       await writeTestFile(
         join(pluginRoot, ".claude-plugin", "plugin.json"),
         JSON.stringify({
-          name: "workspace-demo", mcpServers: { panel: { command: "node", args: ["panel.mjs"] } },
-          ui: { surfaces: [{ id: "panel", title: "Panel", server: "panel", resourceUri: "ui://demo/panel", availability: "session" }] },
+          name: "workspace-demo",
+          mcpServers: { panel: { command: "node", args: ["panel.mjs"] } },
+          ui: {
+            surfaces: [
+              {
+                id: "panel",
+                title: "Panel",
+                server: "panel",
+                resourceUri: "ui://demo/panel",
+                availability: "session",
+              },
+            ],
+          },
         }),
       );
 
@@ -291,7 +314,17 @@ describe("plugins protocol contracts", () => {
         rootPath: pluginRoot,
         rootSource: "workspace",
         enabled: false,
-        uiSurfaces: [{ pluginId: "workspace-demo@inline", pluginName: "workspace-demo", id: "panel", title: "Panel", server: "plugin:workspace-demo:panel", resourceUri: "ui://demo/panel", availability: "session" }],
+        uiSurfaces: [
+          {
+            pluginId: "workspace-demo@inline",
+            pluginName: "workspace-demo",
+            id: "panel",
+            title: "Panel",
+            server: "plugin:workspace-demo:panel",
+            resourceUri: "ui://demo/panel",
+            availability: "session",
+          },
+        ],
       });
       expect(() => zcodePluginsListResultSchema.parse(result)).not.toThrow();
     } finally {
@@ -302,10 +335,9 @@ describe("plugins protocol contracts", () => {
   it("keeps the User projection independent from Workspace enable overrides", async () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-plugin-config-view-"));
     const pluginId = "skill-creator@zcode-plugins-official";
-    const userConfigPath = join(FAKE_HOME, ".zcode", "cli", "config.json");
     try {
       await writeTestFile(
-        userConfigPath,
+        resolveUserCliConfigPath(),
         JSON.stringify({
           plugins: { enabledPlugins: { [pluginId]: true } },
         }),
@@ -317,35 +349,25 @@ describe("plugins protocol contracts", () => {
         }),
       );
 
-      const userResult = await listPlugins(
-        {} as ZCodeProtocolAgentServerContext,
-        {
-          workspace: { workspacePath: root, workspaceKey: root },
-          configScope: "user",
-        },
-      );
-      const workspaceResult = await listPlugins(
-        {} as ZCodeProtocolAgentServerContext,
-        {
-          workspace: { workspacePath: root, workspaceKey: root },
-          configScope: "workspace",
-        },
-      );
+      const userResult = await listPlugins({} as ZCodeProtocolAgentServerContext, {
+        workspace: { workspacePath: root, workspaceKey: root },
+        configScope: "user",
+      });
+      const workspaceResult = await listPlugins({} as ZCodeProtocolAgentServerContext, {
+        workspace: { workspacePath: root, workspaceKey: root },
+        configScope: "workspace",
+      });
 
-      expect(
-        userResult.plugins.find((plugin) => plugin.id === pluginId),
-      ).toMatchObject({
+      expect(userResult.plugins.find((plugin) => plugin.id === pluginId)).toMatchObject({
         enabled: true,
         enabledSource: "user",
       });
-      expect(
-        workspaceResult.plugins.find((plugin) => plugin.id === pluginId),
-      ).toMatchObject({
+      expect(workspaceResult.plugins.find((plugin) => plugin.id === pluginId)).toMatchObject({
         enabled: false,
         enabledSource: "workspace",
       });
     } finally {
-      await rm(userConfigPath, { force: true });
+      await rm(resolveUserCliConfigPath(), { force: true });
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -354,7 +376,6 @@ describe("plugins protocol contracts", () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-plugin-option-source-view-"));
     const pluginRoot = join(root, "user-plugin");
     const pluginId = "option-source-view@inline";
-    const userConfigPath = join(FAKE_HOME, ".zcode", "cli", "config.json");
     try {
       await writeTestFile(
         join(pluginRoot, ".claude-plugin", "plugin.json"),
@@ -366,7 +387,7 @@ describe("plugins protocol contracts", () => {
         }),
       );
       await writeTestFile(
-        userConfigPath,
+        resolveUserCliConfigPath(),
         JSON.stringify({
           plugins: {
             dirs: [pluginRoot],
@@ -385,7 +406,7 @@ describe("plugins protocol contracts", () => {
         optionSources: { label: "user" },
       });
     } finally {
-      await rm(userConfigPath, { force: true });
+      await rm(resolveUserCliConfigPath(), { force: true });
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -401,17 +422,12 @@ describe("plugins protocol contracts", () => {
         }),
       );
 
-      const result = await listPlugins(
-        {} as ZCodeProtocolAgentServerContext,
-        {
-          workspace: { workspacePath: root, workspaceKey: root },
-          configScope: "workspace",
-        },
-      );
+      const result = await listPlugins({} as ZCodeProtocolAgentServerContext, {
+        workspace: { workspacePath: root, workspaceKey: root },
+        configScope: "workspace",
+      });
 
-      expect(
-        result.plugins.find((plugin) => plugin.id === pluginId),
-      ).toMatchObject({
+      expect(result.plugins.find((plugin) => plugin.id === pluginId)).toMatchObject({
         enabled: true,
         enabledSource: "workspace",
         marketplace: "personal-market",
@@ -641,11 +657,10 @@ describe("updatePlugin handler diagnostics", () => {
 // restoreBuiltinPlugin / overview 走真实 bootstrap 路径：storageRoot 由 ZCODE_STORAGE_DIR
 // 锚定（storage.dir 以 "cli" 结尾时 getCliStorageRoot 原样返回，pluginStorageRoot =
 // <storageDir>/plugins）；suppressedBuiltins 必须写到 handler 实际解析的 user config，即
-// ~/.zcode/cli/config.json（文件头部已把 homedir 重定向到 FAKE_HOME，故落在隔离目录）。
+// resolver 指向当前 ZCODE_STORAGE_DIR/cli/config.json，全程落在临时隔离目录。
 describe("restoreBuiltinPlugin handler", () => {
   const noopContext = {} as unknown as ZCodeProtocolAgentServerContext;
   const builtinId = "skill-creator@zcode-plugins-official";
-  const userConfigPath = join(FAKE_HOME, ".zcode", "cli", "config.json");
   let previousStorageDir: string | undefined;
 
   beforeEach(() => {
@@ -655,7 +670,7 @@ describe("restoreBuiltinPlugin handler", () => {
   afterEach(async () => {
     if (previousStorageDir === undefined) delete process.env.ZCODE_STORAGE_DIR;
     else process.env.ZCODE_STORAGE_DIR = previousStorageDir;
-    await rm(userConfigPath, { force: true });
+    await rm(resolveUserCliConfigPath(), { force: true });
   });
 
   it("restoreBuiltinPlugin clears suppression via protocol handler", async () => {
@@ -667,7 +682,7 @@ describe("restoreBuiltinPlugin handler", () => {
       // Arrange: user config (the path the handler actually reads/writes) suppresses
       // the built-in so the overview lists it as a restorable built-in.
       await writeTestFile(
-        userConfigPath,
+        resolveUserCliConfigPath(),
         JSON.stringify({ plugins: { enabled: true, suppressedBuiltins: [builtinId] } }),
       );
 
@@ -683,7 +698,7 @@ describe("restoreBuiltinPlugin handler", () => {
       expect(result).toEqual({ pluginId: builtinId, diagnostics: [] });
 
       // The handler patched the user config to drop the suppression marker.
-      const config = JSON.parse(await readFile(userConfigPath, "utf8"));
+      const config = JSON.parse(await readFile(resolveUserCliConfigPath(), "utf8"));
       expect(config.plugins?.suppressedBuiltins ?? []).not.toContain(builtinId);
 
       // After restore the overview no longer lists it as restorable.
@@ -703,7 +718,7 @@ describe("restoreBuiltinPlugin handler", () => {
 
     try {
       await writeTestFile(
-        userConfigPath,
+        resolveUserCliConfigPath(),
         JSON.stringify({
           plugins: { enabled: true, suppressedBuiltins: [builtinId] },
         }),

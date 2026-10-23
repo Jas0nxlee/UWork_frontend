@@ -58,6 +58,26 @@ describe("Published MCS and search final Anthropic wire", () => {
     );
     const rules = parseZCodeBuiltinModelConfigRules(release.config.modelConfigRules);
     let config = rules.resolve({ providerId, baseUrl, modelId, apiType: "anthropic-messages" });
+    if (providerId.startsWith("account:")) {
+      // 发布目录已退役账号；显式历史输入只验证保留的 MCS/WebSearch 序列化合同。
+      const legacy = JSON.parse(
+        await readFile(
+          new URL(
+            "../../../../../packages/provider-node/test/fixtures/legacy-account-config.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      config = config.overlay(
+        parseZCodeBuiltinModelConfigRules(legacy.modelConfigRules).resolve({
+          providerId,
+          baseUrl,
+          modelId,
+          apiType: "anthropic-messages",
+        }),
+      );
+    }
     if (providerId === "personal-off")
       config = config.overlay(
         parseModelConfig({ properties: { supportsMidConversationSystem: false } }),

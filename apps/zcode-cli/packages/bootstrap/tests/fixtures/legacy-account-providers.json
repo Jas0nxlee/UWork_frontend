@@ -1,0 +1,83 @@
+[
+  {
+    "providerId": "account:zai-individual-coding-plan",
+    "config": {
+      "group": "zai-family",
+      "access": {
+        "type": "zhipu-account",
+        "accountType": "zai",
+        "mode": "individual-coding-plan"
+      },
+      "api": {
+        "type": "anthropic-messages",
+        "baseUrl": "https://model.example.test/anthropic"
+      },
+      "builtinModelIds": ["GLM-5.3"]
+    }
+  },
+  {
+    "providerId": "account:bigmodel-individual-coding-plan",
+    "config": {
+      "group": "bigmodel-family",
+      "access": {
+        "type": "zhipu-account",
+        "accountType": "bigmodel",
+        "mode": "individual-coding-plan"
+      },
+      "api": {
+        "type": "anthropic-messages",
+        "baseUrl": "https://model.example.test/anthropic"
+      },
+      "builtinModelIds": ["GLM-5.3"]
+    }
+  },
+  {
+    "providerId": "account:bigmodel-team-coding-plan",
+    "config": {
+      "group": "bigmodel-family",
+      "access": {
+        "type": "zhipu-account",
+        "accountType": "bigmodel",
+        "mode": "team-coding-plan"
+      },
+      "api": {
+        "type": "anthropic-messages",
+        "baseUrl": "https://model.example.test/anthropic"
+      },
+      "builtinModelIds": ["GLM-5.3"]
+    }
+  },
+  {
+    "providerId": "account:zai-start-plan",
+    "config": {
+      "group": "zai-family",
+      "access": {
+        "type": "zhipu-account",
+        "accountType": "zai",
+        "mode": "start-plan"
+      },
+      "api": {
+        "type": "anthropic-messages",
+        "baseUrl": "https://model.example.test/anthropic"
+      },
+      "builtinModelIds": ["GLM-5.3", "GLM-5.2"]
+    }
+  },
+  {
+    "providerId": "account:zai-offpeak-idle-plan",
+    "config": {
+      "group": "zai-family",
+      "access": {
+        "type": "zhipu-account",
+        "accountType": "zai",
+        "mode": "off-peak"
+      },
+      "api": {
+        "type": "anthropic-messages",
+        "baseUrl": "https://model.example.test/anthropic"
+      },
+      "builtinModelIds": ["GLM-5.3"],
+      "visibility": "hidden"
+    }
+  }
+]

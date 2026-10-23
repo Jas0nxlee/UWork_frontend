@@ -2,6 +2,7 @@ import { join } from "node:path";
 import {
   ModelConfigRules,
   ProviderConfig,
+  ProviderApiConfig,
   ProviderConfigMap,
   ProviderConfigResolver,
   ProviderRegistry,
@@ -20,7 +21,25 @@ describe("buildOffPeakModelSelectionView", () => {
     try {
       const zcodeBuiltin = await source.read();
       const resolution = new ProviderConfigResolver().resolve({
-        zcodeBuiltinProviders: zcodeBuiltin.providers,
+        // 发布包不再带闲时账号；这里只验证投影保留的显式 Registry 输入。
+        zcodeBuiltinProviders: new ProviderConfigMap(
+          ["zai", "bigmodel"].map((accountType) => [
+            `account:${accountType}-offpeak-idle-plan`,
+            new ProviderConfig({
+              group: accountType === "zai" ? "zai-family" : "bigmodel-family",
+              visibility: "hidden",
+              access: new ZhipuAccountAccessConfig({
+                accountType: accountType as "zai" | "bigmodel",
+                mode: "off-peak",
+              }),
+              api: new ProviderApiConfig({
+                type: "anthropic-messages",
+                baseUrl: "https://zcode.z.ai/api/v1/off-peak/anthropic",
+              }),
+              builtinModelIds: ["GLM-5.3", "GLM-5.3-Flash"],
+            }),
+          ]),
+        ),
         zcodeBuiltinModelRules: zcodeBuiltin.models,
         accountProviders: new ProviderConfigMap([
           [
@@ -48,7 +67,11 @@ describe("buildOffPeakModelSelectionView", () => {
         providerId: "account:zai-offpeak-idle-plan",
         config: {
           visibility: "hidden",
-          access: { type: "zhipu-account", accountType: "zai", mode: "off-peak" },
+          access: {
+            type: "zhipu-account",
+            accountType: "zai",
+            mode: "off-peak",
+          },
           api: {
             type: "anthropic-messages",
             baseUrl: "https://zcode.z.ai/api/v1/off-peak/anthropic",
@@ -63,12 +86,19 @@ describe("buildOffPeakModelSelectionView", () => {
             enabled: true,
             properties: {
               contextWindow: 1_000_000,
-              inputFormat: { supportsImage: flash, supportsVideo: flash, supportsPdf: flash },
+              inputFormat: {
+                supportsImage: flash,
+                supportsVideo: flash,
+                supportsPdf: flash,
+              },
               supportsNativeWebSearch: false,
               supportsMidConversationSystem: true,
             },
             optionSpecs: {
-              reasoningLevel: { values: ["low", "high", "max"], map: expect.any(String) },
+              reasoningLevel: {
+                values: ["low", "high", "max"],
+                map: expect.any(String),
+              },
               maxOutputTokens: { max: 128000, map: expect.any(String) },
             },
           });
@@ -78,7 +108,11 @@ describe("buildOffPeakModelSelectionView", () => {
         providerId: "account:bigmodel-offpeak-idle-plan",
         config: {
           visibility: "hidden",
-          access: { type: "zhipu-account", accountType: "bigmodel", mode: "off-peak" },
+          access: {
+            type: "zhipu-account",
+            accountType: "bigmodel",
+            mode: "off-peak",
+          },
         },
       });
     } finally {

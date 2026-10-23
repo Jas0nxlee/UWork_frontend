@@ -13,11 +13,12 @@ import {
   resolveInitialModelSelection,
 } from "@zcode/provider";
 import { encodeProviderConfigFile, NodeModelSelectionConfigRepository } from "@zcode/provider-node";
+import type { ICredentialService } from "../src/credential/credential.js";
 import type { ProviderProvisioningEnvelope } from "@zcode/shared";
 import { createCredentialService } from "../src/credential/credentialService.js";
 import { createCredentialCipherProvider } from "../src/credential/providers/credentialCipherProvider.js";
 import { createSettingService } from "../src/setting/settingService.js";
-import { getDataBaseDir, setDataBaseDir } from "../src/paths.js";
+import { getAppConfigDir, getDataBaseDir, setDataBaseDir } from "../src/paths.js";
 import { createProviderConfigRuntime } from "../src/model-provider/providerConfigRuntime.js";
 import { createProviderRuntimeFromConfigRuntime } from "../src/model-provider/providerRuntime.js";
 import { createProviderProvisioningTarget } from "../src/model-provider/providerProvisioningTarget.js";
@@ -90,7 +91,7 @@ async function createFixture(root: string) {
   setDataBaseDir(root);
   // 设置服务独立读取HOME；仅在Vitest worker中模拟系统用户目录，避免触及真实用户设置。
   vi.stubEnv("HOME", root);
-  const dir = join(root, ".zcode/v2");
+  const dir = getAppConfigDir();
   await mkdir(dir, { recursive: true });
   const builtin = join(root, "builtin.json");
   await writeFile(
@@ -99,7 +100,20 @@ async function createFixture(root: string) {
       schemaVersion: 1,
       revision: 1,
       config: {
-        providerConfigRules: { templateRules: [], providerRules: [] },
+        providerConfigRules: {
+          // Runtime 现在固定播种 UCAS；空模板不再是可启动的生产基线。
+          templateRules: [
+            {
+              templateId: "ucas",
+              templateNameMap: { "zh-CN": "ucas", "en-US": "ucas" },
+              config: {
+                access: { type: "api-key" },
+                api: { type: "openai-chat-completions", baseUrl: "http://127.0.0.1:1/v1" },
+              },
+            },
+          ],
+          providerRules: [],
+        },
         modelConfigRules: {
           modelRules: [],
           modelApiRules: [],
@@ -131,11 +145,33 @@ async function createFixture(root: string) {
   const defaults = new NodeModelSelectionConfigRepository({
     personalRepository: config.personalRepository,
   });
-  const credentials = createCredentialService({
+  const diskCredentials = createCredentialService({
     cipherProvider: createCredentialCipherProvider({
       env: { ZCODE_CREDENTIAL_SECRET: "r3-real-stores-test-cipher" },
     }),
   });
+  // Provisioning 的受支持 scope 仍是 oauth-session，但应用账号 load 已明确退役。
+  // 在注入端口把合成同步数据映射到测试命名空间；真实 cipher/磁盘锁/原子写入仍完整运行，
+  // 不允许 fixture 通过读取真实 oauth:* 账号来伪造生产登录可用。
+  const fixtureKey = (key: string) =>
+    key.startsWith("oauth:") || key === "zcodejwttoken" ? `provisioning-fixture:${key}` : key;
+  const credentials: ICredentialService = {
+    load: (key) => diskCredentials.load(fixtureKey(key)),
+    save: (key, value) => diskCredentials.save(fixtureKey(key), value),
+    delete: (key) => diskCredentials.delete(fixtureKey(key)),
+  };
+  await diskCredentials.save("oauth:zai:access_token", "historical-account-must-stay-retired");
+  const historicalRecord = (
+    JSON.parse(await readFile(join(dir, "credentials.json"), "utf8")) as Record<string, string>
+  )["oauth:zai:access_token"];
+  const assertHistoricalPreserved = async () => {
+    const after = JSON.parse(await readFile(join(dir, "credentials.json"), "utf8")) as Record<
+      string,
+      string
+    >;
+    expect(after["oauth:zai:access_token"]).toBe(historicalRecord);
+    await expect(diskCredentials.load("oauth:zai:access_token")).resolves.toBeNull();
+  };
   const settings = createSettingService();
   const target = createProviderProvisioningTarget({
     providerRuntime: runtime,
@@ -163,6 +199,7 @@ async function createFixture(root: string) {
     personal,
     dir,
     builtin,
+    assertHistoricalPreserved,
     dispose() {
       runtime.dispose();
       account.dispose();
@@ -182,6 +219,7 @@ describe("R3A-PRV-08/09 正式磁盘Store与Registry事务", () => {
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    if (fixture) await fixture.assertHistoricalPreserved();
     fixture?.dispose();
     setDataBaseDir(previousRoot);
     vi.unstubAllEnvs();
@@ -312,6 +350,7 @@ describe("R3A-PRV-05/06/07/10/11 完整替换、allowlist 凭据、窄设置与�
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    if (fixture) await fixture.assertHistoricalPreserved();
     fixture?.dispose();
     setDataBaseDir(previousRoot);
     vi.unstubAllEnvs();
