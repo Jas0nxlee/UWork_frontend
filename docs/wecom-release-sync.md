@@ -41,6 +41,8 @@
 
 ### 触发方式
 
+需要定位空间权限时，可以勾选 `inspect_only`，或运行 `gh workflow run wecom-release-sync.yml --ref main -f tag=v0.1.2 -f inspect_only=true`。该模式通过同一代理和凭据读取应用名称、空间信息和一条目录列表；不下载安装包、不上传、不调整权限。报告中只有名称、结果码和格式判断，不输出内部标识或凭据。诊断拒绝仍失败退出，不能被当作同步成功。
+
 - 桌面发布工作流将所有附件上传并将 Release 公开后，显式派发微盘同步。`GITHUB_TOKEN` 发布事件不会再自动启动另一个 workflow，因此不能只依赖 `release.published`。网页人工发布 Release 时也支持 published 事件。
 - 在 Actions → **Sync release to WeCom Drive** → Run workflow，选择已包含该 workflow 的默认分支，输入已公开标签，如 `v0.1.2`。不填时使用最新公开 Release。草稿、非正式版本和缺少必需安装包会失败。
 - 也可用 CLI：`gh workflow run wecom-release-sync.yml --ref main -f tag=v0.1.2`。查看运行结果：`gh run list --workflow wecom-release-sync.yml`。

@@ -9,6 +9,10 @@ on:
         description: Release tag to backfill (defaults to latest published release)
         required: false
         type: string
+      inspect_only:
+        description: Read application and target space permissions without downloading or uploading installers
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -95,6 +99,7 @@ jobs:
         run: node scripts/wecom-release-proxy.mjs --probe-only
 
       - name: Download the three release installers with retries
+        if: inputs.inspect_only != true
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.options.outputs.tag }}
@@ -121,9 +126,10 @@ jobs:
             done
           done < "$RUNNER_TEMP/wecom-selected-assets.txt"
 
-      - name: Upload and verify the three installers
+      - name: Inspect access or upload and verify the three installers
         env:
           WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}

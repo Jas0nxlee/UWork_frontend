@@ -2,7 +2,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const TRANSIENT_CODES = new Set([-1, 45009, 45011]);
 const TOKEN_CODES = new Set([40001, 40014, 42001]);
-const REPLAYABLE = new Set(["file_list", "file_info", "file_upload_part"]);
+const REPLAYABLE = new Set([
+  "file_list",
+  "file_info",
+  "file_upload_part",
+  "new_space_info",
+  "agent_list",
+]);
 
 class WecomError extends Error {
   constructor(operation, { code, status, transient = false } = {}) {
@@ -86,16 +92,25 @@ export function createWecomClient({
   return {
     async request(operation, body) {
       if (
-        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish)$/.test(
+        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list)$/.test(
           operation,
         )
       )
         throw new Error("不支持的微盘同步操作");
       for (let refresh = 0; refresh < 2; refresh++) {
-        const url = new URL(`https://qyapi.weixin.qq.com/cgi-bin/wedrive/${operation}`);
+        const url = new URL(
+          operation === "agent_list"
+            ? "https://qyapi.weixin.qq.com/cgi-bin/agent/list"
+            : `https://qyapi.weixin.qq.com/cgi-bin/wedrive/${operation}`,
+        );
         url.searchParams.set("access_token", await accessToken());
         try {
-          return await invoke(operation, url, body, REPLAYABLE.has(operation));
+          return await invoke(
+            operation,
+            url,
+            operation === "agent_list" ? undefined : body,
+            REPLAYABLE.has(operation),
+          );
         } catch (error) {
           if (!TOKEN_CODES.has(error.code) || refresh === 1) throw error;
           // 明确的 token 拒绝未执行写入，可以刷新后再发；写入结果不明由同步 owner 回读处理。

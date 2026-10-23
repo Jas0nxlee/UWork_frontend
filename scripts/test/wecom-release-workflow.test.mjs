@@ -67,6 +67,18 @@ test("固定代理配置只从 Secret 注入，上传前先探测出口，凭据
   assert.doesNotMatch(workflow, /uuid:|public-key:|skip-cert-verify:\s*true/);
 });
 
+test("手动权限诊断不下载安装包，使用独立只读入口并保留报告", async () => {
+  const workflow = await read(".github/workflows/wecom-release-sync.yml");
+  const wrapper = await read("scripts/wecom-release-proxy.mjs");
+  assert.match(workflow, /inspect_only:\s+description:.*\s+type: boolean\s+default: false/);
+  assert.match(
+    workflow,
+    /name: Download the three release installers with retries\s+if: inputs.inspect_only != true/,
+  );
+  assert.match(workflow, /WECOM_INSPECT_ONLY: \$\{\{ inputs.inspect_only \|\| false \}\}/);
+  assert.match(wrapper, /wecom-release-diagnostics\.mjs/);
+});
+
 test("桌面公开成功后显式派发微盘；GitLab 派发失败不阻止尝试；无配置时关闭自动派发", async () => {
   const workflow = await read(".github/workflows/desktop-release.yml");
   const publish = workflow.indexOf('gh release edit "$tag"');
