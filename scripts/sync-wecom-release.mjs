@@ -2,7 +2,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectGitLabReleaseAssets, validateLocalAssets } from "./sync-gitlab-release.mjs";
+import { selectWecomReleaseAssets, validateLocalAssets } from "./release-installer-assets.mjs";
 import { blockDigests, fileBlocks } from "./wecom-block-digest.mjs";
 import { createWecomClient, readWecomFilePage } from "./wecom-release-client.mjs";
 
@@ -148,7 +148,7 @@ export async function syncWecomRelease({
   try {
     const config = resolveWecomConfig(env);
     report.tag = config.tag;
-    const selected = selectGitLabReleaseAssets(
+    const selected = selectWecomReleaseAssets(
       release ?? JSON.parse(await readFile(env.RELEASE_JSON, "utf8")),
       config.tag,
     );
@@ -179,7 +179,7 @@ export async function syncWecomRelease({
       await verifyFile(client, config, folder, asset, hashes.get(asset.name).at(-1), file.fileid);
     }
     report.status = "success";
-    log(`微盘 ${config.tag} 的三个安装包同步完成`);
+    log(`微盘 ${config.tag} 的 ${selected.assets.length} 个安装包同步完成`);
     return report;
   } finally {
     // 报告只保存源摘要和成功进度，不保存 token、目录标识或服务端原始响应。

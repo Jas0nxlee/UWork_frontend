@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // GitLab 仅保存发布附件；标签引用独立元数据根提交，绝不推送应用源码历史。
 import { createReadStream } from "node:fs";
-import { createHash } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +13,8 @@ import {
   requireValue,
 } from "./gitlab-release-client.mjs";
 export { resolveSyncConfig } from "./gitlab-release-client.mjs";
+import { validateRelease, validateLocalAssets } from "./release-installer-assets.mjs";
+export { validateRelease, validateLocalAssets } from "./release-installer-assets.mjs";
 
 import {
   checked,
@@ -29,15 +30,6 @@ export function releaseDescription(release, tag) {
   if (body) return body;
   const name = typeof release?.name === "string" ? release.name.trim() : "";
   return name || `UWork ${tag}`;
-}
-
-export function validateRelease(release, tag) {
-  if (!release || typeof release !== "object" || Array.isArray(release))
-    throw new Error("Release 元数据为空或格式错误");
-  if (!Array.isArray(release.assets) || !release.assets.length) throw new Error("Release 缺少附件");
-  if (release.draft === true) throw new Error(`Release ${tag} 仍是草稿，先公开再同步`);
-  if (release.tag_name && release.tag_name !== tag)
-    throw new Error(`Release 标签 ${release.tag_name} 与同步标签 ${tag} 不一致`);
 }
 
 export function selectGitLabReleaseAssets(release, tag = release?.tag_name) {
@@ -200,24 +192,6 @@ export async function uploadReleaseAssets({
     uploaded.set(asset.name, url);
   }
   return uploaded;
-}
-
-export async function validateLocalAssets({ config, release }) {
-  if (!config.assetDir) throw new Error("缺少发布附件目录 ASSET_DIR");
-  const seen = new Set();
-  for (const asset of release.assets) {
-    if (basename(asset.name) !== asset.name || seen.has(asset.name))
-      throw new Error(`非法或重复附件名：${asset.name}`);
-    seen.add(asset.name);
-    const path = join(config.assetDir, asset.name);
-    const info = await stat(path).catch(() => null);
-    if (!info?.isFile()) throw new Error(`缺少发布附件：${asset.name}`);
-    if (info.size !== asset.size) throw new Error(`附件大小不一致：${asset.name}`);
-    const hash = createHash("sha256");
-    for await (const chunk of createReadStream(path)) hash.update(chunk);
-    if (asset.digest !== `sha256:${hash.digest("hex")}`)
-      throw new Error(`附件摘要不一致：${asset.name}`);
-  }
 }
 
 export async function verifyPackageFiles({ client, config, release }) {

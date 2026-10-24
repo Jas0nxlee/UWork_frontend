@@ -8,9 +8,17 @@ import { blockDigests, BLOCK_SIZE } from "../wecom-block-digest.mjs";
 import { resolveWecomConfig, syncWecomRelease } from "../sync-wecom-release.mjs";
 import { createWecomClient } from "../wecom-release-client.mjs";
 
-const names = ["mac-arm64.dmg", "win-x64.exe", "linux-amd64.deb"].map(
-  (suffix) => `UWork-0.1.2-${suffix}`,
-);
+const names = [
+  "mac-arm64.dmg",
+  "mac-x64.dmg",
+  "win-x64.exe",
+  "linux-x86_64.AppImage",
+  "linux-amd64.deb",
+  "linux-x86_64.rpm",
+  "linux-arm64.AppImage",
+  "linux-arm64.deb",
+  "linux-aarch64.rpm",
+].map((suffix) => `UWork-0.1.2-${suffix}`);
 const env = {
   WECOM_CORP_ID: "test-corp",
   WECOM_SECRET: "test-secret",
@@ -147,13 +155,13 @@ test("配置集中列出缺失项且不泄漏已有凭据，父目录可回退�
   );
 });
 
-test("完整三平台上传、分页核对与重跑零重复", async (t) => {
+test("完整五平台九包上传、分页核对与重跑零重复", async (t) => {
   const f = await fixture(t);
   const client = disk();
   const result = await syncWecomRelease({ ...f, client, log() {} });
   assert.equal(result.status, "success");
-  assert.equal(result.files.length, 3);
-  assert.equal(client.initialized, 3);
+  assert.equal(result.files.length, names.length);
+  assert.equal(client.initialized, names.length);
   assert.deepEqual(
     [...client.files.values()].filter((file) => file.file_type === 2).map((file) => file.file_name),
     names,
@@ -177,9 +185,28 @@ test("草稿、缺包、重复包和损坏附件在任何写入前失败", async
     { ...f.release, assets: [...f.release.assets, f.release.assets[0]] },
   ])
     await assert.rejects(syncWecomRelease({ ...f, release, client, log() {} }));
-  await writeFile(join(f.dir, names[2]), "damaged");
+  await writeFile(join(f.dir, names.at(-1)), "damaged");
   await assert.rejects(syncWecomRelease({ ...f, client, log() {} }));
   assert.equal(client.writes, 0);
+});
+
+test("旧三包目录扩为九包，只补六个缺失安装包且保留原文件", async (t) => {
+  const f = await fixture(t);
+  const client = disk();
+  await syncWecomRelease({ ...f, client, log() {} });
+  const previousNames = [names[0], names[2], names[4]];
+  for (const [id, file] of client.files)
+    if (file.file_type === 2 && !previousNames.includes(file.file_name)) client.files.delete(id);
+  const previousFiles = new Map(client.files);
+  const initialized = client.initialized;
+  const result = await syncWecomRelease({ ...f, client, log() {} });
+  assert.equal(client.initialized - initialized, 6);
+  assert.equal(client.files.size, 10);
+  assert.deepEqual(
+    result.files.filter((file) => file.action === "skipped").map((file) => file.name),
+    previousNames,
+  );
+  for (const [id, file] of previousFiles) assert.strictEqual(client.files.get(id), file);
 });
 
 test("丢失创建目录/完成响应时先核对已提交结果，不盲目重复创建", async (t) => {
@@ -187,8 +214,8 @@ test("丢失创建目录/完成响应时先核对已提交结果，不盲目重�
   const client = disk({ loseCreate: true, loseFinish: true });
   const result = await syncWecomRelease({ ...f, client, log() {} });
   assert.equal(result.status, "success");
-  assert.equal(client.initialized, 3);
-  assert.equal(client.files.size, 4);
+  assert.equal(client.initialized, names.length);
+  assert.equal(client.files.size, names.length + 1);
 });
 
 test("部分失败保留成功文件，手动补传只上传缺少文件", async (t) => {
@@ -209,9 +236,9 @@ test("部分失败保留成功文件，手动补传只上传缺少文件", async
   const result = await syncWecomRelease({ ...f, client, log() {} });
   assert.deepEqual(
     result.files.map((file) => file.action),
-    ["skipped", "uploaded", "uploaded"],
+    names.map((_, index) => (index === 0 ? "skipped" : "uploaded")),
   );
-  assert.equal(client.initialized, 3);
+  assert.equal(client.initialized, names.length);
 });
 
 test("远端 SHA 冲突、重复同名和位置错误不视为成功且不覆盖", async (t) => {
@@ -230,7 +257,7 @@ test("远端 SHA 冲突、重复同名和位置错误不视为成功且不覆盖
   await assert.rejects(syncWecomRelease({ ...f, client, log() {} }), /校验/);
 });
 
-test("完整 API 适配链路上传多块文件，分块失败重试后仍是三个完整安装包", async (t) => {
+test("完整 API 适配链路上传多块文件，分块失败重试后仍是九个完整安装包", async (t) => {
   const content = Buffer.alloc(BLOCK_SIZE + 13, 113);
   const f = await fixture(t, content);
   const remote = disk({ loseFinish: true });

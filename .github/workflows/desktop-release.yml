@@ -217,14 +217,8 @@ jobs:
           gh release upload "$tag" release-assets/UWork-* release-assets/uwork-*.json release-assets/SHA256SUMS release-assets/dependency-audit.json --repo "$GITHUB_REPOSITORY" --clobber
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
       # GITHUB_TOKEN 创建的 Release 不会触发 release 事件，显式派发同步工作流。
-      - name: Dispatch the GitLab release sync
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(node -p 'require("./package.json").version')
-          gh workflow run gitlab-release-sync.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f tag="v${version}"
       - name: Dispatch the WeCom release sync
-        # GitLab 派发失败也须尝试微盘；只有本次 Release 已公开且开关启用时才派发。
+        # 只有本次 Release 已公开且开关启用时才派发。
         if: ${{ !cancelled() && steps.publish_release.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}

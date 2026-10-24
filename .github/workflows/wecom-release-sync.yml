@@ -60,7 +60,7 @@ jobs:
           fi
 
   sync:
-    name: Upload and verify DMG, EXE, DEB in WeCom Drive
+    name: Upload and verify all installers in WeCom Drive
     needs: contract
     if: github.event_name == 'workflow_dispatch' || needs.contract.outputs.run_sync == 'yes'
     runs-on: ${{ vars.WECOM_SYNC_RUNNER || 'ubuntu-24.04' }}
@@ -119,7 +119,7 @@ jobs:
           WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
         run: node scripts/wecom-release-proxy.mjs --probe-only
 
-      - name: Download the three release installers with retries
+      - name: Download all release installers with retries
         if: inputs.inspect_only != true && inputs.bootstrap_space != true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -135,9 +135,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/wecom-release-assets"
           node --input-type=module <<'JS' > "$RUNNER_TEMP/wecom-selected-assets.txt"
           import { readFile } from 'node:fs/promises';
-          import { selectGitLabReleaseAssets } from './scripts/sync-gitlab-release.mjs';
+          import { selectWecomReleaseAssets } from './scripts/release-installer-assets.mjs';
           const release = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/wecom-release.json`, 'utf8'));
-          for (const asset of selectGitLabReleaseAssets(release, process.env.RELEASE_TAG).assets) console.log(asset.name);
+          for (const asset of selectWecomReleaseAssets(release, process.env.RELEASE_TAG).assets) console.log(asset.name);
           JS
           while IFS= read -r asset; do
             for attempt in 1 2 3 4; do
@@ -147,7 +147,7 @@ jobs:
             done
           done < "$RUNNER_TEMP/wecom-selected-assets.txt"
 
-      - name: Inspect access or upload and verify the three installers
+      - name: Inspect access or upload and verify all installers
         env:
           WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
           WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}

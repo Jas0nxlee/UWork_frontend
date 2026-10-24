@@ -231,20 +231,16 @@ test("本地附件不完整时完整同步不会写远端", async () => {
   assert.ok(methods.every((x) => x === "GET"));
 });
 
-test("工作流总是下载附件、不检出源码历史，自动入口不暴露强推开关", async () => {
-  const workflow = await readFile(
-    new URL("../../.github/workflows/gitlab-release-sync.yml", import.meta.url),
+test("GitLab 自动同步工作流及桌面派发入口已移除", async () => {
+  await assert.rejects(
+    readFile(new URL("../../.github/workflows/gitlab-release-sync.yml", import.meta.url)),
+    { code: "ENOENT" },
+  );
+  const desktop = await readFile(
+    new URL("../../.github/workflows/desktop-release.yml", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(
-    workflow,
-    /upload_assets:|force_branch:|fetch-tags:|fetch-depth: 0|SYNC_BRANCH:/,
-  );
-  assert.match(workflow, /Download release installers/);
-  assert.match(workflow, /selectGitLabReleaseAssets/);
-  assert.match(workflow, /--pattern "\$asset"/);
-  assert.match(workflow, /cleanup_source:/);
-  assert.match(workflow, /group: gitlab-release-sync\s/);
+  assert.doesNotMatch(desktop, /gitlab-release-sync|Dispatch the GitLab/);
 });
 
 test("21 条资产链接重试读取完整列表，不把第 21 条误判为新增", async () => {

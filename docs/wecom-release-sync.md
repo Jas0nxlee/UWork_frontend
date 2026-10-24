@@ -1,12 +1,14 @@
 # Release 安装包自动同步企业微信微盘
 
-此 workflow 将公开的 GitHub Release 的三个安装包归档到指定微盘文件夹的版本子目录，例如 `UWork/v0.1.2/`：
+此 workflow 将公开的 GitHub Release 中全部五个平台/架构的九个常规安装包归档到指定微盘文件夹的版本子目录，例如 `UWork 发布包/v0.1.2/`：
 
-- `UWork-0.1.2-mac-arm64.dmg`
-- `UWork-0.1.2-win-x64.exe`
-- `UWork-0.1.2-linux-amd64.deb`
+| 平台/架构         | 安装格式                   |
+| ----------------- | -------------------------- |
+| macOS ARM64 / x64 | DMG，各一份                |
+| Windows x64       | EXE                        |
+| Linux x64 / ARM64 | AppImage、DEB、RPM，各三份 |
 
-复用 GitLab 的安装包选择与 SHA-256 校验，不上传 ZIP、其它架构或辅助附件。
+下载和上传共用 `selectWecomReleaseAssets`，所有文件须通过大小及 GitHub SHA-256 校验。不上传 ZIP、`.pkg.tar.zst` 压缩归档、源码、清单或审计附件；任何目标格式缺失或重复都会失败。GitLab 自动同步 workflow 和桌面发布派发入口已移除。
 
 ## 一次性配置
 
@@ -35,7 +37,7 @@
 
 也可以保留 GitHub 托管 Linux runner，通过 `WECOM_PROXY_CONFIG` Secret 配置一个 VLESS Reality 节点。值为单个节点的 JSON 对象（包含 server、port、uuid、flow、tls、servername、reality-opts、client-fingerprint、network、encryption 等字段），不是整份 Clash 配置。必须开启 TLS 且 `skip-cert-verify` 为 `false`；只支持 TCP、Vision 和 chrome 指纹。
 
-代理只解决出口固定问题，实际出口地址仍需添加到企业微信应用的“企业可信 IP”。工作流先运行无凭据出口/连通性探测，通过后才下载三个安装包；上传时重新启动代理，所有企微 token、目录及文件请求都经该出口。GitHub 附件下载不使用该隧道。代理连接失败时停止，不回退直连。
+代理只解决出口固定问题，实际出口地址仍需添加到企业微信应用的“企业可信 IP”。工作流先运行无凭据出口/连通性探测，通过后才下载全部九个安装包；上传时重新启动代理，所有企微 token、目录及文件请求都经该出口。GitHub 附件下载不使用该隧道。代理连接失败时停止，不回退直连。
 
 代理二进制固定为 Mihomo `v1.19.33`，下载后核对仓库代码中的固定 SHA-256。配置仅在运行时随机临时目录中创建（目录 0700、文件 0600），只监听 loopback；成功、失败或取消时删除配置并终止代理。原始节点配置和代理日志不保存到 artifact。
 
@@ -60,16 +62,16 @@
 
 下载元数据、下载每个附件最多尝试 4 次。企微只读和分块请求遇到临时网络问题、超时、HTTP 429/5xx、系统忙/限频最多尝试 4 次，退避 1/2/4 秒；请求超时 60 秒。token 提前刷新，明确失效时额外刷新一次。目录创建、上传初始化及完成提交遇到响应丢失，先回读目标核验，不盲目重发；无法确定结果时失败，可再次补传。
 
-上传前验证三个文件的 GitHub SHA-256 和大小；分块采用官方 2 MiB 累积 SHA 合同。每个文件上传后核对名称、目录、状态、大小和完整 SHA-1；最终再次分页查重和回读。任一冲突、缺包或校验错误阻止成功状态，已完成的安装包保留。
+上传前验证全部九个文件的 GitHub SHA-256 和大小；分块采用官方 2 MiB 累积 SHA 合同。每个文件上传后核对名称、目录、状态、大小和完整 SHA-1；最终再次分页查重和回读。任一冲突、缺包或校验错误阻止成功状态，已完成的安装包保留。
 
-执行时最多并行一个微盘同步 job，不能取消正在执行的版本。请勿让其它自动化同时写入同一发布目录。workflow 失败不会撤回 GitHub Release 或已分发的 GitLab 安装包。
+执行时最多并行一个微盘同步 job，不能取消正在执行的版本。请勿让其它自动化同时写入同一发布目录。workflow 失败不会撤回 GitHub Release。
 
 上传脚本启动后始终保存 `wecom-release-verification-<运行编号>` artifact（7 天），包含成功进度和总状态，不含凭据、上传凭证或内部目录标识。配置检查或 GitHub 下载阶段失败时，上传脚本尚未启动，不生成该报告，查看对应步骤日志。
 
 ## 本地回归
 
 ```sh
-node --test scripts/test/wecom-release-*.test.mjs scripts/test/gitlab-release-*.test.mjs
+node --test scripts/test/wecom-release-*.test.mjs
 pnpm typecheck
 pnpm lint
 pnpm architecture:check --changed
