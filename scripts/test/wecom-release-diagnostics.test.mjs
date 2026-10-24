@@ -34,6 +34,8 @@ test("只读诊断应用、空间、目录，不写远端且不暴露凭据和�
   assert.equal(report.canReadSpace, true);
   assert.deepEqual(report.applications.names, ["Synthetic App"]);
   assert.equal(report.space.name, "Synthetic Space");
+  assert.equal(report.space.identifierType, "string");
+  assert.equal(report.space.identifierMatchesRequest, true);
   assert.equal(report.folderIsSpaceRoot, true);
   const serialized = JSON.stringify(report);
   for (const value of [config.secret, config.corpId, config.space, "agentid", "spaceid"])

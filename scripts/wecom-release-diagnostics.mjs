@@ -28,7 +28,14 @@ export async function inspectWecomAccess({ config, client = createWecomClient({ 
   );
   report.space = await read("new_space_info", { spaceid: config.space }, (data) =>
     typeof data.space_info?.space_name === "string"
-      ? { name: data.space_info.space_name }
+      ? {
+          name: data.space_info.space_name,
+          identifierType: typeof data.space_info.spaceid,
+          identifierMatchesRequest: data.space_info.spaceid === config.space,
+          administratorPermissionValues: [
+            ...new Set((data.space_info.auth_list?.auth_info || []).map((entry) => entry.auth)),
+          ],
+        }
       : undefined,
   );
   report.directory = await read(
@@ -42,7 +49,14 @@ export async function inspectWecomAccess({ config, client = createWecomClient({ 
     },
     (data) =>
       Array.isArray(data.file_list?.item)
-        ? { sampledItemCount: data.file_list.item.length }
+        ? {
+            sampledItemCount: data.file_list.item.length,
+            sampleFieldTypes: data.file_list.item[0]
+              ? Object.fromEntries(
+                  Object.entries(data.file_list.item[0]).map(([key, value]) => [key, typeof value]),
+                )
+              : {},
+          }
         : undefined,
   );
   report.canReadSpace =
