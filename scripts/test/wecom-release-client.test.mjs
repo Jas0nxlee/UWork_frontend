@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWecomClient } from "../wecom-release-client.mjs";
+import { createWecomClient, readWecomFilePage } from "../wecom-release-client.mjs";
 
 const config = { corpId: "private-corp", secret: "private-secret" };
 const response = (data, status = 200) =>
   new Response(JSON.stringify({ errcode: 0, ...data }), { status });
 const issued = (value = "private-token") => response({ access_token: value, expires_in: 7200 });
+
+test("空目录成功响应省略默认字段时归一化，错误类型不伪装为空目录", () => {
+  for (const data of [
+    { errcode: 0 },
+    { errcode: 0, file_list: {} },
+    { errcode: 0, file_list: { item: [] }, has_more: false },
+  ]) {
+    assert.deepEqual(readWecomFilePage(data).items, []);
+    assert.equal(readWecomFilePage(data).hasMore, false);
+  }
+  for (const data of [
+    {},
+    { errcode: 0, file_list: [] },
+    { errcode: 0, file_list: { item: "bad" } },
+    { errcode: 0, has_more: "false" },
+  ])
+    assert.throws(() => readWecomFilePage(data), /响应/);
+});
 
 test("HTTP 429/5xx、系统忙、限频和网络失败可重试且最多四次", async () => {
   for (const failure of [

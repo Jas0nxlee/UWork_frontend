@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { selectGitLabReleaseAssets, validateLocalAssets } from "./sync-gitlab-release.mjs";
 import { blockDigests, fileBlocks } from "./wecom-block-digest.mjs";
-import { createWecomClient } from "./wecom-release-client.mjs";
+import { createWecomClient, readWecomFilePage } from "./wecom-release-client.mjs";
 
 export function resolveWecomConfig(env) {
   const required = ["WECOM_CORP_ID", "WECOM_SECRET", "WECOM_SPACE_ID", "RELEASE_TAG", "ASSET_DIR"];
@@ -34,10 +34,9 @@ async function listFiles(client, config, folder) {
       start,
       limit: 1000,
     });
-    if (!Array.isArray(data.file_list?.item) || typeof data.has_more !== "boolean")
-      throw new Error("微盘目录响应无效");
-    files.push(...data.file_list.item.filter((file) => file.file_status === 1));
-    if (!data.has_more) return files;
+    const page = readWecomFilePage(data);
+    files.push(...page.items.filter((file) => file.file_status === 1));
+    if (!page.hasMore) return files;
     if (
       !Number.isSafeInteger(data.next_start) ||
       data.next_start <= start ||

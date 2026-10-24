@@ -5,6 +5,25 @@ export function isWecomIdentifier(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+export function readWecomFilePage(data) {
+  if (
+    !data ||
+    typeof data !== "object" ||
+    (data.file_list !== undefined &&
+      (!data.file_list || typeof data.file_list !== "object" || Array.isArray(data.file_list))) ||
+    (data.file_list?.item !== undefined && !Array.isArray(data.file_list.item)) ||
+    (data.has_more !== undefined && typeof data.has_more !== "boolean") ||
+    (data.file_list?.item === undefined && data.errcode !== 0)
+  )
+    throw new Error("微盘目录响应无效");
+  // 实际空目录响应会省略空集合及 false 默认值；仅对已确认成功的响应归一化。
+  return {
+    items: data.file_list?.item ?? [],
+    hasMore: data.has_more ?? false,
+    nextStart: data.next_start,
+  };
+}
+
 const TRANSIENT_CODES = new Set([-1, 45009, 45011]);
 const TOKEN_CODES = new Set([40001, 40014, 42001]);
 const REPLAYABLE = new Set([

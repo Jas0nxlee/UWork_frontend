@@ -8,7 +8,11 @@ import {
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createWecomClient, isWecomIdentifier } from "./wecom-release-client.mjs";
+import {
+  createWecomClient,
+  isWecomIdentifier,
+  readWecomFilePage,
+} from "./wecom-release-client.mjs";
 
 const SPACE_NAME = "UWork 发布包";
 
@@ -95,7 +99,11 @@ export async function bootstrapWecomSpace({
   if (config.oldSpace) {
     try {
       const current = await client.request("new_space_info", { spaceid: config.oldSpace });
-      if (current.space_info?.space_name === SPACE_NAME) space = config.oldSpace;
+      if (
+        current.space_info?.space_name === SPACE_NAME &&
+        isWecomIdentifier(current.space_info.spaceid)
+      )
+        space = current.space_info.spaceid;
     } catch (error) {
       // 旧成员空间拒绝是已确认的迁移场景；网络错误不能被当作应再次创建的依据。
       if (![640001, 640008].includes(error.code)) throw error;
@@ -153,8 +161,7 @@ export async function bootstrapWecomSpace({
     start: 0,
     limit: 1,
   });
-  if (!Array.isArray(directory.file_list?.item))
-    throw new Error("新空间根目录回读失败，已保存加密恢复配置");
+  readWecomFilePage(directory);
   return {
     kind: "wecom-space-bootstrap",
     status: "success",

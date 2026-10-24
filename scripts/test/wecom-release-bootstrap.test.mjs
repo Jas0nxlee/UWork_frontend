@@ -114,6 +114,21 @@ test("只允许恢复时，旧空间无权访问也不能再次创建", async ()
   assert.equal(client.calls.filter((x) => x.op === "space_create").length, 0);
 });
 
+test("恢复管理后台内部标识时使用接口返回的 API 标识，不误建空间", async () => {
+  const client = fixture({ newSpace: "opaque-api-space-id" });
+  let handoff;
+  const report = await bootstrapWecomSpace({
+    config: { ...config, oldSpace: "native-internal-id", reuseOnly: true },
+    client,
+    saveHandoff: async (value) => {
+      handoff = value;
+    },
+  });
+  assert.equal(report.action, "reused");
+  assert.equal(decryptHandoff(handoff).space, "opaque-api-space-id");
+  assert.equal(client.calls.filter((x) => x.op === "space_create").length, 0);
+});
+
 test("应用仅允许显式成员时不查询未授权根部门，按可见账号查找管理员", async () => {
   const client = fixture({ explicitUsers: true });
   const report = await bootstrapWecomSpace({ config, client, saveHandoff: async () => {} });

@@ -2,7 +2,11 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveWecomConfig } from "./sync-wecom-release.mjs";
-import { createWecomClient, isWecomIdentifier } from "./wecom-release-client.mjs";
+import {
+  createWecomClient,
+  isWecomIdentifier,
+  readWecomFilePage,
+} from "./wecom-release-client.mjs";
 
 export async function inspectWecomAccess({ config, client = createWecomClient({ config }) }) {
   const report = {
@@ -47,17 +51,17 @@ export async function inspectWecomAccess({ config, client = createWecomClient({ 
       start: 0,
       limit: 1,
     },
-    (data) =>
-      Array.isArray(data.file_list?.item)
-        ? {
-            sampledItemCount: data.file_list.item.length,
-            sampleFieldTypes: data.file_list.item[0]
-              ? Object.fromEntries(
-                  Object.entries(data.file_list.item[0]).map(([key, value]) => [key, typeof value]),
-                )
-              : {},
-          }
-        : undefined,
+    (data) => {
+      const page = readWecomFilePage(data);
+      return {
+        sampledItemCount: page.items.length,
+        sampleFieldTypes: page.items[0]
+          ? Object.fromEntries(
+              Object.entries(page.items[0]).map(([key, value]) => [key, typeof value]),
+            )
+          : {},
+      };
+    },
   );
   report.canReadSpace =
     report.targetFormatValid && report.space.code === 0 && report.directory.code === 0;
