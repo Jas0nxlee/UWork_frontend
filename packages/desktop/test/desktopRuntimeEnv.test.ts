@@ -11,6 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+beforeEach(() => vi.stubGlobal("__UWORK_LOCAL_DEVELOPMENT_BUILD__", false));
+afterAll(() => vi.unstubAllGlobals());
+
 const appMock = {
   isPackaged: false,
   getPath: vi.fn((name: string) => `/mock/${name}`),
@@ -652,6 +655,32 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
     expect(env.NODE_ENV).toBeUndefined();
     expect(env.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL).toBeUndefined();
   });
+
+  it.skipIf(process.platform !== "darwin")(
+    "明确编译的本地开发包使用随包DevHelper和隔离组件目录，业务数据路径不变",
+    async () => {
+      appMock.isPackaged = true;
+      productFlavorMock.value = "production";
+      vi.stubGlobal("__UWORK_LOCAL_DEVELOPMENT_BUILD__", true);
+      Object.defineProperty(process, "resourcesPath", {
+        value: "/mock/resources",
+        configurable: true,
+      });
+      const runtime = await import("../src/main/desktopRuntimeEnv.js");
+      const env = runtime.buildHostProcessEnv({
+        ZCODE_CUA_BUNDLED_HELPER_APP_PATH: "/tmp/untrusted.app",
+      });
+      expect(env.ZCODE_RUNTIME_ENV).toBe("production");
+      expect(env.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL).toBe("1");
+      expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe(
+        join("/mock/resources", "cua-helper", "ZCode Computer Use Dev.app"),
+      );
+      expect(env.ZCODE_CUA_HELPER_INSTALL_VARIANT).toBe("local-development");
+      expect(env.ZCODE_STORAGE_DIR).toBe(join("/mock/db", ".uwork"));
+      expect(runtime.runtimeApplicationName).toBe("UWork Local Development");
+      expect(runtime.runtimeUserDataPath).toBe(join("/mock/appData", "UWork"));
+    },
+  );
 
   it("打包 Preview 向 Host 传递 UWork 数据根且不新建 storage profile", async () => {
     appMock.isPackaged = true;

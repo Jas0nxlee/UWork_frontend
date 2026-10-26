@@ -43,6 +43,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm architecture:check
+      - name: Validate Computer Use runtime and explicit local build isolation
+        run: >-
+          pnpm exec vitest run
+          packages/zcode-cua
+          packages/desktop/test/desktopLocalDevelopmentBuild.test.ts
+          packages/desktop/test/desktopRuntimeEnv.test.ts
+          packages/desktop/test/desktopLocalDevelopmentInstaller.test.ts
+          packages/desktop/test/desktopPlatformCuaCancellation.test.ts
       - name: Validate focused desktop release regressions
         run: >-
           pnpm exec vitest run

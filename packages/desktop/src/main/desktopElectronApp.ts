@@ -1,12 +1,16 @@
 import { app } from "electron";
 import { getAppConfigDir } from "@zcode/services/node";
 
+declare const __UWORK_LOCAL_DEVELOPMENT_BUILD__: boolean | undefined;
+
+// 仅编译期事实；正式包固定 false，不能读取用户机器的 profile 环境来放宽 Helper 验证。
+export const isLocalDevelopmentDesktopBuild =
+  typeof __UWORK_LOCAL_DEVELOPMENT_BUILD__ === "boolean" && __UWORK_LOCAL_DEVELOPMENT_BUILD__;
+
 export type ElectronAppPathName = "appData" | "userData";
 
 export function isElectronAppPackaged(): boolean {
-  return (
-    (app as unknown as { isPackaged?: boolean } | undefined)?.isPackaged === true
-  );
+  return (app as unknown as { isPackaged?: boolean } | undefined)?.isPackaged === true;
 }
 
 export function getElectronAppPath(name: ElectronAppPathName): string {

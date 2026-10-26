@@ -47,7 +47,11 @@ async function fixture(
     resolve(repositoryRoot, "packages/desktop/electron-builder.config.js"),
     resolve(desktop, "electron-builder.config.js"),
   );
-  for (const file of ["target-platform.mjs", "desktop-product-identity.mjs"]) {
+  for (const file of [
+    "target-platform.mjs",
+    "desktop-product-identity.mjs",
+    "desktop-build-profile.mjs",
+  ]) {
     await mkdir(resolve(desktop, "scripts"), { recursive: true });
     await copyFile(
       resolve(repositoryRoot, "packages/desktop/scripts", file),

@@ -25,14 +25,19 @@ import {
 const runFile = promisify(execFile);
 const installers = new Map();
 const normalizeArch = (arch) => ({ x86_64: "x64", amd64: "x64", aarch64: "arm64" })[arch] ?? arch;
+// 正式 Desktop 编译为 false，运行时环境不能打开例外；未打包源码保留显式 dev 流程。
+const compiledLocalDevelopmentBuild =
+  typeof __UWORK_LOCAL_DEVELOPMENT_BUILD__ === "boolean"
+    ? __UWORK_LOCAL_DEVELOPMENT_BUILD__
+    : undefined;
 
 export function isCuaLocalDevelopmentRuntime(
   env = process.env,
-  compiledLocalDevelopmentRuntime = true,
+  compiledLocalDevelopmentRuntime = compiledLocalDevelopmentBuild ?? true,
 ) {
   return (
     compiledLocalDevelopmentRuntime &&
-    env.ZCODE_RUNTIME_ENV !== "production" &&
+    (compiledLocalDevelopmentBuild === true || env.ZCODE_RUNTIME_ENV !== "production") &&
     env.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL === "1"
   );
 }

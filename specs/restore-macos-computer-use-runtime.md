@@ -89,6 +89,19 @@ sequenceDiagram
 
 遵守现有中文根因注释、异步 IO、包公开入口与 logger 规则；不扩大 UI 能力宣称。Windows/Linux 继续按各自明确能力返回，不用 macOS 运行时假装其他平台已通过验收。
 
+## 明确标识的本地开发安装包
+
+2026-10-26 用户授权在本机替换应用，并明确选择本地开发版，允许跳过 Helper 的有效 Developer ID / Gatekeeper 验证以启用真实控制。该例外是单独的编译档位，正式包继续严格校验。
+
+- 唯一构建选择器为 `UWORK_DESKTOP_BUILD_PROFILE=local-development`，默认值 `release`；非法拼写拒绝。Main、Host、renderer、About 元数据和打包资源必须消费同一档位，不允许由安装后环境切换。
+- 本地开发包的显示名称为 `UWork Local Development`，版本附加 `-local-development`；保持原 appId、协议、业务数据根、会话与用户配置路径。仅 Helper 的安装 variant 固定为 `local-development`，避免与正式运行组件互相覆盖。
+- Main / Host 编译常量 `__UWORK_LOCAL_DEVELOPMENT_BUILD__` 只有本地开发档位为 true。正式包编译为 false，即使继承 unsigned、profile、runtime 或外置 Helper 路径变量，也不得开启签名例外。
+- 本地开发包只使用自己随包携带的 `ZCode Computer Use Dev.app`；构建必须核对其 manifest `development=true` 与开发 bundle id，拒绝正式 Helper / 开发 Helper 混配。正式包继续携带并要求 `development=false` 的正式 Helper。
+- Main 的安装桥与 Host 环境均只在该编译档位注入固定 dev Helper 路径和 `ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL=1`；既有未打包源码显式开发流程继续可用。开发 Helper 仍需编译 development=true 且显式携带既有两个 argv，才允许本地开发 peer。
+- 安装器开发例外跳过有效 Team / Gatekeeper 要求，但仍校验 bundle id、架构、完整 ad-hoc 资源签名、目录及 symlink 边界、来源与内容摘要。token、私有 socket、会话隔离、主任务和本地 workspace admission 不变，不放松正式 Helper / native peer 的策略。
+- 本地开发档位关闭自动更新，构建只生成本地 App，不推送发布或改变系统 TCC；系统权限仍由用户授予。安装位置可以替换 `/Applications/UWork.app`，bundle 内显示身份保持本地开发标识。
+- 验收包括编译 release 对伪造环境拒绝、local-development 对固定 dev Helper 接纳、拒绝混配、未打包 dev 保持、App / About 标识以及业务数据路径不变；最终独立 Helper 与客户端真实链路验证单独记录。
+
 ## 实施与验收
 
 1. 先补 broker 鉴权、权限快照、会话隔离/stop 的失败用例，再恢复运行时；运行选定测试，不运行全量根套件。
@@ -97,3 +110,12 @@ sequenceDiagram
 4. 使用隔离测试数据执行一条无破坏性的真实应用观察/输入回读；若受系统用户授权限制，明确记录边界。
 5. 执行 `pnpm architecture:check --changed`、相关聚焦单测、桌面 E2E、`pnpm typecheck`、`pnpm lint`。按实际结果报告，不把本机 ad-hoc 构建当成已签名发行验收。
 6. 最后检查安装包确实带 Helper/驱动/许可证，并从随包路径启动验证。发布另行进行。
+7. PR 检查执行 CUA runtime 和本地开发档位的聚焦回归，保护正式编译拒绝运行时污染、随包 Helper 档位匹配、Host 环境与权限取消桥接；原生链路脚本只在 macOS 显式运行，不以 Linux 单测代替真机验证。
+
+## 真实 CLI 链路验收
+
+`scripts/test/native-cua-client-smoke.mjs` 使用已构建 CLI 的 `__zcode-plugin-host`、实际 node_repl MCP bundle、官方 SDK、Host 仅连接发现的 broker 与真实 development Helper。先验证普通 JS / subagent / remote 调用不启动 Helper，再通过可信 MCP namespace 的本地主会话 metadata 枚举应用，只输出应用数量。脚本可指定最终 App 内的 Agent、Node 和 Helper 路径，不以直接调用 Helper 或 mock runtime 代替此链路。
+
+运行入口为 `node --import tsx scripts/test/native-cua-client-smoke.mjs`；`tsx` 仅供 harness 解析 workspace 公开的 TypeScript 入口，启动的 CLI 与 node_repl 使用实际构建 bundle，不加载该 loader。
+
+此验收不发起模型请求、不截图、不发送输入、不修改 TCC；可信 metadata 由测试 harness 提供，因此不能冒称完整 Agent 决策、用户授权或真实输入回读验收。临时数据、broker 与测试 Helper 会话在结束时清理。

@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { isLocalDevelopmentBuild } from "../packages/desktop/scripts/desktop-build-profile.mjs";
 
 const exec = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -331,7 +332,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const args = process.argv.slice(2);
   const valueAfter = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
   const result = await buildCuaHelperApp({
-    development: args.includes("--allow-unsigned-launcher-local-dev"),
+    development: args.includes("--allow-unsigned-launcher-local-dev") || isLocalDevelopmentBuild(),
     version: valueAfter("--version"),
     arch: valueAfter("--arch"),
   });
