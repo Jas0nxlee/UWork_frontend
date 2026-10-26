@@ -1,27 +1,13 @@
-# GitHub Release 同步到 GitLab
+# GitLab Release 手动附件工具
 
-工作流见 `.github/workflows/gitlab-release-sync.yml`，完整产品规则与验收见 [同步 spec](../specs/gitlab-release-sync.md)。
+2026-10-24 已按要求移除 GitLab 同步 workflow 及桌面发布中的派发入口。GitHub Release 不再自动同步到 GitLab，现有远端 Release 和包继续保留。自动分发现在使用[微盘同步](wecom-release-sync.md)。
 
-## 当前同步内容
+仓库保留 `scripts/sync-gitlab-release.mjs` 及其客户端、元数据工具和回归测试，供显式人工调用。手动工具仍只选择 macOS ARM64 DMG、Windows x64 EXE、Linux amd64 DEB，验证大小及 SHA-256，将附件上传至 Generic Package Registry，发布标签仅引用独立元数据根提交。调用方负责下载同一选择器返回的附件并串行执行，不提供 GitHub Actions 触发入口。
 
-GitLab 只分发当前版本三个安装文件：
+手动工具读取 `GITLAB_TOKEN`、`RELEASE_TAG`、`RELEASE_JSON`、`ASSET_DIR`，可使用 `GITLAB_BASE_URL`、`GITLAB_PROJECT_PATH`、`GITLAB_PUSH_URL` 指定目标；`INSPECT_ONLY=true` 为只读检查。不要在命令、日志或仓库中保存真实凭据。既有源码迁移功能仅在显式 `CLEANUP_SOURCE` 下运行，默认关闭；本次停用不执行迁移或远端清理。
 
-- `UWork-<version>-mac-arm64.dmg`：macOS Apple Silicon。
-- `UWork-<version>-win-x64.exe`：Windows x64。
-- `UWork-<version>-linux-amd64.deb`：Linux / Ubuntu x64。
+完整合同见[手动工具 spec](../specs/gitlab-release-sync.md)。回归命令：
 
-工作流通过 `selectGitLabReleaseAssets` 精确选择并下载，脚本用同一名单校验、上传和创建下载链接。缺失或重复任一目标、大小或 SHA-256 不一致时失败，不回退到 ZIP。GitLab 的文件链接全部指向 Generic Package Registry；保留 GitHub Release 来源页面链接。GitHub 自身继续发布全部五平台产物、安装格式、审计和摘要。
-
-不推送应用源码、源码标签或源码分支。GitLab 发布标签引用单 README、无父提交的独立 `release-metadata` 根提交。正常同步不删除历史发布和人工链接，不移动已有标签。一次性源码清理仅保留显式 `cleanup_source` 迁移入口，自动发布关闭。
-
-## 配置和触发
-
-- GitHub Actions secret：`GITLAB_TOKEN`，需具备 `api` 与创建独立元数据引用所需的 `write_repository` 权限。
-- 仓库变量：`GITLAB_BASE_URL`、`GITLAB_PROJECT_PATH`、可选的 `GITLAB_PUSH_URL` 和 `GITLAB_SYNC_RUNNER`；默认目标以脚本为准。
-- 手工公开 Release 通过 `release: published` 触发；发布流水线公开 Release 后显式派发，避免 `GITHUB_TOKEN` 不触发后续事件。
-- 可手工派发并指定 tag 重跑；`inspect_only` 为只读检查。工作流不再提供 `upload_assets`、`force_branch` 或源码分支选项。
-- 所有版本共用项目级 concurrency，避免元数据根初始化和附件同步竞态。失败时按同一 tag 重跑，已匹配的包文件和链接幂等跳过。
-
-## 验证
-
-`node --test scripts/test/gitlab-release-*.test.mjs` 验证三个安装文件的选择、缺失/重复拒绝、包校验、链接分页和源码隔离。运行报告保留前后引用及实际上传文件清单。
+```sh
+node --test scripts/test/gitlab-release-*.test.mjs
+```

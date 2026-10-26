@@ -1,0 +1,184 @@
+name: Sync release to WeCom Drive
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to backfill (defaults to latest published release)
+        required: false
+        type: string
+      inspect_only:
+        description: Read application and target space permissions without downloading or uploading installers
+        type: boolean
+        default: false
+      bootstrap_space:
+        description: Explicit one-time creation of the application-owned release space and its administrator
+        type: boolean
+        default: false
+      bootstrap_public_key:
+        description: Base64 PEM RSA public key for encrypted target handoff (bootstrap only)
+        required: false
+        type: string
+      bootstrap_reuse_only:
+        description: Bootstrap recovery must only reuse the configured application space and never create another
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wecom-release-sync
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Validate installer sync contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      run_sync: ${{ steps.gate.outputs.run_sync }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: node --test scripts/test/wecom-release-*.test.mjs
+      - name: Resolve automatic sync gate
+        id: gate
+        env:
+          SYNC_ENABLED: ${{ vars.WECOM_SYNC_ENABLED || secrets.WECOM_SYNC_ENABLED }}
+        run: |
+          # Secrets 不能用于 job if；只传固定控制结果，不传出开关原值。
+          if [[ "$SYNC_ENABLED" == true ]]; then
+            echo 'run_sync=yes' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run_sync=no' >> "$GITHUB_OUTPUT"
+          fi
+
+  sync:
+    name: Upload and verify all installers in WeCom Drive
+    needs: contract
+    if: github.event_name == 'workflow_dispatch' || needs.contract.outputs.run_sync == 'yes'
+    runs-on: ${{ vars.WECOM_SYNC_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Resolve the published release tag
+        id: options
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$EVENT_TAG}"
+          if [[ -z "$tag" ]]; then
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          if [[ ! "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'A stable Release tag is required' >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check required WeCom settings
+        env:
+          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
+          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
+          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
+          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
+          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
+          WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
+          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
+          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
+          RELEASE_TAG: ${{ steps.options.outputs.tag }}
+          ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
+        run: |
+          node --input-type=module <<'JS'
+          import { resolveWecomConfig } from './scripts/sync-wecom-release.mjs';
+          import { resolveBootstrapConfig } from './scripts/wecom-release-bootstrap.mjs';
+          try {
+            if (process.env.WECOM_BOOTSTRAP_SPACE === 'true') resolveBootstrapConfig(process.env);
+            else resolveWecomConfig(process.env);
+          }
+          catch (error) { console.error(error.message); process.exitCode = 1; }
+          JS
+
+      - name: Check fixed proxy egress before downloading installers
+        env:
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+        run: node scripts/wecom-release-proxy.mjs --probe-only
+
+      - name: Download all release installers with retries
+        if: inputs.inspect_only != true && inputs.bootstrap_space != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.options.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # 元数据读取和附件下载都允许重试；任何失败都阻止目标微盘写入。
+          for attempt in 1 2 3 4; do
+            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/wecom-release.json"; then break; fi
+            if [[ "$attempt" == 4 ]]; then exit 1; fi
+            sleep "$((2 ** attempt))"
+          done
+          mkdir -p "$RUNNER_TEMP/wecom-release-assets"
+          node --input-type=module <<'JS' > "$RUNNER_TEMP/wecom-selected-assets.txt"
+          import { readFile } from 'node:fs/promises';
+          import { selectWecomReleaseAssets } from './scripts/release-installer-assets.mjs';
+          const release = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/wecom-release.json`, 'utf8'));
+          for (const asset of selectWecomReleaseAssets(release, process.env.RELEASE_TAG).assets) console.log(asset.name);
+          JS
+          while IFS= read -r asset; do
+            for attempt in 1 2 3 4; do
+              if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/wecom-release-assets" --pattern "$asset" --clobber; then break; fi
+              if [[ "$attempt" == 4 ]]; then exit 1; fi
+              sleep "$((2 ** attempt))"
+            done
+          done < "$RUNNER_TEMP/wecom-selected-assets.txt"
+
+      - name: Inspect access or upload and verify all installers
+        env:
+          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
+          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
+          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
+          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
+          BOOTSTRAP_HANDOFF: ${{ runner.temp }}/wecom-encrypted-target.json
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
+          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
+          WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
+          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
+          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
+          RELEASE_TAG: ${{ steps.options.outputs.tag }}
+          RELEASE_JSON: ${{ runner.temp }}/wecom-release.json
+          ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
+          SYNC_REPORT: ${{ runner.temp }}/wecom-release-verification.json
+        run: node scripts/wecom-release-proxy.mjs
+
+      - name: Preserve the verification and partial progress report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wecom-release-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/wecom-release-verification.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Preserve encrypted bootstrap configuration handoff
+        if: always() && inputs.bootstrap_space == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wecom-encrypted-target-${{ github.run_id }}
+          path: ${{ runner.temp }}/wecom-encrypted-target.json
+          if-no-files-found: ignore
+          retention-days: 1
