@@ -368,5 +368,29 @@
     "roots": ["plugins/office-editor/ui/vendor/jszip.min.js"],
     "scope": "Pako-derived portions embedded in the unmodified JSZip browser bundle only.",
     "license": "MIT"
+  },
+  {
+    "id": "zcode-ce-cua-protocol-adapter",
+    "referenceRevision": "7fc3bfe252e7fb1833dc06113e3c2c012910996d",
+    "importRevision": "7fc3bfe252e7fb1833dc06113e3c2c012910996d",
+    "source": "https://github.com/Zcode-CE/Zcode-CE/blob/7fc3bfe252e7fb1833dc06113e3c2c012910996d/LICENSE",
+    "file": "third-party/upstream/606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b.txt",
+    "sha256": "606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b",
+    "roots": [
+      "packages/zcode-cua/cua-driver-actions.js",
+      "packages/zcode-cua/cua-driver-apps.js",
+      "packages/zcode-cua/cua-driver-errors.js",
+      "packages/zcode-cua/cua-driver-runtime.js",
+      "packages/zcode-cua/cua-driver-targets.js"
+    ],
+    "modifiedFiles": [
+      "packages/zcode-cua/cua-driver-actions.js",
+      "packages/zcode-cua/cua-driver-apps.js",
+      "packages/zcode-cua/cua-driver-errors.js",
+      "packages/zcode-cua/cua-driver-runtime.js",
+      "packages/zcode-cua/cua-driver-targets.js"
+    ],
+    "scope": "Public CUA protocol translation only, adapted for an authenticated independent macOS Helper; no CE Host admission bypass is included.",
+    "license": "Apache-2.0"
   }
 ]

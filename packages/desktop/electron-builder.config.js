@@ -27,7 +27,7 @@ import {
   isSharpRequiredByComputerUse,
   verifyStagedSharp,
 } from "./scripts/sharp-package-assets.mjs";
-import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
+import { isComputerUseProducerSupported } from "./scripts/computer-use-producer.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
   finalizePackagedWindowsCuaHelper,
@@ -86,7 +86,10 @@ const hasMobileRemoteControlConfig = await access(mobileRemoteControlConfigPath)
   () => false,
 );
 // Computer Use Helper（macOS .app、Windows runtime）只随真实 producer 打包；开源占位包下跳过随包资源与校验。
-const shouldPackageComputerUseHelper = isRealComputerUseProducerInstalled({ desktopPackageRoot });
+const shouldPackageComputerUseHelper = isComputerUseProducerSupported({
+  desktopPackageRoot,
+  platform: targetPlatform.os,
+});
 const HELPER_FILENAME = "zcode-browser-import-helper.exe";
 const runtimeModuleLookupRoots = [
   desktopPackageRoot,
@@ -460,6 +463,7 @@ function assertPackagedCuaSharp(context) {
 
 function assertPackagedCuaKoffi(context) {
   const problems = verifyStagedKoffi({
+    desktopPackageRoot,
     resourcesDir: resolvePackagedResourcesDir(context),
     targetPlatform,
   });

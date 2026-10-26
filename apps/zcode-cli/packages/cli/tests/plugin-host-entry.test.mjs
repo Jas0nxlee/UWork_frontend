@@ -35,14 +35,26 @@ for (const minify of [false, true]) {
       await writeFile(
         serverPath,
         `const socketVisibleAtImport = process.env.ZCODE_CUA_PERMISSION_BROKER_SOCKET !== undefined;
-export async function main() {
+const authorityVisibleAtImport = process.env.ZCODE_CUA_PLUGIN_AUTHORITY !== undefined;
+let mainSnapshot;
+process.once("beforeExit", () => {
   process.stdout.write(JSON.stringify({
+    ...mainSnapshot,
+    socketVisibleAfterMain: process.env.ZCODE_CUA_PERMISSION_BROKER_SOCKET !== undefined,
+    authorityVisibleAfterMain: process.env.ZCODE_CUA_PLUGIN_AUTHORITY !== undefined,
+  }));
+});
+export async function main() {
+  mainSnapshot = {
     args: process.argv.slice(2),
     nodeEnvRemoved: process.env.NODE_ENV === undefined,
     socketVisibleAtImport,
+    authorityVisibleAtImport,
     socketVisibleAtMain: process.env.ZCODE_CUA_PERMISSION_BROKER_SOCKET !== undefined,
+    authorityVisibleAtMain: process.env.ZCODE_CUA_PLUGIN_AUTHORITY !== undefined,
+    authorityMatchesExpectedAtMain: process.env.ZCODE_CUA_PLUGIN_AUTHORITY === "test-official-authority",
     tokenVisibleAtMain: process.env.ZCODE_CUA_PERMISSION_BROKER_TOKEN !== undefined,
-  }));
+  };
 }`,
       );
       await build({
@@ -85,8 +97,13 @@ export async function main() {
         args: ["--prompt", "plugin argument"],
         nodeEnvRemoved: true,
         socketVisibleAtImport: false,
+        authorityVisibleAtImport: false,
         socketVisibleAtMain: false,
+        authorityVisibleAtMain: false,
+        authorityMatchesExpectedAtMain: false,
         tokenVisibleAtMain: false,
+        socketVisibleAfterMain: false,
+        authorityVisibleAfterMain: false,
       });
 
       const brokerSocket = join(directory, "broker.sock");
@@ -97,8 +114,8 @@ export async function main() {
         ZCODE_CUA_PERMISSION_BROKER_SOCKET: brokerSocket,
         ZCODE_CUA_PERMISSION_BROKER_TOKEN: "test-scoped-token",
         ZCODE_CUA_PLUGIN_AUTHORITY: "test-official-authority",
-        // broker 已改身份模式（Helper 按对端代码签名裁决连接），凭据组只剩 socket +
-        // pluginAuthority；captured 凭据只允许启动 shared node_repl 宿主，由这个标记声明。
+        // socket + authority 是当前定向 bearer，Helper 同时校验真实对端；旧 TOKEN 不得恢复。
+        // captured 凭据只允许启动 shared node_repl 宿主，由这个标记声明。
         ZCODE_CUA_NODE_REPL_HOST: "1",
       };
       const authorized = await execFileAsync(
@@ -113,9 +130,14 @@ export async function main() {
         // socket 被 sanitize 收进 capture，插件模块求值时读不到；只有 plugin host 在
         // 确认是可信 node_repl 宿主后才恢复到 env，供 broker bridge 读取。
         socketVisibleAtImport: false,
+        authorityVisibleAtImport: false,
         socketVisibleAtMain: true,
+        authorityVisibleAtMain: true,
+        authorityMatchesExpectedAtMain: true,
         // token 已从凭据组删除，宿主不再恢复它。
         tokenVisibleAtMain: false,
+        socketVisibleAfterMain: false,
+        authorityVisibleAfterMain: false,
       });
 
       // 非 node_repl 宿主必须在插件 import 前被拒绝，不能因入口提前分流绕过产品鉴权。

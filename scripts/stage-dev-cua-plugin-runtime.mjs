@@ -1,7 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { isRealComputerUseProducerInstalled } from "../packages/desktop/scripts/computer-use-producer.mjs";
-import { stageSharpIntoBundledAgents } from "../packages/desktop/scripts/sharp-package-assets.mjs";
+import {
+  isSharpRequiredByComputerUse,
+  stageSharpIntoBundledAgents,
+} from "../packages/desktop/scripts/sharp-package-assets.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -15,6 +18,9 @@ export function stageDevCuaPluginRuntime({
   if (env.ZCODE_CUA_DEV_MODE !== "1") return [];
   // 开源占位包不提供 Computer Use 原生能力，也不随附 Sharp：没有真实 producer 时不暂存。
   if (!isRealComputerUseProducerInstalled({ desktopPackageRoot })) return [];
+  // 独立 Helper 已拥有驱动与图像处理；不能把“真实 producer”误当成依赖 Sharp。
+  // 与正式打包共用清单依赖判定，避免源码 Agent 构建仍查找已不需要的旧原生包。
+  if (!isSharpRequiredByComputerUse({ desktopPackageRoot })) return [];
 
   const manifestPath = resolve(pluginRoot, ".zcode-plugin", "plugin.json");
   if (!existsSync(manifestPath)) {

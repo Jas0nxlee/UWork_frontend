@@ -17,6 +17,8 @@ import {
   isReviewedLegacyLicense,
   isReviewedBundledFontLicense,
   legacyLicenseIdentifier,
+  isMplWithPermissiveConjunction,
+  isReviewedCuaDriverLicense,
 } from "./license-identifiers.mjs";
 import { readFile } from "node:fs/promises";
 import {
@@ -80,6 +82,7 @@ function classify(raw) {
     .map((x) => x.trim())
     .filter(Boolean);
   if (and.length > 1 && and.every((x) => GREEN.test(x))) return "green";
+  if (isMplWithPermissiveConjunction(s)) return "yellow-weak";
   const t = or[0] || and[0] || s;
   if (/\bAGPL/i.test(t)) return "red-agpl";
   if (/\bLGPL/i.test(t)) return "yellow-lgpl";
@@ -109,6 +112,8 @@ const PROD_REVIEWED = [
 ];
 function weakAllowReason(r) {
   if (r.isProd) {
+    if (r.bucket === "yellow-weak" && isReviewedCuaDriverLicense(r))
+      return "固定版 CUA/UBJS 原生运行时；原始声明、完整许可和固定发布源码链接随包保留";
     for (const [re, bucket, why] of PROD_REVIEWED)
       if (re.test(r.name) && r.bucket === bucket) return why;
     return null;

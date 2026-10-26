@@ -67,7 +67,7 @@ async function fixture(
     "packages/desktop/scripts/packaged-sourcemap-cleanup.mjs": `export const cleanupPackagedSourcemaps = async () => {};`,
     "packages/desktop/scripts/powershell-command.mjs": `export const createWindowsPowerShellSecurityArgs = () => [];`,
     "packages/desktop/scripts/sharp-package-assets.mjs": `export const isSharpRequiredByComputerUse = () => false; export const verifyStagedSharp = () => [];`,
-    "packages/desktop/scripts/computer-use-producer.mjs": `export const isRealComputerUseProducerInstalled = () => ${JSON.stringify(cua)};`,
+    "packages/desktop/scripts/computer-use-producer.mjs": `export const isRealComputerUseProducerInstalled = () => ${JSON.stringify(cua)}; export const isComputerUseProducerSupported = () => ${JSON.stringify(cua)};`,
     "packages/desktop/scripts/koffi-package-assets.mjs": `export const verifyStagedKoffi = () => [];`,
     "packages/desktop/scripts/windows-cua-helper-assets.mjs": `
       import { writeFile } from "node:fs/promises";

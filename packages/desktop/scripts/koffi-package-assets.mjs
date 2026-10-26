@@ -5,6 +5,14 @@
 // node_modules, so keep only the target binary beside the plugin.
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { readComputerUseProducer } from "./computer-use-producer.mjs";
+
+export function isKoffiRequiredByComputerUse({ desktopPackageRoot }) {
+  const { manifest } = readComputerUseProducer({ desktopPackageRoot });
+  return ["dependencies", "optionalDependencies", "peerDependencies"].some(
+    (field) => typeof manifest?.[field]?.koffi === "string",
+  );
+}
 
 function resolveKoffiRoot(koffiPackageRoot) {
   const candidates = [
@@ -37,11 +45,22 @@ function koffiPlatformKey(targetPlatform) {
   return `${targetPlatform.os}_${targetPlatform.arch}`;
 }
 
-export function stageKoffiIntoBundledAgents({ koffiPackageRoot, glmDir, targetPlatform }) {
+export function stageKoffiIntoBundledAgents({
+  koffiPackageRoot,
+  glmDir,
+  targetPlatform,
+  desktopPackageRoot,
+}) {
   if (!koffiPackageRoot || !glmDir || !targetPlatform?.os || !targetPlatform?.arch) {
     throw new Error(
       "[koffi-package-assets] koffiPackageRoot, glmDir and targetPlatform are required",
     );
+  }
+  if (desktopPackageRoot && !isKoffiRequiredByComputerUse({ desktopPackageRoot })) {
+    // 原因：真实 producer 不等于需要 Koffi。公开 driver 的原生运行时只在独立 Helper 内，
+    // 同时移除先前构建遗留的该插件 FFI，防止“跳过暂存”仍把旧二进制带进产品。
+    rmSync(resolve(glmDir, "node_modules", "koffi"), { recursive: true, force: true });
+    return undefined;
   }
   const sourceRoot = resolveKoffiRoot(koffiPackageRoot);
   const platformKey = koffiPlatformKey(targetPlatform);
@@ -69,7 +88,9 @@ export function verifyStagedKoffi({
   resourcesDir,
   targetPlatform,
   pluginRelativePath = "packages/zcode-cua-plugin",
+  desktopPackageRoot,
 }) {
+  if (desktopPackageRoot && !isKoffiRequiredByComputerUse({ desktopPackageRoot })) return [];
   const platformKey = koffiPlatformKey(targetPlatform);
   const koffiRoot = resolve(resourcesDir, "glm", pluginRelativePath, "node_modules", "koffi");
   const nativePath = resolve(koffiRoot, "build", "koffi", platformKey, "koffi.node");

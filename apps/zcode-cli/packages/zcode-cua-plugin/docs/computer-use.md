@@ -1,5 +1,17 @@
 # Computer Use
 
+## UWork implementation scope
+
+The current local macOS runtime runs the open-source CUA driver inside an
+independent Helper.app. It supports observation/screenshots, AX-index clicks,
+plain text/value input, scrolling and basic key chords after user-granted system
+permissions. Coordinate actions/dragging, rich paste, text selection, held-key
+duration and secondary actions are unavailable. The SDK shapes below are retained
+for compatibility; these operations return explicit unavailable errors. Do not
+retry them or switch automation technologies. Prefer a fresh AX element index,
+`setValue`, `typeText` or a basic key chord. Windows/Linux, remote workspaces and
+subagent control are not provided by this implementation.
+
 Fetch this reference on demand with
 `nodeRepl.write(await agent.documentation.get("computer-use"))`. It largely repeats
 the resident Computer Use skill, so read it only when you need an argument shape or

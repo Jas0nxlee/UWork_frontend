@@ -821,6 +821,30 @@ modules:
     layers:
       adapters: .
     owner: messaging
+  # cua-runtime：由 architecture:adopt 登记
+  - id: cua-runtime
+    roots:
+      - packages/zcode-cua
+    managed: true
+    requires: [shared]
+    publicEntrypoints:
+      - packages/zcode-cua/index.js
+      - packages/zcode-cua/broker.js
+      - packages/zcode-cua/broker-server.js
+      - packages/zcode-cua/broker-ports.js
+      - packages/zcode-cua/broker-helper-health.js
+      - packages/zcode-cua/broker-helper-constants.js
+      - packages/zcode-cua/broker-socket-path.js
+      - packages/zcode-cua/frame-contract.js
+      - packages/zcode-cua/host-display-contract.js
+      - packages/zcode-cua/pip-session.js
+      - packages/zcode-cua/pip-session-node.js
+      - packages/zcode-cua/request-access-contract.js
+      - packages/zcode-cua/lazy-broker.js
+      - packages/zcode-cua/contract.ts
+    layers:
+      adapters: .
+    owner: desktop
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

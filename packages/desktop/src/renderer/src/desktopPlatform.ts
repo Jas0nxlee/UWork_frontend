@@ -70,6 +70,9 @@ export function createDesktopPlatform(options: {
           window.zcode.openCuaPermissionOnboarding?.(permissionOptions) ??
           Promise.resolve({ success: false, error: "not_supported" })
       : undefined,
+    // 缺少此委托会吞掉设置分区卸载的取消，导致原生面板残留且下一权限加入旧会话。
+    cancelCuaPermissionOnboarding: (operationId) =>
+      window.zcode.cancelCuaPermissionOnboarding?.(operationId),
     prepareCuaHelperPermissionDrag: window.zcode.prepareCuaHelperPermissionDrag
       ? () =>
           window.zcode.prepareCuaHelperPermissionDrag?.() ??

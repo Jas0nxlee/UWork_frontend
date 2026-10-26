@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { isRealComputerUseProducerInstalled } from "../packages/desktop/scripts/computer-use-producer.mjs";
+import { isComputerUseProducerSupported } from "../packages/desktop/scripts/computer-use-producer.mjs";
 import { resolveDevDesktopWindowsCuaEnv } from "./dev-desktop-cua-env.mjs";
 import { withPinnedNodePath } from "./mise-toolchain-env.mjs";
 import { quoteArgsForWindowsShell } from "./spawn-command.mjs";
@@ -18,7 +18,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 // Computer Use Helper 只由真实 producer 提供；开源占位包下不构建 Helper、不注入 Helper 环境。
 // 见 docs/desktop/computer-use-producer-detection.md。
-const hasComputerUseProducer = isRealComputerUseProducerInstalled({
+const hasComputerUseProducer = isComputerUseProducerSupported({
   desktopPackageRoot: join(repoRoot, "packages", "desktop"),
 });
 const computerUseDevEnv = hasComputerUseProducer ? await resolveComputerUseDevEnv() : {};

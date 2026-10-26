@@ -583,5 +583,226 @@
       "sourceTagApiUrl": "https://api.github.com/repos/lddubeau/saxes/git/tags/8c687ae8e2b9814da0928fff0faae1887a950200",
       "result": "The official v5.0.1 annotated tag resolves to this fixed revision; its manifest declares saxes 5.0.1 and ISC. Preserve the complete upstream LICENSE, including inherited sax and historical String.fromCodePoint notices. The registry archive integrity was verified."
     }
+  },
+  {
+    "package": "@trycua/cua-driver@0.28.2",
+    "file": "third-party/upstream/c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9.txt",
+    "sha256": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-darwin-arm64@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-darwin-x64@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-linux-arm64-gnu@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-linux-x64-gnu@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-win32-arm64-msvc@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@trycua/cua-driver-win32-x64-msvc@0.28.2",
+    "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+    "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+    "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+    "license": "MIT AND MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/core@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-darwin-arm64@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-darwin-x64@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-linux-arm64-gnu@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-linux-arm64-musl@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-linux-x64-gnu@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-linux-x64-musl@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-win32-arm64-msvc@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
+  },
+  {
+    "package": "@ubjs/node-win32-x64-msvc@0.31.0-3",
+    "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+    "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+    "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+    "license": "MPL-2.0",
+    "evidenceKind": "pinned-upstream-license-file",
+    "reviewEvidence": {
+      "checkedOn": "2026-10-26",
+      "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+      "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+    }
   }
 ]

@@ -25,6 +25,7 @@ export interface ComputerUseRuntime {
 }
 
 export interface ComputerUseRuntimeOptions {
+  /** Window Host 的 metadata-only 代理；客户端解析后直接连接真实 Helper。 */
   brokerSocketPath?: string;
   refreshMarkerPath?: string;
   ensureBrokerAvailable?: () => Promise<void>;

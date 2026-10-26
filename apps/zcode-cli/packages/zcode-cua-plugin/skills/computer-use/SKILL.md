@@ -7,6 +7,20 @@ description: "Use when a task needs a native desktop app's own UI or the OS. For
 
 Read or operate the UI of native apps on the user's computer.
 
+## Current UWork runtime
+
+This build provides local macOS app/window observation, screenshots, AX element
+clicks, text/value input, scrolling and basic key chords through an independent
+Helper. The user grants Accessibility and Screen Recording to that Helper.
+
+Coordinate clicks, dragging, `paste`, `selectText` and
+`performSecondaryAction` are unavailable in this runtime. Their SDK signatures
+remain for compatibility and return an explicit unavailable error. Use an AX
+element index, `setValue` / `typeText`, or a basic key chord. Screenshots are for
+observation; do not derive coordinates, try another UI automation technology, or
+retry an unavailable operation. Windows/Linux and remote/subagent control are
+not provided by this build.
+
 - Prefer a dedicated connector, API, CLI or skill when one can complete the task.
 - For browser and web tasks, use Browser Use instead.
 - Do not use AppleScript, `osascript`, JXA, System Events, shell commands, or any
@@ -43,13 +57,11 @@ background app and does not steal the user's focus.
 
 1. Observe, then search the returned tree for the target by its role, name,
    title, value or other visible identity.
-2. When a matching element exists, act on it by **index**. For a control that
-   advertises a semantic action, `performSecondaryAction` is also correct.
-3. For a settable element prefer `setValue` over typing or pasting. Reach for
-   `paste` only when the target is not settable or the content is rich text.
+2. When a matching element exists, act on it by **index**.
+3. For a settable element prefer `setValue`; otherwise use `typeText`.
 4. Keyboard input is the fallback: use `pressKey` only when no element expresses
-   the operation, or the user asked for keyboard interaction. Coordinates are the
-   last fallback, for canvas, games and Electron content accessibility cannot see.
+   the operation, or the user asked for keyboard interaction. If AX and basic
+   keys cannot express the operation, report the runtime limitation.
 
 Do not replace an available element action with a keyboard shortcut just because
 the shortcut is shorter. Do not run both the accessibility and visual paths for
@@ -189,24 +201,9 @@ Action methods display nothing.
 
 ## Coordinates
 
-Choose `x` and `y` only by looking at the current returned raster, with
-`0 <= x < width` and `0 <= y < height` for that raster. Submit those integers
-unchanged; CUA binds the current raster internally and owns every transform from
-the returned raster to native dispatch. Element and window bounds are diagnostic
-global screen points and must never be copied into a coordinate. When visual
-fallback begins, discard coordinate-like numbers from earlier text or
-accessibility results.
-
-Act on the current raster when the target is clear; if it is too small or ambiguous,
-re-observe rather than guessing at geometry.
-
-A pointer action accepted with no change usually means the app acted where the real
-pointer sits: repeating it will not help — use an element index or the keyboard.
-
-A coordinate refusal may name an unexpected owner, or say the frame is stale — the
-window moved, resized or was replaced. Observe again for a current raster, or act on
-an element index, which does not depend on window geometry. Never move, resize or
-close a window to make a coordinate land.
+This runtime does not have a verified screenshot-to-window transform. Coordinate
+actions and dragging are explicitly refused. Use a fresh AX element index or a
+basic key chord, and report a limitation when neither is available.
 
 ## Keyboard
 
@@ -215,19 +212,15 @@ X keysym style: `"a"`, `"Return"`, `"Tab"`, `"Control_L+a"`, `"super+c"`, `"Up"`
 macOS uses `cmd`; Linux and Windows use `ctrl`. Use `{ holdSeconds }` to hold a
 key or chord for a duration rather than simulating repeated presses.
 
-Bind keyboard input to an app or element; never send it unbound. `paste` is for
-rich text, or a target `setValue` cannot set — not for plain text a settable
-element accepts.
+Bind keyboard input to an app; never send it unbound. Use `setValue` or `typeText`
+for plain text. Rich-text paste and held-key duration are unavailable.
 
-`performSecondaryAction` accepts only an action the element advertises in the
-current tree. Do not guess an action name.
+`performSecondaryAction` is unavailable. Do not guess another action name.
 
 At most one element is `focused` — the one holding keyboard focus; absent means
 undetermined.
 
-`selectText` locates text inside an editable element. Use `prefix`/`suffix` to
-disambiguate repeated matches and `selectionType` to place the cursor instead of
-selecting. An ambiguous match is refused rather than resolved to the first hit.
+`selectText` is unavailable. Use supported element or basic keyboard operations.
 
 ## Waiting
 
