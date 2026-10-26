@@ -39,7 +39,6 @@ import { supportsLocalMacCuaPermissionOnboarding } from "@/lib/cuaPlatform.js";
 import { runAfterSuccessfulPluginEnabledChange } from "@/settings/pluginEnabledChange.js";
 import { createCuaPermissionOnboardingOperationId } from "@/lib/cuaPermissionOnboardingOperation.js";
 import { waitForAccessibilityNotStale } from "@/settings/cuaPermissionRestartVerify.js";
-import { requiredCuaPermissionsForFreshStatus } from "@/settings/cuaPermissionPreparation.js";
 import { ExternalLink } from "lucide-react";
 import {
   isComputerUseRemoteOrLinux,
@@ -72,7 +71,7 @@ export function ComputerUseSection({
   const services = useServices();
   const platform = usePlatform();
   const pluginManagementService = services.pluginManagementService;
-  // cuaPermissionService 在 main 是可选字段（远端 host 无 CUA）；下方各 handler 在缺失时早退。
+  // 重启依赖本地权限服务；显式打开系统设置只经过平台桥，不以状态查询是否就绪为前提。
   const cuaPermissionService = services.cuaPermissionService;
   const isLocalWorkspace =
     !remoteSessionId &&
@@ -95,9 +94,8 @@ export function ComputerUseSection({
   });
   // CUA 权限是 macOS 本机属性：仅完整 macOS 设置需要 Helper workspace 路径。
   const path = supportsLocalMacWorkspace ? (localWorkspacePath ?? workspacePath) : null;
-  // 展示只跟 settled：fresh 每次查询开始都会落回 false，跟着它渲染会让授权按钮的文案
-  // 在「验证中…」与终态之间切换、宽度随之跳变。
-  const { status, settled, refresh } = useCuaPermissionStatus(path ?? null, workspaceIdentity);
+  // 状态仅用于展示；用户明确打开系统设置时，不等待查询完成或按权限结果裁掉导航。
+  const { status, refresh } = useCuaPermissionStatus(path ?? null, workspaceIdentity);
   const availableStatus = status && isCuaPermissionStatusAvailable(status) ? status : null;
 
   // macOS 版本门槛：低版本系统上 Helper 被 LaunchServices -10825 拒启，表象是授权反复无响应。
@@ -184,7 +182,6 @@ export function ComputerUseSection({
   const helperContextKeyRef = useRef(helperContextKey);
   helperContextKeyRef.current = helperContextKey;
   const activeOnboardingOperationIdRef = useRef<string | null>(null);
-  const permissionStatusCheckTokenRef = useRef<symbol | null>(null);
   const platformRef = useRef(platform);
   platformRef.current = platform;
   useEffect(() => {
@@ -192,7 +189,6 @@ export function ComputerUseSection({
     return () => {
       mountedRef.current = false;
       pluginToggleGenerationRef.current += 1;
-      permissionStatusCheckTokenRef.current = null;
       const operationId = activeOnboardingOperationIdRef.current;
       activeOnboardingOperationIdRef.current = null;
       if (operationId) {
@@ -204,7 +200,6 @@ export function ComputerUseSection({
   // 同一设置页实例切换 workspace 时也要退出旧 participant；否则旧调用返回后会恢复错误的 Helper。
   useEffect(
     () => () => {
-      permissionStatusCheckTokenRef.current = null;
       const operationId = activeOnboardingOperationIdRef.current;
       activeOnboardingOperationIdRef.current = null;
       if (operationId) {
@@ -370,109 +365,41 @@ export function ComputerUseSection({
     async (initialPermission: CuaPermissionKind): Promise<void> => {
       if (
         typeof platform.openCuaPermissionOnboarding !== "function" ||
-        activeOnboardingOperationIdRef.current ||
-        permissionStatusCheckTokenRef.current
-      ) {
+        !mountedRef.current ||
+        helperContextKeyRef.current !== helperContextKey
+      )
         return;
-      }
-      const checkToken = Symbol("cua-permission-status-check");
-      permissionStatusCheckTokenRef.current = checkToken;
       const operationContextKey = helperContextKey;
-      let operationId: string | null = null;
       const recoveryState = returnRecoveryRef.current;
       const recoveryTarget = path
-        ? {
-            workspacePath: path,
-            ...(workspaceIdentity ? { workspaceIdentity } : {}),
-          }
+        ? { workspacePath: path, ...(workspaceIdentity ? { workspaceIdentity } : {}) }
         : null;
+      const previousOperationId = activeOnboardingOperationIdRef.current;
+      const operationId = createCuaPermissionOnboardingOperationId();
+      // 原因：显式面板入口被 getStatus/granted/checking 门控静默吞掉；状态不决定导航。
+      // 先换代再取消旧 participant，旧结果即使同步完成也不能恢复新操作的 Helper。
+      activeOnboardingOperationIdRef.current = operationId;
+      const isCurrent = () =>
+        mountedRef.current &&
+        activeOnboardingOperationIdRef.current === operationId &&
+        helperContextKeyRef.current === operationContextKey &&
+        returnRecoveryRef.current === recoveryState;
       try {
-        if (!path || !cuaPermissionService) {
-          toast(intl.formatMessage({ id: "cuaPermission.modal.unavailable" }));
-          return;
-        }
-        // 设置页行按钮过去直接使用 lastKnown 状态；另一窗口刚完成授权或当前刷新
-        // in-flight 时仍会打开过期 pane。点击边沿重新查询 Helper，只允许当前 denied/stale 的精确项。
-        let currentStatus = await cuaPermissionService.getStatus(path, workspaceIdentity, {
-          includeFunctionalProbes: false,
-        });
-        // 从系统设置授权返回后 App 会重启 Helper 才能读到新 TCC 授权，这段窗口内查询拿到的是
-        // 不可用状态（授权完立刻点行按钮，预检查退化成「暂时无法确认」
-        // 而非「已授权」）。状态不可用时短重试 2 次、间隔 2s，等 Helper 就绪后走到「已授权」
-        // 或真实缺权分支；期间守卫失效（卸载/重复点击/上下文切换）直接放弃，不再重试。
-        for (
-          let attempt = 0;
-          attempt < 2 && !isCuaPermissionStatusAvailable(currentStatus);
-          attempt += 1
-        ) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-          if (
-            !mountedRef.current ||
-            permissionStatusCheckTokenRef.current !== checkToken ||
-            helperContextKeyRef.current !== operationContextKey ||
-            returnRecoveryRef.current !== recoveryState
-          ) {
-            return;
-          }
-          currentStatus = await cuaPermissionService.getStatus(path, workspaceIdentity, {
-            includeFunctionalProbes: false,
-          });
-        }
-        // React concurrent commit 可能已经收到 workspace A→B 更新但 passive effect 尚未清理 A。
-        // render 同步更新的 context ref 是这段窗口内唯一可靠的失效信号；让出一个 macrotask后再判，
-        // 迟到的 A 状态不能为 B 打开原生设置页。
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        if (
-          !mountedRef.current ||
-          permissionStatusCheckTokenRef.current !== checkToken ||
-          helperContextKeyRef.current !== operationContextKey ||
-          returnRecoveryRef.current !== recoveryState
-        ) {
-          return;
-        }
-        if (
-          !isCuaPermissionStatusAvailable(currentStatus) ||
-          !requiredCuaPermissionsForFreshStatus(currentStatus).includes(initialPermission)
-        ) {
-          const permissionState = isCuaPermissionStatusAvailable(currentStatus)
-            ? initialPermission === "accessibility"
-              ? currentStatus.accessibility
-              : currentStatus.screenRecording
-            : null;
-          toast(
-            intl.formatMessage({
-              id:
-                permissionState === "granted"
-                  ? "cuaPermission.grantAlreadySatisfied"
-                  : "cuaPermission.modal.unavailable",
-            }),
-          );
-          refresh();
-          return;
-        }
-        operationId = createCuaPermissionOnboardingOperationId();
-        activeOnboardingOperationIdRef.current = operationId;
+        if (previousOperationId) platform.cancelCuaPermissionOnboarding?.(previousOperationId);
         const result = await platform.openCuaPermissionOnboarding({
           initialPermission,
           operationId,
           requiredPermissions: [initialPermission],
         });
-        if (
-          !mountedRef.current ||
-          activeOnboardingOperationIdRef.current !== operationId ||
-          helperContextKeyRef.current !== operationContextKey
-        ) {
-          return;
-        }
+        if (!isCurrent()) return;
         if (shouldRestartHelperAfterCuaPermissionReturn(result)) {
           markCuaPermissionOnboardingOpened(recoveryState);
           pendingGrantSessionIdRef.current = result.sessionId;
           const claim = claimCuaPermissionReturnRecovery(recoveryState);
-          if (claim && recoveryTarget) {
+          if (claim && recoveryTarget)
             void applyPendingGrant(claim, recoveryTarget, result.sessionId);
-          }
         } else if (result?.success && result.returnedFromSettings) {
-          // 同一 renderer 对 main session 的重复 join 只刷新；不同窗口各自会拿到本 host 的 recovery。
+          // 同一 renderer 对 Main session 的重复 join 只刷新；恢复权仍由 Main 单点授予。
           refresh();
         }
         if (result?.success === false && !result.canceled) {
@@ -484,32 +411,20 @@ export function ComputerUseSection({
           );
         }
       } catch (error) {
-        if (
-          mountedRef.current &&
-          permissionStatusCheckTokenRef.current === checkToken &&
-          helperContextKeyRef.current === operationContextKey
-        ) {
+        if (isCurrent())
           toast(
-            operationId
-              ? intl.formatMessage(
-                  { id: "chat.cuaPermission.openFailed" },
-                  {
-                    error: error instanceof Error ? error.message : String(error),
-                  },
-                )
-              : intl.formatMessage({ id: "cuaPermission.modal.unavailable" }),
+            intl.formatMessage(
+              { id: "chat.cuaPermission.openFailed" },
+              { error: error instanceof Error ? error.message : String(error) },
+            ),
           );
-        }
       } finally {
-        if (permissionStatusCheckTokenRef.current === checkToken) {
-          permissionStatusCheckTokenRef.current = null;
-        }
-        if (operationId && activeOnboardingOperationIdRef.current === operationId) {
+        if (activeOnboardingOperationIdRef.current === operationId) {
           activeOnboardingOperationIdRef.current = null;
         }
       }
     },
-    [platform, path, services, workspaceIdentity, intl, applyPendingGrant, refresh],
+    [platform, path, workspaceIdentity, helperContextKey, intl, applyPendingGrant, refresh],
   );
 
   const onManualRestart = useCallback((): void => {
@@ -531,15 +446,10 @@ export function ComputerUseSection({
         className="text-sky-500 hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-300"
         aria-label={intl.formatMessage({ id: labelId })}
         title={intl.formatMessage({ id: labelId })}
-        disabled={!settled}
         onClick={() => void openPermissionSettings(kind)}
       >
         <ExternalLink className="size-4" aria-hidden="true" />
-        <span className="hidden sm:inline">
-          {intl.formatMessage({
-            id: settled ? labelId : "cuaPermission.status.verifying",
-          })}
-        </span>
+        <span className="hidden sm:inline">{intl.formatMessage({ id: labelId })}</span>
       </Button>
     );
   };
@@ -781,11 +691,10 @@ export function ComputerUseSection({
                   availableStatus?.accessibility,
                 )}
                 detail={
-                  availableStatus?.accessibility === "granted"
-                    ? undefined
-                    : availableStatus?.accessibility === "stale"
-                      ? renderRestartDetail()
-                      : renderGrantDetail("accessibility", "chat.cuaPermission.openAccessibility")
+                  <div className="flex flex-col items-start gap-2">
+                    {renderGrantDetail("accessibility", "chat.cuaPermission.openAccessibility")}
+                    {availableStatus?.accessibility === "stale" ? renderRestartDetail() : null}
+                  </div>
                 }
               />
               <SettingsRow
@@ -801,14 +710,10 @@ export function ComputerUseSection({
                   screenPerm,
                   availableStatus?.screenRecording,
                 )}
-                detail={
-                  availableStatus?.screenRecording === "granted"
-                    ? undefined
-                    : renderGrantDetail(
-                        "screen_recording",
-                        "chat.cuaPermission.openScreenRecording",
-                      )
-                }
+                detail={renderGrantDetail(
+                  "screen_recording",
+                  "chat.cuaPermission.openScreenRecording",
+                )}
               />
             </SettingsGroupCard>
           ) : null}

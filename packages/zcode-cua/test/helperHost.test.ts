@@ -10,7 +10,10 @@ afterEach(async () => {
   while (cleanup.length) await cleanup.pop()!();
 });
 
-async function fixture(onLaunched?: () => Promise<void>) {
+async function fixture(
+  onLaunched?: () => Promise<void>,
+  freshStatus: Record<string, unknown> = { accessibility: true, screenRecording: false },
+) {
   const dir = await mkdtemp(join(tmpdir(), "uwch-"));
   const socketPath = join(dir, "broker.sock");
   const token = "b".repeat(64);
@@ -41,10 +44,7 @@ async function fixture(onLaunched?: () => Promise<void>) {
       const statusIndex = args.indexOf("--permission-status-file");
       if (statusIndex >= 0) {
         preflightPaths.push(args[statusIndex + 1]);
-        await writeFile(
-          args[statusIndex + 1],
-          JSON.stringify({ accessibility: true, screenRecording: false }),
-        );
+        await writeFile(args[statusIndex + 1], JSON.stringify(freshStatus));
         return;
       }
       launches++;
@@ -200,6 +200,27 @@ it("权限预检使用独立短命进程结果，不读取常驻 Helper 的缓�
   await f.host.start();
   await expect(f.host.queryScreenRecordingPreflight()).resolves.toBe("denied");
   expect(f.preflightPaths).toHaveLength(1);
+  await expect(readFile(f.preflightPaths[0])).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("完整fresh权限只经LS新实例等待退出，不继承直接exec责任身份或等待常驻Helper", async () => {
+  const f = await fixture();
+  await f.host.start();
+  await expect(f.host.queryPermissionStatusFresh()).resolves.toEqual({
+    accessibility: "granted",
+    screen_recording: "denied",
+  });
+  const freshArgs = f.launchArgs.find((args) => args.includes("--permission-status-file"))!;
+  expect(freshArgs.slice(0, 5)).toEqual(["-n", "-W", "-g", "-a", "/fixture/Helper.app"]);
+  expect(freshArgs).not.toContain("--socket");
+  expect(f.launchArgs[0]).not.toContain("-W");
+  expect(f.requestLog).not.toContain("shutdown");
+  expect(f.isListening()).toBe(true);
+});
+
+it("fresh缺少AX字段不能只凭Screen字段伪造完整授权，临时文件仍清理", async () => {
+  const f = await fixture(undefined, { screenRecording: true });
+  await expect(f.host.queryPermissionStatusFresh()).rejects.toThrow(/invalid/i);
   await expect(readFile(f.preflightPaths[0])).rejects.toMatchObject({ code: "ENOENT" });
 });
 

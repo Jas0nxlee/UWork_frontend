@@ -51,6 +51,8 @@ jobs:
           packages/desktop/test/desktopRuntimeEnv.test.ts
           packages/desktop/test/desktopLocalDevelopmentInstaller.test.ts
           packages/desktop/test/desktopPlatformCuaCancellation.test.ts
+          packages/services/test/cuaPermissionFreshStatus.test.ts
+          packages/ui/test/computerUseExplicitSettingsEntry.test.ts
       - name: Validate focused desktop release regressions
         run: >-
           pnpm exec vitest run

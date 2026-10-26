@@ -68,7 +68,14 @@ export function standaloneHelperCandidatePaths(env = process.env) {
 export function buildHelperOpenArgs(spec, launcherPid) {
   if (!spec?.appPath || (!spec.socketPath && !spec.permissionStatusFile))
     throw new CuaHelperError("Helper launch requires an app and socket or permission status file");
-  const args = ["-n", "-a", spec.appPath, "--args"];
+  // 预检必须以 LS 新 App 实例的责任身份执行；-n 配合 -W 只等待这个短命实例，-g 不抢前台。
+  const args = [
+    "-n",
+    ...(spec.permissionStatusFile ? ["-W", "-g"] : []),
+    "-a",
+    spec.appPath,
+    "--args",
+  ];
   if (spec.socketPath) args.push("--socket", spec.socketPath);
   if (spec.permissionStatusFile) args.push("--permission-status-file", spec.permissionStatusFile);
   if (launcherPid) args.push("--launcher-pid", String(launcherPid));

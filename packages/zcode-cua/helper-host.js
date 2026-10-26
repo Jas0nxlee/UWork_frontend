@@ -67,6 +67,7 @@ export function createProductCuaHelperHost(options = {}) {
   let starting;
   let restarting;
   let stopping;
+  let freshPermissionQuery;
   let epoch = 0;
   const health = async (timeoutMs = options.healthTimeoutMs ?? 15000) => {
     const report = await probeHelperHealth(socketPath, { timeoutMs });
@@ -187,6 +188,37 @@ export function createProductCuaHelperHost(options = {}) {
     await start();
     return callBrokerMethod({ socketPath, method: "permission_status", timeoutMs: 3000 });
   };
+  const queryPermissionStatusFresh = () => {
+    if (freshPermissionQuery) return freshPermissionQuery;
+    freshPermissionQuery = (async () => {
+      // 不能直接 exec 二进制：TCC 可能把责任归给父应用而产生假的 AX granted。
+      // 每次先复用安装器验签，再由 LS 新实例发布一份完整快照；常驻 Helper 不受影响。
+      const verifiedApp = await installer.ensureInstalled();
+      const directory = await mkdtemp(join(tmpdir(), "uwc-permission-"));
+      const resultFile = join(directory, "status.json");
+      try {
+        await launch(
+          verifiedApp,
+          buildHelperOpenArgs({ appPath: verifiedApp, permissionStatusFile: resultFile }),
+        );
+        const report = JSON.parse(await readFile(resultFile, "utf8"));
+        if (
+          typeof report.accessibility !== "boolean" ||
+          typeof report.screenRecording !== "boolean"
+        )
+          throw new CuaHelperError("Computer Use fresh permission status is invalid");
+        return {
+          accessibility: report.accessibility ? "granted" : "denied",
+          screen_recording: report.screenRecording ? "granted" : "denied",
+        };
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    })().finally(() => {
+      freshPermissionQuery = undefined;
+    });
+    return freshPermissionQuery;
+  };
   return {
     get running() {
       return Boolean(handle);
@@ -211,6 +243,7 @@ export function createProductCuaHelperHost(options = {}) {
     },
     checkHealth: health,
     queryPermissionStatus: permissionReport,
+    queryPermissionStatusFresh,
     async queryScreenCaptureProbe() {
       await start();
       return callBrokerMethod({
@@ -221,28 +254,7 @@ export function createProductCuaHelperHost(options = {}) {
       });
     },
     async queryScreenRecordingPreflight() {
-      appPath ??= await installer.ensureInstalled();
-      const directory = await mkdtemp(join(tmpdir(), "uwc-permission-"));
-      const resultFile = join(directory, "status.json");
-      try {
-        await launch(appPath, buildHelperOpenArgs({ appPath, permissionStatusFile: resultFile }));
-        const deadline = Date.now() + 5000;
-        while (Date.now() < deadline) {
-          try {
-            const report = JSON.parse(await readFile(resultFile, "utf8"));
-            const value = report.screen_recording ?? report.screenRecording;
-            if (typeof value === "boolean") return value ? "granted" : "denied";
-            if (["granted", "denied", "unknown"].includes(value)) return value;
-            throw new CuaHelperError("Computer Use fresh permission status is invalid");
-          } catch (error) {
-            if (error?.code !== "ENOENT") throw error;
-          }
-          await delay(50);
-        }
-        throw new CuaHelperError("Computer Use fresh permission query timed out");
-      } finally {
-        await rm(directory, { recursive: true, force: true });
-      }
+      return (await queryPermissionStatusFresh()).screen_recording;
     },
   };
 }

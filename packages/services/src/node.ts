@@ -894,6 +894,36 @@ export async function resolveCuaScreenRecordingState(
   }
 }
 
+type CuaRuntimePermissionStates = Pick<
+  Awaited<ReturnType<CuaHelperHost["queryPermissionStatus"]>>,
+  "accessibility" | "screen_recording"
+>;
+
+/** 同一 LS Helper 新实例读双项 TCC，不能把父进程权限或陈旧运行能力当作当前授权。 */
+export async function resolveCuaPermissionStates(
+  host: Pick<CuaHelperHost, "queryPermissionStatusFresh">,
+  reported: CuaRuntimePermissionStates,
+): Promise<CuaRuntimePermissionStates> {
+  try {
+    const fresh = await host.queryPermissionStatusFresh();
+    return {
+      accessibility:
+        fresh.accessibility === "granted" && reported.accessibility !== "granted"
+          ? "stale"
+          : fresh.accessibility,
+      screen_recording: fresh.screen_recording,
+    };
+  } catch (error) {
+    // fresh 失败不制造授权结论；保留已从真实运行 Helper 取得的报告。
+    createServiceLogger("cua-permission-status").warn(
+      undefined,
+      "Fresh LaunchServices Helper status unavailable; retaining running Helper report",
+      { error: error instanceof Error ? error.message : String(error) },
+    );
+    return reported;
+  }
+}
+
 export function createDynamicCuaProductMcpServerResolver(options: {
   isPluginEnabled: (context?: CuaProductMcpServerResolverContext) => boolean;
   getResolver: (
@@ -2160,18 +2190,36 @@ export function createLocalServices(options: {
             owner?: { display_name?: string };
             accessibility: CuaPermissionState;
             accessibility_probe_ok?: boolean;
-            screen_recording: CuaPermissionState;
+            screen_recording: "granted" | "denied" | "unknown";
           }>({
             socketPath: stable,
             method: "permission_status",
             timeoutMs: 3000,
           });
+          const permissions =
+            process.platform === "darwin"
+              ? await resolveCuaPermissionStates(
+                  createProductCuaHelperHost({
+                    env: process.env,
+                    bundledHelperAppPath: resolveBundledCuaHelperAppPath(),
+                    helperInstaller: createCanonicalCuaHelperInstaller({
+                      env: process.env,
+                      logger: cuaStatusLaunchLog,
+                      bundledAppPath: resolveBundledCuaHelperAppPath(),
+                    }),
+                  }),
+                  {
+                    accessibility: report.accessibility,
+                    screen_recording: report.screen_recording,
+                  },
+                )
+              : { accessibility: report.accessibility, screen_recording: report.screen_recording };
           return {
             grantOwner: report.grant_owner,
             grantOwnerDisplayName: report.owner?.display_name ?? report.grant_owner,
-            accessibility: report.accessibility,
+            accessibility: permissions.accessibility,
             accessibilityProbeOk: report.accessibility_probe_ok === true,
-            screenRecording: report.screen_recording,
+            screenRecording: permissions.screen_recording,
             screenCaptureProbeOk: false,
           };
         } catch {
@@ -2192,7 +2240,8 @@ export function createLocalServices(options: {
         }
         // Screen Recording 的真值必须来自一个新进程：撤销对已运行的常驻 Helper 不生效，
         // 它会一直报撤销前的 granted。拿不到真值时 fail-open 沿用 report 值。
-        const screenRecording = await resolveCuaScreenRecordingState(host, report.screen_recording);
+        const permissions = await resolveCuaPermissionStates(host, report);
+        const screenRecording = permissions.screen_recording;
         if (!isDefaultCuaProductHelperCurrent(helper)) {
           return {
             available: false,
@@ -2219,7 +2268,7 @@ export function createLocalServices(options: {
         return {
           grantOwner: report.grant_owner,
           grantOwnerDisplayName: reportedOwnerDisplayName ?? report.grant_owner,
-          accessibility: report.accessibility,
+          accessibility: permissions.accessibility,
           accessibilityProbeOk:
             report.accessibility_probe?.ok === true &&
             report.accessibility_probe?.classification === "functional",
