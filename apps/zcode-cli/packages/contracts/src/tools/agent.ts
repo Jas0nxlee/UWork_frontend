@@ -87,7 +87,7 @@ export const AgentCompletedOutputSchema = z
     totalToolUseCount: z.number().int().nonnegative(),
     totalDurationMs: z.number().int().nonnegative(),
     totalTokens: z.number().int().nonnegative().optional(),
-    usage: z.record(z.unknown()).optional(),
+    usage: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

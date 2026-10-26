@@ -1026,7 +1026,7 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - electron-updater@6.8.3 — MIT
 
-- electron@41.10.7 — MIT
+- electron@42.11.16 — MIT
 
 - elkjs@0.12.0 — EPL-2.0 OR GPL-3.0-or-later
 
@@ -1872,9 +1872,9 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - undici-types@7.19.2 — MIT
 
-- undici@6.29.0 — MIT
+- undici@6.29.1 — MIT
 
-- undici@7.30.0 — MIT
+- undici@7.30.1 — MIT
 
 - unified@11.0.5 — MIT
 
@@ -2008,11 +2008,7 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - zip-stream@4.1.1 — MIT
 
-- zod-to-json-schema@3.25.2 — ISC
-
-- zod@3.25.76 — MIT
-
-- zod@4.6.5 — MIT
+- zod@4.6.6 — MIT
 
 - zrender@6.1.0 — BSD-3-Clause
 
@@ -2145,6 +2141,8 @@ Electron/Chromium target-specific notices are shipped separately under Resources
 - @ai-sdk/openai-compatible@2.0.60: modified by ZCode; the changes are recorded in patches/@ai-sdk__openai-compatible@2.0.60.patch in the source repository.
 
 - @arms/rum-electron@0.0.3: modified by ZCode; the changes are recorded in patches/@arms__rum-electron@0.0.3.patch in the source repository.
+
+- @jimp/plugin-print@1.6.1: modified by ZCode; the changes are recorded in patches/@jimp__plugin-print@1.6.1.patch in the source repository.
 
 - @radix-ui/react-collapsible@1.1.12: modified by ZCode; the changes are recorded in patches/@radix-ui__react-collapsible@1.1.12.patch in the source repository.
 
@@ -3801,9 +3799,9 @@ SOFTWARE.
 
 - ts-dedent@2.2.0: README.md (license section)
 
-- undici@6.29.0: README.md (license section)
+- undici@6.29.1: README.md (license section)
 
-- undici@7.30.0: README.md (license section)
+- undici@7.30.1: README.md (license section)
 
 - universalify@2.0.1: README.md (license section)
 
@@ -14009,9 +14007,9 @@ ECharts is available under the Apache License V2.
 
 ### Notice 5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d
 
-- electron@41.10.7: dist/LICENSE
+- electron@42.11.16: dist/LICENSE
 
-- electron@41.10.7: LICENSE
+- electron@42.11.16: LICENSE
 
 
 
@@ -14042,7 +14040,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### Notice 56a37896ff6edec2b75b41465b66dd768f2d294c315255164898ca3e685bbd30
 
-- electron@41.10.7: README.md (license section)
+- electron@42.11.16: README.md (license section)
 
 
 
@@ -32703,9 +32701,9 @@ ISC
 
 - undici-types@7.19.2: LICENSE
 
-- undici@6.29.0: LICENSE
+- undici@6.29.1: LICENSE
 
-- undici@7.30.0: LICENSE
+- undici@7.30.1: LICENSE
 
 
 
@@ -32736,9 +32734,9 @@ SOFTWARE.
 
 ### Notice a21d6c8d3fc631198b97e57584697f7f9c37805c71c6cf9a12e4442b40394b88
 
-- undici@6.29.0: lib/web/fetch/LICENSE
+- undici@6.29.1: lib/web/fetch/LICENSE
 
-- undici@7.30.0: lib/web/fetch/LICENSE
+- undici@7.30.1: lib/web/fetch/LICENSE
 
 
 
@@ -35387,35 +35385,9 @@ app.
 
 ````
 
-### Notice 80d3168ad2f70f6f5bb2ab22b23414707abf6f0a392034891481ae36a1a429d4
-
-- zod-to-json-schema@3.25.2: LICENSE
-
-
-
-````text
-ISC License
-
-Copyright (c) 2020, Stefan Terdell
-
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-````
-
 ### Notice 3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8
 
-- zod@3.25.76: LICENSE
-
-- zod@4.6.5: LICENSE
+- zod@4.6.6: LICENSE
 
 
 

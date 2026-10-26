@@ -121,11 +121,11 @@ export const AskUserQuestionInputSchema = z
       .max(4)
       .describe("Questions to ask the user (1-4 questions)"),
     answers: z
-      .record(z.string())
+      .record(z.string(), z.string())
       .optional()
       .describe("User answers collected by the permission component"),
     annotations: z
-      .record(AskUserQuestionAnnotationSchema)
+      .record(z.string(), AskUserQuestionAnnotationSchema)
       .optional()
       .describe(
         "Optional per-question annotations from the user (e.g., notes on preview selections). Keyed by question text.",
@@ -175,9 +175,9 @@ export const AskUserQuestionAnsweredInputSchema = AskUserQuestionInputSchema.sup
 export const AskUserQuestionOutputSchema = z
   .object({
     questions: z.array(AskUserQuestionSchema).min(1).max(4),
-    answers: z.record(z.string()).describe("User answers keyed by question text."),
+    answers: z.record(z.string(), z.string()).describe("User answers keyed by question text."),
     annotations: z
-      .record(AskUserQuestionAnnotationSchema)
+      .record(z.string(), AskUserQuestionAnnotationSchema)
       .optional()
       .describe("Optional per-question annotations keyed by question text."),
   })

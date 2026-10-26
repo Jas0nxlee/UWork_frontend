@@ -845,6 +845,23 @@ modules:
     layers:
       adapters: .
     owner: desktop
+  # tool-json-schema：由 architecture:adopt 登记
+  - id: tool-json-schema
+    roots:
+      - apps/zcode-cli/packages/contracts/src/tools/tool-json-schema
+      - apps/zcode-cli/packages/contracts/src/tools/json-schema.ts
+      - apps/zcode-cli/packages/contracts/src/tools/deferred-tool-call.ts
+      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
+    managed: true
+    requires: [zcode-cli]
+    publicEntrypoints:
+      - apps/zcode-cli/packages/contracts/src/tools/tool-json-schema/contract.ts
+      - apps/zcode-cli/packages/contracts/src/tools/json-schema.ts
+      - apps/zcode-cli/packages/contracts/src/tools/deferred-tool-call.ts
+      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
+    layers:
+      domain: .
+    owner: agent-contracts
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。
@@ -885,7 +902,6 @@ exceptions:
   - id: opensource-tool-search-comment-cleanup
     rule: unmanaged-new-file
     paths:
-      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
       - apps/zcode-cli/packages/core/src/tool/handlers/tool-search.ts
     reason: 已有上游文件仅去掉两行产品对标注释；去除注释后的 TypeScript 输出与 staging 完全一致。契约、实现和模块边界不变，整目录接管不在本次开源整理范围内；后续逻辑修改须重新核对模块治理。
   - id: project-location-cache-recovery-existing-edit

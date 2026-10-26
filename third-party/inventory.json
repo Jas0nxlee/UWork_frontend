@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "inputHashEncoding": "UTF-8 with CRLF normalized to LF; notice and source snapshot hashes remain byte-exact",
   "scope": "Production dependency union across current workspace projects, copied source/assets and native tools; not a per-installer SBOM or a certification of all licensing obligations.",
-  "noticesSha256": "5f8c07add831ee8fc4acbcef8c845645fdc96151c7fe3c9869fe16510f06a291",
+  "noticesSha256": "74cdd1d02791b47e622bc9d0e2698c71b6dbfb24e0eec4ec184b2b3a5ce10f85",
   "inputs": {
     ".agents/skills/agent-browser/references/authentication.md": "e2c3b0f4a1dc1368dee821f03c000d818a48421d09f3872525dddffe73f2112b",
     ".agents/skills/agent-browser/references/commands.md": "17522fc56d742663f47231ff06c4811abc87e12c7f78e11f94d253ddd540a909",
@@ -226,12 +226,12 @@
     ".agents/skills/react-best-practices/SKILL.md": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355",
     "apps/dev-docs/package.json": "3830c01890b83081debf6596aceb19734924f43b4dee2111c5ea85584f3e944b",
     "apps/zcode-cli/package.json": "f4622eb66460133ac75eba76135a022f12078bf7182ecc02379b15a9f7c68615",
-    "apps/zcode-cli/packages/adapters/package.json": "a716756a7e9a3a7e11993a94f646c823c21c4e095c61d2f8b8ca91eb9a97cc6c",
-    "apps/zcode-cli/packages/android-emulator-plugin/package.json": "96ecaa9ce091e13f7e508b0aed8ab116360b40ba21dc1be78c906b2eebbf5571",
-    "apps/zcode-cli/packages/bootstrap/package.json": "8447b104d66e1a400be3f45403f6e29293c2b15d73c49322ea8bc8525fc19fdc",
-    "apps/zcode-cli/packages/browser-use-plugin/package.json": "e385ead02c51cc4c6c62c9f3fc8951333cbdc15fb9dd08273b682c9f5936ad57",
+    "apps/zcode-cli/packages/adapters/package.json": "cc6bb6584a3de43693ba64e9e340aa0e4330cd4160447d2951023d4147266334",
+    "apps/zcode-cli/packages/android-emulator-plugin/package.json": "819d1f6e2ee7650578d61c1431061f27c113ad06fa52b0644d436211bb22251d",
+    "apps/zcode-cli/packages/bootstrap/package.json": "1686116e467bb2d1dd22b5a6c3f299e02229f7473d57eaafe0941c00fb5310ea",
+    "apps/zcode-cli/packages/browser-use-plugin/package.json": "94a9ae981198ed18a8b8f6648ceea1614dec51b2dfc7b0932e4a3b96d8f6322d",
     "apps/zcode-cli/packages/cli/package.json": "c7f319da5c9c354b891c2741a119276ab0abeea82c8d1e14585d14661fb1175c",
-    "apps/zcode-cli/packages/contracts/package.json": "d71e04825072c7407dcc3e1fcca3d8b9221cfac411ea58a024998a57cb579029",
+    "apps/zcode-cli/packages/contracts/package.json": "d3e1ff0d35d91901503c0084816908de47c0552c426dd42d431be9d6cc630194",
     "apps/zcode-cli/packages/core/package.json": "e70205607c75f7fb51cd1815ff3d411d7ea63bef6a0148f3a698229c30189d32",
     "apps/zcode-cli/packages/core/src/tool/handlers/generated/bash-command-registry.ts": "60fa5acd9f5c357f4e51b1d1e944ee39da92680e4bc5e98dd708f1457fcf612b",
     "apps/zcode-cli/packages/debug/package.json": "0cf03ea1dd384546319e8f301e99c2b668c7c15271f5d38d5a3b0526c24a3279",
@@ -240,9 +240,9 @@
     "apps/zcode-cli/packages/dynamic-workflow/package.json": "9edb746ae170418d81c4431dc16533e814bf3a97e4693a2a94f06b4516151a95",
     "apps/zcode-cli/packages/i18n/package.json": "cd51fc9cda66d726ab54f9821ff748bc150bf4bd84143bb7c8aa9b712a7e6c61",
     "apps/zcode-cli/packages/image-search-plugin/package.json": "f59cba2c8890624a2f5164c9e2f68f808021d2958a7f088544c268eddc9a26a5",
-    "apps/zcode-cli/packages/ios-simulator-plugin/package.json": "fc38d3f6d88598f2c84aced1dfbbef0682addc54e477500dbe323e829c74217a",
-    "apps/zcode-cli/packages/node-repl-host/package.json": "3b8fafd78a122a59eb7941e7ef44f62fbacdc75b344aa5859f814c250f9de4d8",
-    "apps/zcode-cli/packages/office-runtime/package.json": "c51046c5646a0670e554ac4b5949c70cc029c1ba94a5ee3b277b26208e2b4063",
+    "apps/zcode-cli/packages/ios-simulator-plugin/package.json": "46b24004733b772c9537d0f0e8ea676263c6880323bf6d0b3f815c9d3532ffe3",
+    "apps/zcode-cli/packages/node-repl-host/package.json": "c344290e6c75730ed0811121005f488638d8efedc6863d16fdf9783837b573f8",
+    "apps/zcode-cli/packages/office-runtime/package.json": "13d9613e64cd67161bc041e2cb2c48ecc2410e76be727c5077040a1fa51c99d0",
     "apps/zcode-cli/packages/pdf-plugin/package.json": "63588284641c57e2d7a6b8ff5826cdcb451a5b21f7bc91d6f544ef535d36bc14",
     "apps/zcode-cli/packages/plugin-creator-plugin/package.json": "17ab1504c465c165b013f983270f54868aa282538557bf6f935daac153e46ba6",
     "apps/zcode-cli/packages/presentations-plugin/package.json": "8c8bc559c98ca67cbe95616032589d14425dc85fae309a824101efc1a021e861",
@@ -435,7 +435,7 @@
     "docs/knip/docs/tsconfig.json": "662b1f10a5e572b49a45669e4be9ee46c22f987dcf277c204948777b367df1cd",
     "package.json": "63a3d7de2c88391fcddb35b41b83235bbb115808182b0ab1e7eb03203f762e95",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
-    "packages/desktop/package.json": "b39fcbe37287f3b831cdf9f60ca33d78c118889076d6e213dd6b3981b30ba812",
+    "packages/desktop/package.json": "a1655db43e79fc0ad8da8e5e2bb1f1a81b41111b537c697832a08d27350e0409",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
     "packages/desktop/src/renderer/public/material-icons/abap.svg": "1335bd7eb9a0ed49deb622330d680c2e97731726a7a5eee8e4f46dc1e5db4de4",
     "packages/desktop/src/renderer/public/material-icons/abc.svg": "d1a68020e8f020ef29dca5f94dc8613b7ae8fb5b212d8b1cc23b0f975ac7acda",
@@ -1585,8 +1585,8 @@
     "packages/e2e-report/package.json": "4619226682bcfd35b3e20c0dbbe16d6c1474a532fbd3fcadc06646dc3cb323eb",
     "packages/formal-proof/package.json": "ccfbc2908b846d96a053ba348b0cabeccf76a6dffc126a0326e228f3af92aaaf",
     "packages/model-option-map/package.json": "9ba8537bca94b388eca39307ebb3ab85c473f01fa51368162be5b3bc303315ee",
-    "packages/provider-node/package.json": "b9b475a0f8cd0822980e64013f8b41139082ede376868051480702ead2913cb8",
-    "packages/provider/package.json": "0f52edde6ef9712efc10dfccf12a918255f5be4a0379b5c8693fab79abacf2fc",
+    "packages/provider-node/package.json": "64a058ff339ba4feb7247dcc16cd833179833a57b9fa9919ab8c8b05b5f4aa16",
+    "packages/provider/package.json": "752f5f0666681adb97f61b64fd2994d4a9e1918ba81617b15085a85ce9906f74",
     "packages/relay/package.json": "b1b92b91c377c9f1b383eff2a22a166976d12cc34ca6e5838c161ed6487526ce",
     "packages/rpc/examples/01-basic-ipc.ts": "bb4423c1642918846010f9307262c379536ca9541d79df6ebba120b5cf792f3e",
     "packages/rpc/examples/02-proxy-channel.ts": "66dda9aec12cd46da8a56560cb765a3de590917bbc40f329185e6fd05a388fff",
@@ -1610,13 +1610,13 @@
     "packages/rpc/src/remote.ts": "a11e072d5df7e1c1ce64814a68f72afc081246b364f0da409b5c9d22bc815957",
     "packages/rpc/src/serialization.ts": "e949418e1cd17cc863c147fc8d1ff15237e1b5f0cb8e3344fd2a9ccfae9d54e7",
     "packages/safe-extract-zip/package.json": "fd2ea628f7ba8121cbe5fcb4a822d68ee7463216d91bf866c6b33f6cc7a5ee71",
-    "packages/server/package.json": "1534ed270fa99c846563eb2671678697edcebee33f6c8b21eafe89734e927eaf",
-    "packages/services/package.json": "625a79390b7c5cc056c4acccc47e4cd09e75d6d373478a45ae4b042f4f913a72",
+    "packages/server/package.json": "146cf5b95008698a0e787d9668578cb25faf1312b58159a66f988be57c0e3a79",
+    "packages/services/package.json": "d3a96d0f8a1e9478ca06d3da05c239cfa839847cd90f73e86cc959b5c4962ee8",
     "packages/share-ui/package.json": "b6b2135ae81213bb0cb53dff74b165299d3b5d6b08c153fbb8f4e8fabaf6b604",
-    "packages/shared/package.json": "e73faa3f9855fb7e1c9b60f2ebe1d39d68f2437575724f5936d2d24be1f7e79e",
+    "packages/shared/package.json": "e694be8fec25efa1af4b57aa2bcd96922ea6b6c93f90777a52489f7c0b8353d4",
     "packages/shared/src/zcode-protocol-v4/wire-codec.ts": "ac2494a3acc795c809c94ee9393f50271a9c2a0fd33813459e5ab93842ceef75",
     "packages/stream-animate/package.json": "31cb25ed87e64dbcd695bbc932729ac30499107d45f747b96a5c3de832afdc28",
-    "packages/ui/package.json": "5a8d861cef6a1ae17b153cc3e53b7657dc93e022368913b1d4763542501384e5",
+    "packages/ui/package.json": "7053282fc7985faef3d54be21060f5d9763bf707d189c78c74994d062b24dd12",
     "packages/ui/src/components/ai-elements/agent.tsx": "830e7ea9e927de1524851337f1d35bda0e5690e3e4fa307fff854b60006b16c7",
     "packages/ui/src/components/ai-elements/artifact.tsx": "7d73f08864d6280ac86c77d32e56d0e702f8aa6208e5910820139d0fb08ce64c",
     "packages/ui/src/components/ai-elements/attachments.tsx": "7a847ce6c8ac9dc630481a82dd20a5e9e00949bf710a41fea1d32a18123011d8",
@@ -2886,10 +2886,11 @@
     "packages/zcode-cua/cua-driver-runtime.js": "d1546e69178e8c2103e81c1aba7c5520ba2099af72612383ca70df834f377b37",
     "packages/zcode-cua/cua-driver-targets.js": "fdf3fff16693cb4a5e744baddd1a221bf6373ec2f19803be0e029cb12d0647d6",
     "packages/zcode-cua/package.json": "c54b21f1657c4ab151ed8624d6a91ec61d4aa7ef6a88720a85e306f7a607c441",
-    "packages/zcode-server-cli/package.json": "698f659142ac592cddba0e0f9b1ea932a8c1ac7d8ee3d049c5defe2a493b9235",
+    "packages/zcode-server-cli/package.json": "469cbe067351401f6f5d09a7605dae9caac21cddbfef88a1dd17066b0c736f02",
     "patches/@ai-sdk__anthropic@3.0.81.patch": "d3a7c381eba7f5157f765a0528003af17cf84544911dfb7412c7800168e01c18",
     "patches/@ai-sdk__openai-compatible@2.0.60.patch": "9632fe9d821b3dc20939ae509cc35b968d90d018bbd1d812390718898182a38b",
     "patches/@arms__rum-electron@0.0.3.patch": "36855354851ea495bc47a03340b0484ff62836b739cad56904b8a69f18e2ae97",
+    "patches/@jimp__plugin-print@1.6.1.patch": "a2647164af82b933f77849c11a79098d891ed22e51a49c2bbc3d35336c4b6a8c",
     "patches/@radix-ui__react-collapsible@1.1.12.patch": "4b7b3781f603e111bb33aef9c4b1694ac9bacd3dff47692606de9876d4631164",
     "patches/exceljs@4.4.0.patch": "3fd52b48fd037d35cdf5f26c104b22405dc44bda21bf71ba9a06b1d3e158038a",
     "patches/playwright-core@1.59.1.patch": "9ae057e01fae03fcc47221009c62c58ccfd9b752b3510502ceb5f3266e8373e0",
@@ -2906,8 +2907,8 @@
     "plugins/office-editor/ui/vendor/superdoc/LICENSE-AGPL-3.0.txt": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.css": "0c1fd0ae51215b4fe5573858190c97ac971f888c63875970979e72018daef33f",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.js": "360490e362af6623eae40cc5aa82efcc5d9dedf5455195b9c373c48220c232ad",
-    "pnpm-lock.yaml": "0278b018a900c370f956001807fa71d71c228ff5837243e49d7c909fb1234a15",
-    "pnpm-workspace.yaml": "17246bfe1659b8a6bd3481745ae24c0a283f2bfca16fd57d2ae23ab72070d8c4",
+    "pnpm-lock.yaml": "1249cd52167028c397645e634e3970ca00ba08bbdebbecdcd15574faca144f83",
+    "pnpm-workspace.yaml": "62b74a1ceabb8ddb1134315d51d51c6e49e7728e2709825e47aa1f0e64bb710e",
     "scripts/license-texts/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "scripts/native-search-tools-config.mjs": "06e9d2b066a22f4bb731fb7356d786b52cf08e20dd6faf91e1a82b167d7462e8",
     "scripts/remote-native-search-tools-config.mjs": "2ddb7054e219ea487596cbdcb83d5c7eac9f239cfe169cfac22e3759d95d7c35",
@@ -9738,7 +9739,7 @@
     },
     {
       "name": "electron",
-      "version": "41.10.7",
+      "version": "42.11.16",
       "license": "MIT",
       "repository": "https://github.com/electron/electron",
       "notices": [
@@ -15770,7 +15771,7 @@
     },
     {
       "name": "undici",
-      "version": "6.29.0",
+      "version": "6.29.1",
       "license": "MIT",
       "repository": "git+https://github.com/nodejs/undici.git",
       "notices": [
@@ -15790,7 +15791,7 @@
     },
     {
       "name": "undici",
-      "version": "7.30.0",
+      "version": "7.30.1",
       "license": "MIT",
       "repository": "git+https://github.com/nodejs/undici.git",
       "notices": [
@@ -16813,32 +16814,8 @@
       ]
     },
     {
-      "name": "zod-to-json-schema",
-      "version": "3.25.2",
-      "license": "ISC",
-      "repository": "https://github.com/StefanTerdell/zod-to-json-schema",
-      "notices": [
-        {
-          "member": "LICENSE",
-          "sha256": "80d3168ad2f70f6f5bb2ab22b23414707abf6f0a392034891481ae36a1a429d4"
-        }
-      ]
-    },
-    {
       "name": "zod",
-      "version": "3.25.76",
-      "license": "MIT",
-      "repository": "git+https://github.com/colinhacks/zod.git",
-      "notices": [
-        {
-          "member": "LICENSE",
-          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
-        }
-      ]
-    },
-    {
-      "name": "zod",
-      "version": "4.6.5",
+      "version": "4.6.6",
       "license": "MIT",
       "repository": "git+https://github.com/colinhacks/zod.git",
       "notices": [
@@ -28738,6 +28715,11 @@
       "package": "@arms/rum-electron@0.0.3",
       "file": "patches/@arms__rum-electron@0.0.3.patch",
       "sha256": "36855354851ea495bc47a03340b0484ff62836b739cad56904b8a69f18e2ae97"
+    },
+    {
+      "package": "@jimp/plugin-print@1.6.1",
+      "file": "patches/@jimp__plugin-print@1.6.1.patch",
+      "sha256": "a2647164af82b933f77849c11a79098d891ed22e51a49c2bbc3d35336c4b6a8c"
     },
     {
       "package": "@radix-ui/react-collapsible@1.1.12",

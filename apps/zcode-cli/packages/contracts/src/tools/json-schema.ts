@@ -2,17 +2,10 @@
 // Zod -> provider-neutral JSON Schema for tool contracts
 // ============================================================
 
-import { zodToJsonSchema } from "zod-to-json-schema";
-import type { ZodTypeAny } from "zod";
+import { z } from "zod";
 import type { JsonSchema } from "../model/index.js";
 
-const STRIPPED_SCHEMA_KEYS = new Set([
-  "$schema",
-  "$id",
-  "$ref",
-  "$defs",
-  "definitions",
-]);
+const STRIPPED_SCHEMA_KEYS = new Set(["$schema", "$id", "$ref", "$defs", "definitions"]);
 export const TOOL_JSON_SCHEMA_VERSION = "https://json-schema.org/draft/2020-12/schema";
 
 /**
@@ -20,11 +13,21 @@ export const TOOL_JSON_SCHEMA_VERSION = "https://json-schema.org/draft/2020-12/s
  * providers. Keep all built-in tool schemas on this path so runtime validation
  * and provider-facing function parameters cannot drift.
  */
-export function toToolJsonSchema(schema: ZodTypeAny): JsonSchema {
-  const jsonSchema = zodToJsonSchema(schema, {
-    $refStrategy: "none",
-    effectStrategy: "input",
-    target: "jsonSchema7",
+export function toToolJsonSchema(schema: z.ZodType): JsonSchema {
+  // 原因：旧转换器不认识真实 Zod 4，会把工具参数静默投影成 {}；原生转换保留输入约束。
+  const jsonSchema = z.toJSONSchema(schema, {
+    io: "input",
+    target: "draft-07",
+    reused: "inline",
+    // 正规化会去掉 provider 不支持的 $ref；先拒绝循环，避免引用约束被无声删除。
+    cycles: "throw",
+    override: ({ zodSchema, jsonSchema: node }) => {
+      // Zod 3 转换器对 strip 对象声明 additionalProperties=false；迁移保留模型合同，
+      // 运行时仍按原 schema 剥离未知字段，不把 ToolSearch 的 strip 改成 strict。
+      if (zodSchema instanceof z.ZodObject && zodSchema.def.catchall === undefined) {
+        node.additionalProperties = false;
+      }
+    },
   }) as JsonSchema;
 
   normalizeToolJsonSchema(jsonSchema);
@@ -100,7 +103,11 @@ function inferSchemaType(schema: Record<string, unknown>): string | undefined {
   if (isRecord(schema.properties) || Array.isArray(schema.required)) {
     return "object";
   }
-  if (schema.items !== undefined || typeof schema.minItems === "number" || typeof schema.maxItems === "number") {
+  if (
+    schema.items !== undefined ||
+    typeof schema.minItems === "number" ||
+    typeof schema.maxItems === "number"
+  ) {
     return "array";
   }
   if (Array.isArray(schema.enum)) {

@@ -121,7 +121,7 @@
     "ripgrep": "0.3.1",
     "semver": "^7.7.4",
     "yauzl": "^3.3.0",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

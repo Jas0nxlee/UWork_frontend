@@ -43,7 +43,7 @@ export const CreateWorkflowSavedSourceSchema = z
       .max(SAVED_WORKFLOW_MAX_NAME_CHARS)
       .describe("Name of a saved workflow (see ListSavedWorkflows)."),
     args: z
-      .record(z.unknown())
+      .record(z.string(), z.unknown())
       .optional()
       .describe("Values for the arguments the saved workflow declares."),
     /** 解析回填：保存文件的落点。模型不填。 */
@@ -97,9 +97,7 @@ const CreateWorkflowModelInputSchema = z
     script: z
       .string()
       .optional()
-      .describe(
-        "The whole workflow script, inline. Exactly one of `script`, `saved` and `path`.",
-      ),
+      .describe("The whole workflow script, inline. Exactly one of `script`, `saved` and `path`."),
     saved: CreateWorkflowSavedSourceSchema.optional().describe(
       "A saved workflow to run, by name. Exactly one of `script`, `saved` and `path`.",
     ),
@@ -121,7 +119,7 @@ const CreateWorkflowModelInputSchema = z
      * 所以这个字段与 `path` 同进同退——`validateInput` 在模型入参上把这条钉住。
      */
     args: z
-      .record(z.unknown())
+      .record(z.string(), z.unknown())
       .optional()
       .describe("Values for the arguments a `path` file declares. Only with `path`."),
     /**

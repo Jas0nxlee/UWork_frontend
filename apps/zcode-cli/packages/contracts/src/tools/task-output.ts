@@ -67,9 +67,7 @@ export type TaskOutputResult = z.infer<typeof TaskOutputResultSchema>;
 
 export const TaskOutputResultJsonSchema = toToolJsonSchema(TaskOutputResultSchema);
 
-function semanticBoolean(
-  schema: z.ZodDefault<z.ZodBoolean>,
-): z.ZodEffects<z.ZodDefault<z.ZodBoolean>, boolean, unknown> {
+function semanticBoolean(schema: z.ZodDefault<z.ZodBoolean>) {
   return z.preprocess((value) => {
     if (value === "true") return true;
     if (value === "false") return false;

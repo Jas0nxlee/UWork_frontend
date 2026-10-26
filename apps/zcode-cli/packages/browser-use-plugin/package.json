@@ -27,7 +27,7 @@
     "@zcode/core": "workspace:*",
     "@zcode/node-repl-host": "workspace:*",
     "@zcode/shared": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "name": "@zcode/browser-use-plugin",
   "description": "作为官方 UWork 内置插件发布的 Browser Use skill 与 client runtime；node_repl MCP server 由 @zcode/node-repl-host 提供。",

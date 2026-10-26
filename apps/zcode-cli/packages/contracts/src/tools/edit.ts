@@ -19,9 +19,7 @@ export const EditInputSchema = z.object({
   /**
    * The absolute path to the file to modify.
    */
-  file_path: z
-    .string()
-    .describe("The absolute path to the file to modify"),
+  file_path: z.string().describe("The absolute path to the file to modify"),
   /**
    * The text to replace
    */
@@ -191,7 +189,7 @@ export const EditErrorCode = {
 
 export type EditErrorCode = (typeof EditErrorCode)[keyof typeof EditErrorCode];
 
-function semanticBoolean(): z.ZodEffects<z.ZodBoolean, boolean, unknown> {
+function semanticBoolean() {
   return z.preprocess((value) => {
     if (typeof value === "boolean") return value;
     if (typeof value === "number") {
