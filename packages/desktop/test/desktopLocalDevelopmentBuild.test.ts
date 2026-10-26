@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   createLocalDevelopmentPackageArgs,
+  resolveDesktopLocalDevelopmentBuildDefine,
   resolveDesktopBuildProfile,
   resolveDesktopDisplayVersion,
   resolveDesktopHelperPackaging,
@@ -16,6 +17,19 @@ const { build } = require("esbuild");
 afterEach(() => vi.unstubAllGlobals());
 
 describe("explicit local development build", () => {
+  it("正式生产编译固定关闭例外，普通source/watch保留显式dev合同，本地档位明确开启", () => {
+    expect(resolveDesktopLocalDevelopmentBuildDefine({ NODE_ENV: "production" })).toBe("false");
+    expect(resolveDesktopLocalDevelopmentBuildDefine({ NODE_ENV: "development" })).toBe(
+      "undefined",
+    );
+    expect(resolveDesktopLocalDevelopmentBuildDefine({})).toBe("undefined");
+    expect(
+      resolveDesktopLocalDevelopmentBuildDefine({
+        NODE_ENV: "production",
+        UWORK_DESKTOP_BUILD_PROFILE: "local-development",
+      }),
+    ).toBe("true");
+  });
   it("本地打包入口显式加载仓库JS配置且禁止发布，不能落到无版本默认配置", () => {
     expect(createLocalDevelopmentPackageArgs("arm64")).toEqual([
       "--filter",

@@ -16,6 +16,11 @@ afterEach(async () => {
 });
 
 describe("SEA Helper entry", () => {
+  it("rejects unsupported platforms before loading native code", async () => {
+    const loadSdk = vi.fn();
+    await expect(startCuaHelper({ platform: "linux", loadSdk })).rejects.toThrow(/only on macOS/);
+    expect(loadSdk).not.toHaveBeenCalled();
+  });
   it("keeps the native operation alive after its broker response has timed out", async () => {
     vi.useFakeTimers();
     const close = vi.fn(async () => {});
@@ -85,6 +90,8 @@ describe("SEA Helper entry", () => {
     roots.push(root);
     const socketPath = join(root, "helper.sock");
     const helper = await startCuaHelper({
+      // 此处测试已替换原生 SDK，明确模拟 macOS；Linux CI 仍执行相同身份合同。
+      platform: "darwin",
       argv: ["--socket", socketPath],
       development: true,
       loadSdk: () => ({
@@ -114,6 +121,7 @@ describe("SEA Helper entry", () => {
     const requestPermissions = vi.fn();
     const createDriver = vi.fn();
     await startCuaHelper({
+      platform: "darwin",
       argv: ["--permission-status-file", output],
       loadSdk: () => ({
         currentMacOsPermissionStatus: () => ({ accessibility: false, screenRecording: true }),
@@ -134,6 +142,7 @@ describe("SEA Helper entry", () => {
     roots.push(root);
     await expect(
       startCuaHelper({
+        platform: "darwin",
         argv: ["--permission-status-file", join(root, "status.json")],
         loadSdk: () => ({
           currentMacOsPermissionStatus: () => ({ accessibility: null, screenRecording: true }),

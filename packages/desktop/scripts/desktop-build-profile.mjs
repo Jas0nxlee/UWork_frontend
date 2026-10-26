@@ -30,6 +30,12 @@ export function isLocalDevelopmentBuild(env = process.env) {
   return resolveDesktopBuildProfile(env) === "local-development";
 }
 
+export function resolveDesktopLocalDevelopmentBuildDefine(env = process.env) {
+  if (isLocalDevelopmentBuild(env)) return "true";
+  // source/watch 不是正式打包策略；把它也编译成 false 会误伤既有显式免签开发流程。
+  return env.NODE_ENV === "production" ? "false" : "undefined";
+}
+
 export function resolveDesktopDisplayVersion(version, env = process.env) {
   return isLocalDevelopmentBuild(env) ? `${version}-local-development` : version;
 }
