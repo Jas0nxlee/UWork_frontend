@@ -15,7 +15,7 @@ const env = {
   ZCODE_PREVIEW_IDENTITY: "0",
   ZCODE_TARGET_OS: "darwin",
   ZCODE_TARGET_ARCH: process.arch,
-  VITE_E2E_STORE_BRIDGE: "0",
+  VITE_ZCODE_E2E_STORE_BRIDGE: "0",
   ZCODE_MAC_ADHOC_SIGN: "1",
   ZCODE_DESKTOP_DIST_DIR: "dist-local-development",
 };
