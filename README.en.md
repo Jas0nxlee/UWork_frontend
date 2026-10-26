@@ -14,7 +14,7 @@ The sign-in page footer shows the current client build version. See [package.jso
 
 ## Features
 
-New to UWork? The [Chinese illustrated guide](docs/user-guide/README.md) covers version checks, WeCom sign-in and usage, project development, validation, and the prerequisites for Office and mobile remote control. It distinguishes current captures from historical screenshots and includes a standalone [offline edition](docs/user-guide/index.html).
+New to UWork? The [Chinese illustrated guide](docs/user-guide/README.md) explains Office/Coding modes, provides a quick workflow, and walks through WeCom QR sign-in, project development, validation, and saving progress. All screenshots were retaken from the installed 0.1.0 client. It also covers the company plugin marketplace, Office files, Bot channels, and remote workspaces, with a standalone [offline edition](docs/user-guide/index.html).
 
 | Feature                | Description                                                                                                                                                                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
