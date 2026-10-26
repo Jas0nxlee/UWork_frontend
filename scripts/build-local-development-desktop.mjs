@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
+import { createLocalDevelopmentPackageArgs } from "../packages/desktop/scripts/desktop-build-profile.mjs";
 
 const run = promisify(execFile);
 if (process.platform !== "darwin")
@@ -21,17 +22,7 @@ const env = {
 for (const args of [
   ["--filter", "@zcode/desktop", "prepare:runtime-assets"],
   ["--filter", "@zcode/desktop", "build:no-runtime-assets"],
-  [
-    "--filter",
-    "@zcode/desktop",
-    "exec",
-    "electron-builder",
-    "--dir",
-    "--mac",
-    `--${process.arch}`,
-    "--publish",
-    "never",
-  ],
+  createLocalDevelopmentPackageArgs(process.arch),
 ]) {
   process.stdout.write(`[local-development] pnpm ${args.join(" ")}\n`);
   const { stdout, stderr } = await run("pnpm", args, {

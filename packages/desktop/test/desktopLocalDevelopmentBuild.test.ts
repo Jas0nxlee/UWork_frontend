@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  createLocalDevelopmentPackageArgs,
   resolveDesktopBuildProfile,
   resolveDesktopDisplayVersion,
   resolveDesktopHelperPackaging,
@@ -15,6 +16,21 @@ const { build } = require("esbuild");
 afterEach(() => vi.unstubAllGlobals());
 
 describe("explicit local development build", () => {
+  it("本地打包入口显式加载仓库JS配置且禁止发布，不能落到无版本默认配置", () => {
+    expect(createLocalDevelopmentPackageArgs("arm64")).toEqual([
+      "--filter",
+      "@zcode/desktop",
+      "exec",
+      "electron-builder",
+      "--config",
+      "electron-builder.config.js",
+      "--dir",
+      "--mac",
+      "--arm64",
+      "--publish",
+      "never",
+    ]);
+  });
   it("默认正式档位且非法选择器拒绝，开发包名称/版本明确并保留原 appId", () => {
     expect(resolveDesktopBuildProfile({})).toBe("release");
     expect(() => resolveDesktopBuildProfile({ UWORK_DESKTOP_BUILD_PROFILE: "1" })).toThrow();

@@ -1,5 +1,24 @@
 import { join } from "node:path";
 
+export function createLocalDevelopmentPackageArgs(arch) {
+  if (!["arm64", "x64"].includes(arch))
+    throw new Error("Unsupported local development architecture");
+  // electron-builder 不自动发现此仓库的 JS 配置；漏传会绕过版本、Helper 和原生资源合同。
+  return [
+    "--filter",
+    "@zcode/desktop",
+    "exec",
+    "electron-builder",
+    "--config",
+    "electron-builder.config.js",
+    "--dir",
+    "--mac",
+    `--${arch}`,
+    "--publish",
+    "never",
+  ];
+}
+
 export function resolveDesktopBuildProfile(env = process.env) {
   const profile = env.UWORK_DESKTOP_BUILD_PROFILE?.trim() || "release";
   if (!["release", "local-development"].includes(profile))
