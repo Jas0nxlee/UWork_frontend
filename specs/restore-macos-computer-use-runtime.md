@@ -102,6 +102,29 @@ sequenceDiagram
 - 本地开发档位关闭自动更新，构建只生成本地 App，不推送发布或改变系统 TCC；系统权限仍由用户授予。安装位置可以替换 `/Applications/UWork.app`，bundle 内显示身份保持本地开发标识。
 - 验收包括编译 release 对伪造环境拒绝、local-development 对固定 dev Helper 接纳、拒绝混配、未打包 dev 保持、App / About 标识以及业务数据路径不变；最终独立 Helper 与客户端真实链路验证单独记录。
 
+## 正确身份的一次性权限预检
+
+2026-10-26 安装验收发现：直接执行相同 Helper 二进制得到 AX=true，但用 LaunchServices 启动同一已安装 App 及其常驻实例均得到 AX=false。直接 exec 的诊断可能继承父应用责任身份，不能作为 Helper 自身已获授权的证据；物理重启后仍拒绝时也不能宣称只是 Host 缓存。
+
+Host 的 `queryPermissionStatusFresh()` 必须先复用既有安装/验签，再通过 `/usr/bin/open -n -W -g -a <exact Helper.app> --args --permission-status-file <private file>` 启动独立短命实例。`-n` 保证新实例，`-W` 只等待该新实例退出，`-g` 不抢前台；常驻 `--socket` 启动不携带等待参数。退出后读取同一份原子发布的完整 AX/Screen 布尔快照，缺字段、非法内容、启动或退出失败均不能制造 granted。既有 `queryScreenRecordingPreflight()` 委托同一接口，不另造权限来源。
+
+服务展示将一次 fresh 快照的两项权限与现有运行报告区分：fresh 拒绝即 denied；fresh AX 已授予而常驻实例仍拒绝时标记 stale，要求显式恢复，不能伪造运行就绪；拿不到 fresh 结果时沿用已读取的运行报告。standalone 状态路径只执行同一 producer 的只读预检，不创建托管 admission、不触发 restart。功能探针仍单独、显式发起，不加入后台轮询。
+
+```mermaid
+sequenceDiagram
+  participant S as 权限服务
+  participant H as Producer Host
+  participant LS as LaunchServices
+  participant P as 短命已验签 Helper
+  S->>H: queryPermissionStatusFresh()
+  H->>H: ensureInstalled / verify exact App
+  H->>LS: open -n -W -g exact App + status-file
+  LS->>P: 新实例，以 Helper 责任身份读取 AX/Screen
+  P-->>H: 原子发布完整快照后退出
+  H-->>S: 一次性双权限结果
+  S->>S: 与运行报告区分 denied / stale / granted
+```
+
 ## 实施与验收
 
 1. 先补 broker 鉴权、权限快照、会话隔离/stop 的失败用例，再恢复运行时；运行选定测试，不运行全量根套件。

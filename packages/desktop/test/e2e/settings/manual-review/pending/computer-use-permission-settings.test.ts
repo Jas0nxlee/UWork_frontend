@@ -119,24 +119,7 @@ describe("Computer Use permission settings with real Helper", () => {
   async function clickPermissionAndExpectUrl(labels: string[], url: string) {
     const button = $(labels.map((label) => `button[aria-label="${label}"]`).join(","));
     await button.waitForClickable({ timeout: 30_000 });
-    // 按钮可用只代表查询结束；必须断言真实状态是缺权，而不是 unknown 终态。
-    const page = $(`[data-testid="${TID_SETTINGS_PAGE}"]`);
-    await browser.waitUntil(async () => !/未知|Unknown/.test(await page.getText()), {
-      timeout: 30_000,
-      timeoutMsg: "Real Helper did not provide a definitive permission snapshot",
-    });
-    const socketPath = resolveBrokerSocketPath();
-    const ping = await callBrokerMethod<{ bundleId: string; pid: number }>({
-      socketPath,
-      method: "ping",
-    });
-    expect(ping.bundleId).toBe("dev.zcode.cua-helper.dev");
-    expect(ping.pid).toBeGreaterThan(0);
-    expect(await callBrokerMethod({ socketPath, method: "permission_status" })).toMatchObject({
-      grant_owner: "dev.zcode.cua-helper.dev",
-      accessibility: "denied",
-      screen_recording: "denied",
-    });
+    // 显式导航不再等待状态查询；同一已授权 Helper 也必须能打开所选设置页。
     const before = external.mock.calls.length;
     await button.click();
     await browser.waitUntil(
@@ -147,6 +130,18 @@ describe("Computer Use permission settings with real Helper", () => {
       },
     );
     expect(external.mock.calls.slice(before).map(([target]) => target)).toContain(url);
+    const socketPath = resolveBrokerSocketPath();
+    const ping = await callBrokerMethod<{ bundleId: string; pid: number }>({
+      socketPath,
+      method: "ping",
+    });
+    expect(ping.bundleId).toBe("dev.zcode.cua-helper.dev");
+    expect(ping.pid).toBeGreaterThan(0);
+    expect(await callBrokerMethod({ socketPath, method: "permission_status" })).toMatchObject({
+      grant_owner: "dev.zcode.cua-helper.dev",
+      accessibility: expect.stringMatching(/^(granted|denied)$/),
+      screen_recording: expect.stringMatching(/^(granted|denied)$/),
+    });
     // Toast 挂在 body portal，不属于设置页容器；必须读取实际可见的全页文本。
     expect(await $("body").getText()).not.toMatch(UNKNOWN_HELPER);
   }
@@ -181,6 +176,22 @@ describe("Computer Use permission settings with real Helper", () => {
   it("CUPS-02: Screen Recording button reaches the exact system settings pane", async function () {
     this.timeout(90_000);
     await openComputerUseSettings();
+    await clickPermissionAndExpectUrl(
+      ["打开屏幕录制设置", "Open Screen Recording"],
+      SCREEN_RECORDING_URL,
+    );
+    await cancelMockedOnboarding();
+  });
+
+  it("CUPS-03: another explicit button replaces this renderer's pending pane", async function () {
+    this.timeout(90_000);
+    await openComputerUseSettings();
+    await clickPermissionAndExpectUrl(
+      ["打开辅助功能设置", "Open Accessibility Settings"],
+      ACCESSIBILITY_URL,
+    );
+    // shell mock 不会产生返回事件，旧引导仍 pending。必须用真实第二次点击取消旧participant，
+    // 无需离开分区或先授权，就能进入所选另一pane；Main仍只有一个native session owner。
     await clickPermissionAndExpectUrl(
       ["打开屏幕录制设置", "Open Screen Recording"],
       SCREEN_RECORDING_URL,

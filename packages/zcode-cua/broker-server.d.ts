@@ -153,6 +153,10 @@ export interface CuaHelperHost extends CuaProductHelperHost {
   queryScreenCaptureProbe(): Promise<{ ok: boolean; reason?: string }>;
   queryScreenRecordingPreflight(): Promise<"granted" | "denied" | "unknown" | undefined>;
   queryPermissionStatus(): Promise<CuaPermissionStatusQueryReport>;
+  queryPermissionStatusFresh(): Promise<{
+    accessibility: "granted" | "denied";
+    screen_recording: "granted" | "denied";
+  }>;
 }
 
 export interface CuaHelperTransportRestartOptions {
