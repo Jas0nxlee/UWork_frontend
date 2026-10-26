@@ -33,3 +33,17 @@ export function isRealComputerUseProducerInstalled({ desktopPackageRoot }) {
   const producer = readComputerUseProducer({ desktopPackageRoot });
   return producer.installed && !producer.placeholder;
 }
+
+/** 恢复的公开 producer 按平台声明能力，不能让其他平台打包不存在的 Helper。 */
+export function isComputerUseProducerSupported({
+  desktopPackageRoot,
+  platform = process.platform,
+}) {
+  const producer = readComputerUseProducer({ desktopPackageRoot });
+  return (
+    producer.installed &&
+    !producer.placeholder &&
+    (!Array.isArray(producer.manifest.zcodeCuaPlatforms) ||
+      producer.manifest.zcodeCuaPlatforms.includes(platform))
+  );
+}

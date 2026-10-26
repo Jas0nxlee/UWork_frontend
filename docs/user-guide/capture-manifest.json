@@ -1,199 +1,260 @@
 {
-  "schemaVersion": 2,
-  "date": "2026-10-21",
+  "schemaVersion": 3,
+  "date": "2026-10-22",
   "product": "UWork",
-  "version": "3.16.7",
-  "branch": "uwork",
-  "textSourceCommit": "a4485d6d",
-  "release": {
-    "tag": "v3.16.7",
-    "commit": "36e049f73ea922b13297c1524039a18baeebea09",
-    "url": "https://github.com/Jas0nxlee/UWork/releases/tag/v3.16.7"
+  "version": "0.1.0",
+  "textSourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+  "sourceMarkdownSha256": "0065f351272a1b5b6836a16212e5705d6a80a79fafaa799a59398d6a0b978015",
+  "runtime": {
+    "version": "0.1.0",
+    "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+    "installedApp": "/Applications/UWork.app",
+    "installedAsarSha256": "8483b79e4d3cbbbe0b9118072f5d0f044b00259aa66b72434538bd17da958abf",
+    "matchesVerifiedBuildArtifact": true,
+    "buildRun": "https://github.com/Jas0nxlee/UWork_frontend/actions/runs/39776134833"
   },
-  "scope": "Text checked against current uwork source; two new login-layout captures, eleven explicitly historical screenshots",
+  "scope": "All 19 screenshots retaken from the installed /Applications/UWork.app. Authenticated workspace used; no historical screenshots or fake identity/usage values. QR authorization captured separately without signing the current user out.",
   "screenshots": [
     {
-      "file": "images/02-model-settings.png",
-      "sha256": "68c01b0b8a27efd41a066035d67c556e15275c998d3b5320b52df71b2af00486",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Personal/account/endpoint/usage values redacted; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "file": "images/19-mode-coding.png",
+      "sha256": "62dfbf773fe3ec23427812d8f28fd9d8a522377b6250278fce061cabc7faba87",
+      "width": 504,
+      "height": 108,
+      "capturedAt": "2026-10-22T21:45:01+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-mode-header-capture",
+      "note": "Actual installed client mode header clipped at x=6,y=55,width=252,height=54 CSS pixels. Coding and Office modes captured via the real toggle; original Coding mode restored. No conversation content included."
     },
     {
-      "file": "images/04-new-project-prompt.png",
-      "sha256": "db34489e6b3a96208bc62fe1e1c0aeac63bdf21e0d10c92a607f78a9dfe0a79a",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "file": "images/20-mode-office.png",
+      "sha256": "f80bf37dbf327c818186229aa11be13c8ae30001223b7335b05e537f1f72b59c",
+      "width": 504,
+      "height": 108,
+      "capturedAt": "2026-10-22T21:45:01+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-mode-header-capture",
+      "note": "Actual installed client mode header clipped at x=6,y=55,width=252,height=54 CSS pixels. Coding and Office modes captured via the real toggle; original Coding mode restored. No conversation content included."
     },
     {
-      "file": "images/05-permission-modes.png",
-      "sha256": "34918939d28a8cc047b08e49aa6d428cbf2c84942de0ce177092950f2f4000d6",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
-    },
-    {
-      "file": "images/06-add-existing-project.png",
-      "sha256": "80e8ba14e5bf8c27bca503b6ec8e994c8046a9932fc2e28a1a8ff5ee5dbd18fc",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
-    },
-    {
-      "file": "images/07-existing-project.png",
-      "sha256": "2bab9b56f2761a3c3bd2934692ca9401a0111eb858bcdc51ce8cbac22f03e069",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
-    },
-    {
-      "file": "images/08-review-changes.png",
-      "sha256": "0567caf0a4dd9b7afa0d97ab2389e68604f68523003b8a6fa826056acbbfead6",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
-    },
-    {
-      "file": "images/09-run-tests.png",
-      "sha256": "df213ec3e48c42029f2ec5737a902de4c4ea4aaf889593e745db05522378faf9",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
-    },
-    {
-      "file": "images/11-preview-and-iterate.png",
-      "sha256": "1adf28a5e112e36db02d301ec26d2aa7c66939904a073d084bab574391c3a17d",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Unaltered UI screenshot; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "file": "images/21-mode-settings.png",
+      "sha256": "6492ffe00ed78d9548d1e12c3d12852c955a90cb22c1407292406dd4d31532bb",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:45:21+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Actual Settings > General > Interface mode selector open, showing both choices; no setting changed from this menu"
     },
     {
       "file": "images/12-login-company.png",
-      "sha256": "f79378194383c7c0cf59e21aa78bb88ad827fdb8f5c4aa5ea17724dbc7924998",
-      "source": "Current shared UI rendered in isolated Chromium at localhost:15494 with the repository enterprise-identity test adapter",
-      "note": "Synthetic organization examples; no real account, credential or authorization QR. Capture uses build version 3.16.7.",
-      "capturedForVersion": "3.16.7",
-      "sourceCommit": "a4485d6d",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "current-shared-ui-test-adapter",
-      "componentSha256": "5333f356e6bd8b4d058cef407081034aae6416d3bdb17bbefc72c4a62cd83b28"
+      "sha256": "581f3c8d7c72d7c5774ef5d9044fcf45b3cc75b6b8ce8ebc327e21cf0f376d86",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:09:53+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "installed-login-page-capture",
+      "note": "Real installed client company picker before authentication"
     },
     {
       "file": "images/13-wecom-qr.png",
-      "sha256": "e1287ab511ba55057eb83d4837c8a348408e34c100197dacb01c5f8199edb9c1",
-      "source": "Current shared UI rendered in isolated Chromium at localhost:15494 with the repository enterprise-identity test adapter",
-      "note": "Synthetic organization examples; no real account, credential or authorization QR. Capture uses build version 3.16.7.",
-      "capturedForVersion": "3.16.7",
-      "sourceCommit": "a4485d6d",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "current-shared-ui-test-adapter",
-      "componentSha256": "5333f356e6bd8b4d058cef407081034aae6416d3bdb17bbefc72c4a62cd83b28"
+      "sha256": "4a347977228dfd9bcd65ad8e28467c97813cb675ff21649ce50bd58988f5d428",
+      "width": 668,
+      "height": 640,
+      "capturedAt": "2026-10-22T21:12:55+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "installed-native-wecom-authorization-capture",
+      "note": "Actual official WeCom QR authorization guest, captured from a separate temporary instance of the same installed app. Live QR pixels covered before capture; pending login cancelled afterward. No successful QR callback claimed."
+    },
+    {
+      "file": "images/17-first-run.png",
+      "sha256": "94675f1a492ccc55ef64bd0c1f4ab24efeda54ccd8ab4570e2258dafd807481a",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:10:49+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "First-run guide observed after enterprise authentication; no profession or onboarding preference submitted"
     },
     {
       "file": "images/14-identity-menu.png",
-      "sha256": "08164c511e68b68213593f5b15414ac4f3ddcde2fa37ffbfcc16b554eed0c369",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Personal/account/endpoint/usage values redacted; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "sha256": "4e8e8cee2d5d8c660ff1a97c316a615c5eb5fbe019ed706ef58407de96f621c1",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:11:32+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/02-model-settings.png",
+      "sha256": "9c918bcc2c4c1cd9f8f32416b72cff123f632b80719cbb00fb2c81c4ea11d7ef",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:13:33+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real authenticated model settings; endpoint and password input masked before capture"
     },
     {
       "file": "images/15-enterprise-account.png",
-      "sha256": "4c87fb0758a5da816ce9266eb1a657ecf4b39ceb01745e13da306db494c82715",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Personal/account/endpoint/usage values redacted; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "sha256": "b37ebcdd2761a795da34e17b5348d3f45b1555f85585b6b6022d4a6ec159cfce",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:11:46+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real enterprise data; identity, organization details, endpoint, plan title, budget and usage values/charts masked before capture"
     },
     {
       "file": "images/16-enterprise-usage.png",
-      "sha256": "f4a18c6fe0da75c59f59025f6a2c0e28af37aaea489238da9350c57e20ce1f27",
-      "source": "Live Electron renderer, macOS, localhost:5174",
-      "note": "Personal/account/endpoint/usage values redacted; retained as a historical operation-location reference, not recaptured in this update",
-      "capturedForVersion": "3.16.6",
-      "sourceCommit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-      "captureDate": "2026-10-21",
-      "evidenceKind": "historical-desktop-capture"
+      "sha256": "99efd2e544d3cf432668f4babf0e1699d8db345f2c486b6159395371db1b85d7",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:11:46+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real enterprise data; identity, organization details, endpoint, plan title, budget and usage values/charts masked before capture"
+    },
+    {
+      "file": "images/06-add-existing-project.png",
+      "sha256": "36fc7aab00484ef758cc93a461ada1b86340ca39a7f29324f4f0858217316e91",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:14:03+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/04-new-project-prompt.png",
+      "sha256": "8494f81a942a50071ad9f4a3b628d547347dcccc898eb4cca71db839687b466b",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:14:04+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/05-permission-modes.png",
+      "sha256": "6903e5e7dd35c83e05b78490b60bce0f9904e41d6b5c4dce14d97ece1c511aff",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:14:05+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/07-existing-project.png",
+      "sha256": "412078ad37940680bf44d1645f370af9eaaf058c5127d520d3020aeab326e7d6",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:15:03+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/08-review-changes.png",
+      "sha256": "c82882f1ccf1f3b12d1f75620920bafddd48cfa4b9e6b0c7d7e26b2d03ceadaa",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:15:11+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/09-run-tests.png",
+      "sha256": "f1db9b90c2d8946d6c9367e58f13304b5af946a1d988732f7b85fa128a63a88f",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:15:21+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Actual integrated terminal execution: npm test, three demo tests passed, zero failed. Prompt anonymized to demo."
+    },
+    {
+      "file": "images/11-preview-and-iterate.png",
+      "sha256": "6f4117b17dfbee4b9090412b4bcd1fb696e48344cf9ecad73c8449193d71bced",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:16:09+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Actual in-app browser, author-prepared local demo; clicked unfinished filter and observed only the incomplete task"
+    },
+    {
+      "file": "images/18-bot-entry.png",
+      "sha256": "74dce07d8d681a5dae83ea28a3b5ab9e3b2268e121d4aee48591ba770134470b",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:16:10+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Real installed client after enterprise authentication; personal identity masked where visible"
+    },
+    {
+      "file": "images/22-company-marketplace.png",
+      "sha256": "63f305a4d9e4f4ff1674333836c759f7b5bcf71d4a0ee266978cd4918755b540",
+      "width": 2400,
+      "height": 1600,
+      "capturedAt": "2026-10-22T21:45:31+08:00",
+      "capturedForVersion": "0.1.0",
+      "sourceCommit": "3a7d3e5b383a03b153c3733d5b05072bf4668f0c",
+      "evidenceKind": "authenticated-installed-client-capture",
+      "note": "Actual Company segment selected in Plugin Marketplace, showing the configured UCAS AIHub catalogue. No plugin installed, enabled, updated, or invoked. Original workspace page restored afterward."
     }
   ],
-  "currentCapture": {
-    "fixture": "packages/ui/test/enterprise-identity/",
-    "viewport": {
-      "width": 1440,
-      "height": 960,
-      "deviceScaleFactor": 1
-    },
-    "versionDefine": "3.16.7",
-    "realEnterpriseLogin": false,
-    "realQrIncluded": false,
-    "modelRequests": 0
+  "demo": {
+    "projects": "Author-prepared hello-tasks empty folder and team-dashboard Git fixture",
+    "composer": "All screenshots show unsent drafts; no model request sent",
+    "checks": "npm test: 3 passed / 0 failed; local npm run dev and unfinished filter click verified"
   },
-  "historicalCapture": {
-    "version": "3.16.6",
-    "commit": "b122e4e76f6e4d4490a889d3930e68034a4d2ca1",
-    "demo": "Author-prepared local projects. All composer prompts are unsent drafts. A nonfunctional placeholder key was used only to display model selection and removed afterward. User completed real WeCom QR login; automatic identity and gateway account/usage hydration observed. No live LLM inference tested.",
-    "runtime": "Built current working tree in isolated data and Electron userData directories; existing production bundled provider template selected explicitly because test template lacks UCAS. Existing unrelated working tree changes preserved.",
-    "reportedChecks": {
-      "typecheck": "passed",
-      "lint": "0 errors, 303 warnings",
-      "demoTests": "node --test: 3 passed, 0 failed",
-      "node": "24.14.0",
-      "html": "Desktop 1440px and mobile 390px checked, images loaded, zoom works"
+  "authenticationBoundary": "Real enterprise authentication, gateway hydration and authenticated UI observed. Main login passed through official authorization and first-run guide. The separate QR page capture is not proof of a full phone scan/callback; no phone screenshot taken.",
+  "checks": {
+    "typecheck": "passed",
+    "lint": "0 errors, 331 warnings",
+    "format": "passed for changed Markdown, HTML and JSON files",
+    "offlineHtml": {
+      "desktopWidth": 1440,
+      "mobileWidth": 390,
+      "printMediaWidth": 794,
+      "horizontalPageOverflow": false,
+      "all19ImagesLoaded": true,
+      "all9ChapterAnchorsValid": true,
+      "compactModeScreenshots": 2,
+      "newImageZoomVerified": true,
+      "printSidebarHidden": true,
+      "externalScriptsOrStyles": false
     },
-    "attribution": "Original capture record retained for provenance; historical real login and gateway state were not repeated in this update"
-  },
-  "currentValidation": {
-    "markdownVersion": "3.16.7",
-    "newCaptures": 2,
-    "retainedHistoricalCaptures": 11,
-    "runtimeAndOfflineChecks": "passed; no real enterprise authentication or model inference performed",
-    "offlineChecks": {
-      "offlineReload": true,
-      "viewports": [1440, 390],
-      "loadedEmbeddedImages": 13,
-      "horizontalOverflow": false,
-      "zoomOpenClose": true,
-      "printStyles": true
-    },
-    "repositoryChecks": {
-      "typecheck": "passed",
-      "lint": {
-        "errors": 0,
-        "warnings": 330
-      },
-      "architectureViolations": 0
-    },
-    "armsGeneratedArtifactTests": 5,
-    "existingArmsRegressionTests": 30,
-    "contentConsistency": "HTML text, code samples, captions and embedded source hash match Markdown"
+    "additionalCapture": {
+      "modeToggleUsed": true,
+      "originalMode": "coding",
+      "restoredMode": "coding",
+      "originalWorkspacePageRestored": true,
+      "companySegmentSelectedForCapture": true,
+      "pluginsInstalledOrEnabled": false,
+      "modelRequestsSent": false
+    }
   }
 }

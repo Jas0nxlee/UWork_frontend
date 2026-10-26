@@ -476,11 +476,18 @@ function stageKoffiForCuaPlugin() {
     console.log("[prepare:agent-bundle] zcode-cua-plugin not staged, skip koffi staging");
     return;
   }
-  stageKoffiIntoBundledAgents({
+  const staged = stageKoffiIntoBundledAgents({
+    desktopPackageRoot: desktopRoot,
     koffiPackageRoot: adaptersRoot,
     glmDir: cuaPluginStagedDir,
     targetPlatform: { os: platform, arch },
   });
+  if (!staged) {
+    console.log(
+      "[prepare:agent-bundle] Computer Use package does not declare koffi, skip koffi staging",
+    );
+    return;
+  }
   console.log(
     `[prepare:agent-bundle] staged koffi into ${resolve(cuaPluginStagedDir, "node_modules")} (${platform}-${arch})`,
   );

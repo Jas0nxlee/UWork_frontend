@@ -47,7 +47,11 @@ async function fixture(
     resolve(repositoryRoot, "packages/desktop/electron-builder.config.js"),
     resolve(desktop, "electron-builder.config.js"),
   );
-  for (const file of ["target-platform.mjs", "desktop-product-identity.mjs"]) {
+  for (const file of [
+    "target-platform.mjs",
+    "desktop-product-identity.mjs",
+    "desktop-build-profile.mjs",
+  ]) {
     await mkdir(resolve(desktop, "scripts"), { recursive: true });
     await copyFile(
       resolve(repositoryRoot, "packages/desktop/scripts", file),
@@ -67,7 +71,7 @@ async function fixture(
     "packages/desktop/scripts/packaged-sourcemap-cleanup.mjs": `export const cleanupPackagedSourcemaps = async () => {};`,
     "packages/desktop/scripts/powershell-command.mjs": `export const createWindowsPowerShellSecurityArgs = () => [];`,
     "packages/desktop/scripts/sharp-package-assets.mjs": `export const isSharpRequiredByComputerUse = () => false; export const verifyStagedSharp = () => [];`,
-    "packages/desktop/scripts/computer-use-producer.mjs": `export const isRealComputerUseProducerInstalled = () => ${JSON.stringify(cua)};`,
+    "packages/desktop/scripts/computer-use-producer.mjs": `export const isRealComputerUseProducerInstalled = () => ${JSON.stringify(cua)}; export const isComputerUseProducerSupported = () => ${JSON.stringify(cua)};`,
     "packages/desktop/scripts/koffi-package-assets.mjs": `export const verifyStagedKoffi = () => [];`,
     "packages/desktop/scripts/windows-cua-helper-assets.mjs": `
       import { writeFile } from "node:fs/promises";

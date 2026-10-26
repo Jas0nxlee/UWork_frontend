@@ -43,7 +43,7 @@ export const ListWorkflowRunsInputSchema = z
       .array(z.enum(WORKFLOW_RUN_LIFECYCLE_STATUSES))
       .optional()
       .describe(
-        "Optional status filter. Omit to see every run in this project. Pass [\"running\", \"pending\"] to see only what is still in flight.",
+        'Optional status filter. Omit to see every run in this project. Pass ["running", "pending"] to see only what is still in flight.',
       ),
   })
   // 刻意没有 cwd 输入：工具恒查当前会话的工作目录（模型无权跨项目扫库，这同时是
@@ -110,7 +110,7 @@ export const ListWorkflowRunsOutputJsonSchema = toToolJsonSchema(ListWorkflowRun
  * 死代码。语义强制转换走 preprocess 是既有惯例（task-output 的 semanticBoolean、bash 的
  * timeout）。
  */
-function clampedLimit(): z.ZodEffects<z.ZodDefault<z.ZodNumber>, number, unknown> {
+function clampedLimit() {
   return z.preprocess((value) => {
     if (typeof value !== "number" || !Number.isFinite(value)) return value;
     return Math.min(

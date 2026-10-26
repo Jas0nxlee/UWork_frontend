@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app } from "electron";
-import { HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
+import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
+import { isLocalDevelopmentDesktopBuild } from "./desktopElectronApp.js";
 import {
   canonicalizeCuaHelperInstallerOptions,
   createCuaHelperInstaller,
@@ -31,7 +32,11 @@ export function resolvePackagedCuaHelperAppPath(
     options.resourcesPath ?? (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   const normalizedResourcesPath = resourcesPath?.trim();
   return platform === "darwin" && isPackaged && normalizedResourcesPath
-    ? join(normalizedResourcesPath, "cua-helper", HELPER_APP_NAME)
+    ? join(
+        normalizedResourcesPath,
+        "cua-helper",
+        isLocalDevelopmentDesktopBuild ? DEV_HELPER_APP_NAME : HELPER_APP_NAME,
+      )
     : undefined;
 }
 
@@ -39,12 +44,20 @@ export function createDesktopCuaHelperInstaller(
   options: DesktopCuaHelperInstallerOptions,
   createInstaller: InstallerFactory = createCuaHelperInstaller,
 ): CuaHelperInstaller {
-  const bundledAppPath = options.bundledHelperAppPath ?? resolvePackagedCuaHelperAppPath(options);
+  const localDevelopmentPackage =
+    isLocalDevelopmentDesktopBuild && (options.isPackaged ?? app.isPackaged);
+  const bundledAppPath = localDevelopmentPackage
+    ? resolvePackagedCuaHelperAppPath(options)
+    : (options.bundledHelperAppPath ?? resolvePackagedCuaHelperAppPath(options));
   const env = { ...options.env };
   // The unsigned-local escape hatch belongs only to unpackaged development.
   // A signed app with a bundled Helper must be deterministic even when its
   // LaunchServices environment was polluted by an earlier dev session.
-  if (bundledAppPath) {
+  if (localDevelopmentPackage) {
+    // 本地开发 profile 仍锁定随包来源；环境不提供任意 Helper 路径或正式包的绕过入口。
+    env.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL = "1";
+    env.ZCODE_CUA_HELPER_INSTALL_VARIANT = "local-development";
+  } else if (bundledAppPath) {
     delete env.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL;
   }
   return createInstaller(

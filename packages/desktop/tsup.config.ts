@@ -4,6 +4,10 @@ import { pathToFileURL } from "node:url";
 import { defineConfig } from "tsup";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
 import { resolveDesktopProductFlavor } from "./scripts/desktop-product-identity.mjs";
+import {
+  isLocalDevelopmentBuild,
+  resolveDesktopLocalDevelopmentBuildDefine,
+} from "./scripts/desktop-build-profile.mjs";
 const { copyGenUiRuntimeAssets } = await import(
   pathToFileURL(resolve(import.meta.dirname, "scripts/gen-ui-runtime-assets.mjs")).href
 );
@@ -198,6 +202,8 @@ function createSharedDefines() {
     __ZCODE_ENV__: JSON.stringify(zcodeEnv),
     __ZCODE_PRODUCT_FLAVOR__: JSON.stringify(zcodeProductFlavor),
     ...buildTimeConfigDefines,
+    __UWORK_LOCAL_DEVELOPMENT_BUILD__: resolveDesktopLocalDevelopmentBuildDefine(),
+    ...(isLocalDevelopmentBuild() ? { __ZCODE_AUTO_UPDATE_ENABLED__: "false" } : {}),
     // Computer Use Helper build identity — helperInstaller 读它决定下载哪个 Helper bundle。
     // 缺失时 installer 抛 "Packaged ZCode is missing its embedded Computer Use Helper build identity"。
     // CI 构建时通过 ZCODE_CUA_HELPER_BUILD_ID env 注入；dev 为空串走兜底（dev helper 不走下载）。

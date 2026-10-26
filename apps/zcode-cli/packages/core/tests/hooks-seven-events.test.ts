@@ -15,6 +15,7 @@ import {
 } from "@zcode/contracts";
 import { createConfiguredHookRunner } from "../src/hooks/index.js";
 import { matchesHookMatcher } from "../src/hooks/output.js";
+import { createConfiguredHookCallback } from "../src/hooks/configured-runner-callback.js";
 
 const sessionId = createSessionId("hooks-seven-events");
 const turnId = createTurnId("hooks-seven-events-turn");
@@ -154,6 +155,29 @@ const cases: HookCase[] = [
 ];
 
 describe("configured hooks seven-event contract", () => {
+  it("keeps invalid hook stdout as a recoverable schema diagnostic with Zod 4", async () => {
+    const callback = createConfiguredHookCallback(
+      {
+        config: { enabled: true, events: {}, maxOutputBytes: 4096, timeoutMs: 1000 },
+        executionPort: executionPortFrom(async () => completed('{"continue":"invalid"}')),
+        getWorkingDirectory: () => "/workspace",
+      },
+      HookEventName.SessionStart,
+      { type: "process", command: "fixture-hook" },
+      0,
+      0,
+      { maxOutputBytes: 4096, timeoutMs: 1000 },
+    );
+    await expect(callback(cases[0]!.input, { hookIndex: 0 })).rejects.toMatchObject({
+      message: "Hook stdout failed HookJSONOutput schema validation",
+      recoverable: true,
+      context: {
+        hookEventName: HookEventName.SessionStart,
+        errors: expect.arrayContaining([expect.objectContaining({ path: ["continue"] })]),
+      },
+    });
+  });
+
   it.each(cases)("runs $event with Claude-compatible input and output", async (hookCase) => {
     let capturedInput: Record<string, unknown> | undefined;
     let transcriptReadable = false;

@@ -43,6 +43,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm architecture:check
+      - name: Validate Computer Use runtime and explicit local build isolation
+        run: >-
+          pnpm exec vitest run
+          packages/zcode-cua
+          packages/desktop/test/desktopLocalDevelopmentBuild.test.ts
+          packages/desktop/test/desktopRuntimeEnv.test.ts
+          packages/desktop/test/desktopLocalDevelopmentInstaller.test.ts
+          packages/desktop/test/desktopPlatformCuaCancellation.test.ts
       - name: Validate focused desktop release regressions
         run: >-
           pnpm exec vitest run
@@ -52,6 +60,16 @@ jobs:
           packages/ui/test/v4ConversationDraftEmptyStateLogo.test.ts
       - name: Validate complete desktop Agent and shared runtime build
         run: node scripts/build-desktop-agent-cli.mjs
+      - name: Validate tool schemas and image dependency compatibility
+        run: >-
+          pnpm exec vitest run
+          --config "$PWD/apps/zcode-cli/vitest.config.ts"
+          --root "$PWD/apps/zcode-cli"
+          packages/contracts/tests
+          packages/adapters/tests/image.test.ts
+          packages/adapters/tests/jimp-print-zod4.test.ts
+          packages/contracts/src/tools/tool-json-schema/contract.test.ts
+          packages/core/tests/hooks-seven-events.test.ts
       - name: Validate release contracts and archive security
         run: >-
           node --test packages/safe-extract-zip/test/*.test.cjs

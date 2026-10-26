@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "inputHashEncoding": "UTF-8 with CRLF normalized to LF; notice and source snapshot hashes remain byte-exact",
   "scope": "Production dependency union across current workspace projects, copied source/assets and native tools; not a per-installer SBOM or a certification of all licensing obligations.",
-  "noticesSha256": "780d50f169d5944dede624836bcba69adc357587ea7e3c21d7bd501184ac3c38",
+  "noticesSha256": "74cdd1d02791b47e622bc9d0e2698c71b6dbfb24e0eec4ec184b2b3a5ce10f85",
   "inputs": {
     ".agents/skills/agent-browser/references/authentication.md": "e2c3b0f4a1dc1368dee821f03c000d818a48421d09f3872525dddffe73f2112b",
     ".agents/skills/agent-browser/references/commands.md": "17522fc56d742663f47231ff06c4811abc87e12c7f78e11f94d253ddd540a909",
@@ -226,12 +226,12 @@
     ".agents/skills/react-best-practices/SKILL.md": "71ed7794962fa6e803ee83030517b5b93a9f70fbfeb431ec4535c5480a8d8355",
     "apps/dev-docs/package.json": "3830c01890b83081debf6596aceb19734924f43b4dee2111c5ea85584f3e944b",
     "apps/zcode-cli/package.json": "f4622eb66460133ac75eba76135a022f12078bf7182ecc02379b15a9f7c68615",
-    "apps/zcode-cli/packages/adapters/package.json": "a716756a7e9a3a7e11993a94f646c823c21c4e095c61d2f8b8ca91eb9a97cc6c",
-    "apps/zcode-cli/packages/android-emulator-plugin/package.json": "96ecaa9ce091e13f7e508b0aed8ab116360b40ba21dc1be78c906b2eebbf5571",
-    "apps/zcode-cli/packages/bootstrap/package.json": "8447b104d66e1a400be3f45403f6e29293c2b15d73c49322ea8bc8525fc19fdc",
-    "apps/zcode-cli/packages/browser-use-plugin/package.json": "e385ead02c51cc4c6c62c9f3fc8951333cbdc15fb9dd08273b682c9f5936ad57",
+    "apps/zcode-cli/packages/adapters/package.json": "cc6bb6584a3de43693ba64e9e340aa0e4330cd4160447d2951023d4147266334",
+    "apps/zcode-cli/packages/android-emulator-plugin/package.json": "819d1f6e2ee7650578d61c1431061f27c113ad06fa52b0644d436211bb22251d",
+    "apps/zcode-cli/packages/bootstrap/package.json": "1686116e467bb2d1dd22b5a6c3f299e02229f7473d57eaafe0941c00fb5310ea",
+    "apps/zcode-cli/packages/browser-use-plugin/package.json": "94a9ae981198ed18a8b8f6648ceea1614dec51b2dfc7b0932e4a3b96d8f6322d",
     "apps/zcode-cli/packages/cli/package.json": "c7f319da5c9c354b891c2741a119276ab0abeea82c8d1e14585d14661fb1175c",
-    "apps/zcode-cli/packages/contracts/package.json": "d71e04825072c7407dcc3e1fcca3d8b9221cfac411ea58a024998a57cb579029",
+    "apps/zcode-cli/packages/contracts/package.json": "d3e1ff0d35d91901503c0084816908de47c0552c426dd42d431be9d6cc630194",
     "apps/zcode-cli/packages/core/package.json": "e70205607c75f7fb51cd1815ff3d411d7ea63bef6a0148f3a698229c30189d32",
     "apps/zcode-cli/packages/core/src/tool/handlers/generated/bash-command-registry.ts": "60fa5acd9f5c357f4e51b1d1e944ee39da92680e4bc5e98dd708f1457fcf612b",
     "apps/zcode-cli/packages/debug/package.json": "0cf03ea1dd384546319e8f301e99c2b668c7c15271f5d38d5a3b0526c24a3279",
@@ -240,9 +240,9 @@
     "apps/zcode-cli/packages/dynamic-workflow/package.json": "9edb746ae170418d81c4431dc16533e814bf3a97e4693a2a94f06b4516151a95",
     "apps/zcode-cli/packages/i18n/package.json": "cd51fc9cda66d726ab54f9821ff748bc150bf4bd84143bb7c8aa9b712a7e6c61",
     "apps/zcode-cli/packages/image-search-plugin/package.json": "f59cba2c8890624a2f5164c9e2f68f808021d2958a7f088544c268eddc9a26a5",
-    "apps/zcode-cli/packages/ios-simulator-plugin/package.json": "fc38d3f6d88598f2c84aced1dfbbef0682addc54e477500dbe323e829c74217a",
-    "apps/zcode-cli/packages/node-repl-host/package.json": "3b8fafd78a122a59eb7941e7ef44f62fbacdc75b344aa5859f814c250f9de4d8",
-    "apps/zcode-cli/packages/office-runtime/package.json": "c51046c5646a0670e554ac4b5949c70cc029c1ba94a5ee3b277b26208e2b4063",
+    "apps/zcode-cli/packages/ios-simulator-plugin/package.json": "46b24004733b772c9537d0f0e8ea676263c6880323bf6d0b3f815c9d3532ffe3",
+    "apps/zcode-cli/packages/node-repl-host/package.json": "c344290e6c75730ed0811121005f488638d8efedc6863d16fdf9783837b573f8",
+    "apps/zcode-cli/packages/office-runtime/package.json": "13d9613e64cd67161bc041e2cb2c48ecc2410e76be727c5077040a1fa51c99d0",
     "apps/zcode-cli/packages/pdf-plugin/package.json": "63588284641c57e2d7a6b8ff5826cdcb451a5b21f7bc91d6f544ef535d36bc14",
     "apps/zcode-cli/packages/plugin-creator-plugin/package.json": "17ab1504c465c165b013f983270f54868aa282538557bf6f935daac153e46ba6",
     "apps/zcode-cli/packages/presentations-plugin/package.json": "8c8bc559c98ca67cbe95616032589d14425dc85fae309a824101efc1a021e861",
@@ -435,7 +435,7 @@
     "docs/knip/docs/tsconfig.json": "662b1f10a5e572b49a45669e4be9ee46c22f987dcf277c204948777b367df1cd",
     "package.json": "63a3d7de2c88391fcddb35b41b83235bbb115808182b0ab1e7eb03203f762e95",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
-    "packages/desktop/package.json": "6bdadcbf9dc361062932faa5b067084bfe278713c586f0106b2f786667557c75",
+    "packages/desktop/package.json": "a1655db43e79fc0ad8da8e5e2bb1f1a81b41111b537c697832a08d27350e0409",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
     "packages/desktop/src/renderer/public/material-icons/abap.svg": "1335bd7eb9a0ed49deb622330d680c2e97731726a7a5eee8e4f46dc1e5db4de4",
     "packages/desktop/src/renderer/public/material-icons/abc.svg": "d1a68020e8f020ef29dca5f94dc8613b7ae8fb5b212d8b1cc23b0f975ac7acda",
@@ -1585,8 +1585,8 @@
     "packages/e2e-report/package.json": "4619226682bcfd35b3e20c0dbbe16d6c1474a532fbd3fcadc06646dc3cb323eb",
     "packages/formal-proof/package.json": "ccfbc2908b846d96a053ba348b0cabeccf76a6dffc126a0326e228f3af92aaaf",
     "packages/model-option-map/package.json": "9ba8537bca94b388eca39307ebb3ab85c473f01fa51368162be5b3bc303315ee",
-    "packages/provider-node/package.json": "b9b475a0f8cd0822980e64013f8b41139082ede376868051480702ead2913cb8",
-    "packages/provider/package.json": "0f52edde6ef9712efc10dfccf12a918255f5be4a0379b5c8693fab79abacf2fc",
+    "packages/provider-node/package.json": "64a058ff339ba4feb7247dcc16cd833179833a57b9fa9919ab8c8b05b5f4aa16",
+    "packages/provider/package.json": "752f5f0666681adb97f61b64fd2994d4a9e1918ba81617b15085a85ce9906f74",
     "packages/relay/package.json": "b1b92b91c377c9f1b383eff2a22a166976d12cc34ca6e5838c161ed6487526ce",
     "packages/rpc/examples/01-basic-ipc.ts": "bb4423c1642918846010f9307262c379536ca9541d79df6ebba120b5cf792f3e",
     "packages/rpc/examples/02-proxy-channel.ts": "66dda9aec12cd46da8a56560cb765a3de590917bbc40f329185e6fd05a388fff",
@@ -1610,13 +1610,13 @@
     "packages/rpc/src/remote.ts": "a11e072d5df7e1c1ce64814a68f72afc081246b364f0da409b5c9d22bc815957",
     "packages/rpc/src/serialization.ts": "e949418e1cd17cc863c147fc8d1ff15237e1b5f0cb8e3344fd2a9ccfae9d54e7",
     "packages/safe-extract-zip/package.json": "fd2ea628f7ba8121cbe5fcb4a822d68ee7463216d91bf866c6b33f6cc7a5ee71",
-    "packages/server/package.json": "1534ed270fa99c846563eb2671678697edcebee33f6c8b21eafe89734e927eaf",
-    "packages/services/package.json": "625a79390b7c5cc056c4acccc47e4cd09e75d6d373478a45ae4b042f4f913a72",
+    "packages/server/package.json": "146cf5b95008698a0e787d9668578cb25faf1312b58159a66f988be57c0e3a79",
+    "packages/services/package.json": "d3a96d0f8a1e9478ca06d3da05c239cfa839847cd90f73e86cc959b5c4962ee8",
     "packages/share-ui/package.json": "b6b2135ae81213bb0cb53dff74b165299d3b5d6b08c153fbb8f4e8fabaf6b604",
-    "packages/shared/package.json": "e73faa3f9855fb7e1c9b60f2ebe1d39d68f2437575724f5936d2d24be1f7e79e",
+    "packages/shared/package.json": "e694be8fec25efa1af4b57aa2bcd96922ea6b6c93f90777a52489f7c0b8353d4",
     "packages/shared/src/zcode-protocol-v4/wire-codec.ts": "ac2494a3acc795c809c94ee9393f50271a9c2a0fd33813459e5ab93842ceef75",
     "packages/stream-animate/package.json": "31cb25ed87e64dbcd695bbc932729ac30499107d45f747b96a5c3de832afdc28",
-    "packages/ui/package.json": "5a8d861cef6a1ae17b153cc3e53b7657dc93e022368913b1d4763542501384e5",
+    "packages/ui/package.json": "7053282fc7985faef3d54be21060f5d9763bf707d189c78c74994d062b24dd12",
     "packages/ui/src/components/ai-elements/agent.tsx": "830e7ea9e927de1524851337f1d35bda0e5690e3e4fa307fff854b60006b16c7",
     "packages/ui/src/components/ai-elements/artifact.tsx": "7d73f08864d6280ac86c77d32e56d0e702f8aa6208e5910820139d0fb08ce64c",
     "packages/ui/src/components/ai-elements/attachments.tsx": "7a847ce6c8ac9dc630481a82dd20a5e9e00949bf710a41fea1d32a18123011d8",
@@ -2880,11 +2880,17 @@
     "packages/web-share/public/material-icons/zig.svg": "37be0ce02cf471b18d86150b3c38e80caa7c16c49a15078e7db6f1f41788d101",
     "packages/web-share/public/material-icons/zip.svg": "dad79a45f756542d37abd422502ecfbea15720b92ea1c9d80ef0439ab6b9448a",
     "packages/web/package.json": "5ebbadbf8e9dd81b99affc0a62437fafd77350d48165ed184b5360f7b0eceee1",
-    "packages/zcode-cua/package.json": "794687f6e1bf78cc4838e776263908223e2df0a79e15d867a655b112f123ce20",
-    "packages/zcode-server-cli/package.json": "698f659142ac592cddba0e0f9b1ea932a8c1ac7d8ee3d049c5defe2a493b9235",
+    "packages/zcode-cua/cua-driver-actions.js": "3b43abb671421b3c3154a559f01cbe0761741d380bbe40ebb0711c4a18ea64e5",
+    "packages/zcode-cua/cua-driver-apps.js": "2d6883ce1669c2a083358bd4c357c38651c2c897ffd6e93a24895022dc580e61",
+    "packages/zcode-cua/cua-driver-errors.js": "0094ef43748628a8ecb4244e87a1237a32f9d6a80408870b367559579f74396d",
+    "packages/zcode-cua/cua-driver-runtime.js": "d1546e69178e8c2103e81c1aba7c5520ba2099af72612383ca70df834f377b37",
+    "packages/zcode-cua/cua-driver-targets.js": "fdf3fff16693cb4a5e744baddd1a221bf6373ec2f19803be0e029cb12d0647d6",
+    "packages/zcode-cua/package.json": "c54b21f1657c4ab151ed8624d6a91ec61d4aa7ef6a88720a85e306f7a607c441",
+    "packages/zcode-server-cli/package.json": "469cbe067351401f6f5d09a7605dae9caac21cddbfef88a1dd17066b0c736f02",
     "patches/@ai-sdk__anthropic@3.0.81.patch": "d3a7c381eba7f5157f765a0528003af17cf84544911dfb7412c7800168e01c18",
     "patches/@ai-sdk__openai-compatible@2.0.60.patch": "9632fe9d821b3dc20939ae509cc35b968d90d018bbd1d812390718898182a38b",
     "patches/@arms__rum-electron@0.0.3.patch": "36855354851ea495bc47a03340b0484ff62836b739cad56904b8a69f18e2ae97",
+    "patches/@jimp__plugin-print@1.6.1.patch": "a2647164af82b933f77849c11a79098d891ed22e51a49c2bbc3d35336c4b6a8c",
     "patches/@radix-ui__react-collapsible@1.1.12.patch": "4b7b3781f603e111bb33aef9c4b1694ac9bacd3dff47692606de9876d4631164",
     "patches/exceljs@4.4.0.patch": "3fd52b48fd037d35cdf5f26c104b22405dc44bda21bf71ba9a06b1d3e158038a",
     "patches/playwright-core@1.59.1.patch": "9ae057e01fae03fcc47221009c62c58ccfd9b752b3510502ceb5f3266e8373e0",
@@ -2901,12 +2907,12 @@
     "plugins/office-editor/ui/vendor/superdoc/LICENSE-AGPL-3.0.txt": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.css": "0c1fd0ae51215b4fe5573858190c97ac971f888c63875970979e72018daef33f",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.js": "360490e362af6623eae40cc5aa82efcc5d9dedf5455195b9c373c48220c232ad",
-    "pnpm-lock.yaml": "a2782de8951fe7eb1a4c43c900899702cea25749dade8f075595ccc3d46b834a",
-    "pnpm-workspace.yaml": "17246bfe1659b8a6bd3481745ae24c0a283f2bfca16fd57d2ae23ab72070d8c4",
+    "pnpm-lock.yaml": "1249cd52167028c397645e634e3970ca00ba08bbdebbecdcd15574faca144f83",
+    "pnpm-workspace.yaml": "62b74a1ceabb8ddb1134315d51d51c6e49e7728e2709825e47aa1f0e64bb710e",
     "scripts/license-texts/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "scripts/native-search-tools-config.mjs": "06e9d2b066a22f4bb731fb7356d786b52cf08e20dd6faf91e1a82b167d7462e8",
     "scripts/remote-native-search-tools-config.mjs": "2ddb7054e219ea487596cbdcb83d5c7eac9f239cfe169cfac22e3759d95d7c35",
-    "third-party/copied-components.json": "8857030e8adb58729d284315c12c71d7d94415b4e77d0214040c5c3b25db4f04",
+    "third-party/copied-components.json": "efa4414592a19930911fcde433e900e1245eb8bb2e7590ab18810be71f6e8688",
     "third-party/embedded-components.json": "9586ccca15897f56d4ca1d703dffe9e02880fedd766c1dff93f7ac1f52ea891a",
     "third-party/native-search/licenses/00373c9bf56a894b2ed67586596bc1e8b0630cabbaf1ab46c75fc754b6bcd1ce.txt": "00373c9bf56a894b2ed67586596bc1e8b0630cabbaf1ab46c75fc754b6bcd1ce",
     "third-party/native-search/licenses/01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f.txt": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
@@ -3023,7 +3029,7 @@
     "third-party/native-search/licenses/f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af.txt": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
     "third-party/native-search/licenses/f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505.txt": "f9c375a1be4a41f7b70301dd83c91cb89e41567478859b77eef375a52d782505",
     "third-party/native-search/sources.json": "5e1aedef96227f4deefe6f07cda644bd25e638443e86e93ddb2e9578a73d9609",
-    "third-party/npm-overrides.json": "a3274a4671bc37023e70d43042a8ea3f78c9dade8f2695bb13f7cbd593ea3c53",
+    "third-party/npm-overrides.json": "008f54110a97a5dea089d60f3cbcaf61f63b42cf202ed93629507cadff04ba63",
     "third-party/runtime/node-22.16.0-LICENSE.txt": "1ae62e2015784ba438db7b04ebd33f3c4ff3efdb824c111c4ececd99945fd52d",
     "third-party/runtime/node-24.14.0-LICENSE.txt": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18",
     "third-party/runtime/sources.json": "b27bc8d81aeb71108e523602364ffbb6a1b19c2d5d47733fd43094b769006741",
@@ -3035,6 +3041,7 @@
     "third-party/upstream/0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e.txt": "0fac2374380621b22e6b50451057721a9c52935b02d16d106a9f04897f061d0e",
     "third-party/upstream/1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f.txt": "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f",
     "third-party/upstream/17510cf7a58b4879b887ec05a45d72cf1b73544dd9ec7e72f20110ed104229ee.txt": "17510cf7a58b4879b887ec05a45d72cf1b73544dd9ec7e72f20110ed104229ee",
+    "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
     "third-party/upstream/1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d.txt": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
     "third-party/upstream/1b8910ad1a22011c632f7ff544708be6cf08818ef80e8d4b45b6808ee8b05c17.txt": "1b8910ad1a22011c632f7ff544708be6cf08818ef80e8d4b45b6808ee8b05c17",
     "third-party/upstream/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
@@ -3065,6 +3072,7 @@
     "third-party/upstream/5f745b8244890bde0a2258fe32342d60c577fad043e8601d923690a5bfe1b54f.txt": "5f745b8244890bde0a2258fe32342d60c577fad043e8601d923690a5bfe1b54f",
     "third-party/upstream/5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd.txt": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd",
     "third-party/upstream/5fec1b755e7753254cb63ca9400ef0159ebf6bcf05357b72f3e42e0c462a29f9.txt": "5fec1b755e7753254cb63ca9400ef0159ebf6bcf05357b72f3e42e0c462a29f9",
+    "third-party/upstream/606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b.txt": "606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b",
     "third-party/upstream/66aa9feab8bb39aceebd69f2a357015d57ceab486d3c7a19ff8d3d4110a6d101.txt": "66aa9feab8bb39aceebd69f2a357015d57ceab486d3c7a19ff8d3d4110a6d101",
     "third-party/upstream/6ae13df543a24b3fb18c25182cf4f084132f799ea9225410f7037888401b7469.txt": "6ae13df543a24b3fb18c25182cf4f084132f799ea9225410f7037888401b7469",
     "third-party/upstream/75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6.txt": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
@@ -3084,6 +3092,7 @@
     "third-party/upstream/b4f9adb7c568904834d0dd6cc98d16c390d21ca32fc17ae7a267715269bd5529.txt": "b4f9adb7c568904834d0dd6cc98d16c390d21ca32fc17ae7a267715269bd5529",
     "third-party/upstream/ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64.txt": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64",
     "third-party/upstream/bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526.txt": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+    "third-party/upstream/c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9.txt": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9",
     "third-party/upstream/c5adaf9051f20a1bbeecfb39de415cac1fef591d4fcda2b55d66b31354fdba1e.txt": "c5adaf9051f20a1bbeecfb39de415cac1fef591d4fcda2b55d66b31354fdba1e",
     "third-party/upstream/c681d64256e752c1435814cf045f4467720a8473e425ea54103a0f5128bfc817.txt": "c681d64256e752c1435814cf045f4467720a8473e425ea54103a0f5128bfc817",
     "third-party/upstream/c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0.txt": "c8b789cf5a746611e6300a0cc7750dbf92b61912a709d04e639245f7290656d0",
@@ -3097,6 +3106,7 @@
     "third-party/upstream/e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c.txt": "e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c",
     "third-party/upstream/e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c.txt": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
     "third-party/upstream/e49e62397b603438476e0d6b5ca3b6e6d4f23a80594e596aff29ac04fa3e1b1c.txt": "e49e62397b603438476e0d6b5ca3b6e6d4f23a80594e596aff29ac04fa3e1b1c",
+    "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
     "third-party/upstream/ebb2e920800c6353474e3e23d84f714ee8aaecd8f5a71851aa03594a4129d855.txt": "ebb2e920800c6353474e3e23d84f714ee8aaecd8f5a71851aa03594a4129d855",
     "third-party/upstream/edab8abb78d9c5b36944c3e00aebf6a90eb32378993f49ac8a3904007029c629.txt": "edab8abb78d9c5b36944c3e00aebf6a90eb32378993f49ac8a3904007029c629",
     "third-party/upstream/f158b3bd10b867740fdbf81447216f1f8685473acf61e6a105ef91ba9fe8ebc3.txt": "f158b3bd10b867740fdbf81447216f1f8685473acf61e6a105ef91ba9fe8ebc3",
@@ -6608,6 +6618,114 @@
       ]
     },
     {
+      "name": "@trycua/cua-driver-darwin-arm64",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver-darwin-x64",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver-linux-arm64-gnu",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver-linux-x64-gnu",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver-win32-arm64-msvc",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver-win32-x64-msvc",
+      "version": "0.28.2",
+      "license": "MIT AND MPL-2.0",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "node-runtime-NOTICE.md",
+          "sha256": "66a466cc022b4bf4a41f678e4d31d9b82098cc55cc364d6e9295366dfd02cef2"
+        },
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41"
+        }
+      ]
+    },
+    {
+      "name": "@trycua/cua-driver",
+      "version": "0.28.2",
+      "license": "MIT",
+      "repository": "git+https://github.com/trycua/cua.git",
+      "notices": [
+        {
+          "member": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+          "sha256": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9"
+        }
+      ]
+    },
+    {
       "name": "@types/css-font-loading-module",
       "version": "0.0.7",
       "license": "MIT",
@@ -7264,6 +7382,126 @@
         {
           "member": "LICENSE",
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/core",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-darwin-arm64",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-darwin-x64",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-linux-arm64-gnu",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-linux-arm64-musl",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-linux-x64-gnu",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-linux-x64-musl",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-win32-arm64-msvc",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node-win32-x64-msvc",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
+        }
+      ]
+    },
+    {
+      "name": "@ubjs/node",
+      "version": "0.31.0-3",
+      "license": "MPL-2.0",
+      "repository": "git+https://github.com/jhugman/uniffi-bindgen-react-native.git",
+      "notices": [
+        {
+          "member": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+          "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556"
         }
       ]
     },
@@ -9501,7 +9739,7 @@
     },
     {
       "name": "electron",
-      "version": "41.10.7",
+      "version": "42.11.16",
       "license": "MIT",
       "repository": "https://github.com/electron/electron",
       "notices": [
@@ -15533,7 +15771,7 @@
     },
     {
       "name": "undici",
-      "version": "6.29.0",
+      "version": "6.29.1",
       "license": "MIT",
       "repository": "git+https://github.com/nodejs/undici.git",
       "notices": [
@@ -15553,7 +15791,7 @@
     },
     {
       "name": "undici",
-      "version": "7.30.0",
+      "version": "7.30.1",
       "license": "MIT",
       "repository": "git+https://github.com/nodejs/undici.git",
       "notices": [
@@ -16576,32 +16814,8 @@
       ]
     },
     {
-      "name": "zod-to-json-schema",
-      "version": "3.25.2",
-      "license": "ISC",
-      "repository": "https://github.com/StefanTerdell/zod-to-json-schema",
-      "notices": [
-        {
-          "member": "LICENSE",
-          "sha256": "80d3168ad2f70f6f5bb2ab22b23414707abf6f0a392034891481ae36a1a429d4"
-        }
-      ]
-    },
-    {
       "name": "zod",
-      "version": "3.25.76",
-      "license": "MIT",
-      "repository": "git+https://github.com/colinhacks/zod.git",
-      "notices": [
-        {
-          "member": "LICENSE",
-          "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8"
-        }
-      ]
-    },
-    {
-      "name": "zod",
-      "version": "4.6.5",
+      "version": "4.6.6",
       "license": "MIT",
       "repository": "git+https://github.com/colinhacks/zod.git",
       "notices": [
@@ -28438,6 +28652,52 @@
           "sha256": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"
         }
       ]
+    },
+    {
+      "id": "zcode-ce-cua-protocol-adapter",
+      "referenceRevision": "7fc3bfe252e7fb1833dc06113e3c2c012910996d",
+      "importRevision": "7fc3bfe252e7fb1833dc06113e3c2c012910996d",
+      "source": "https://github.com/Zcode-CE/Zcode-CE/blob/7fc3bfe252e7fb1833dc06113e3c2c012910996d/LICENSE",
+      "file": "third-party/upstream/606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b.txt",
+      "sha256": "606c36baf38b973227273df12a74930e4b4137280eea835c5cd623aa4553c13b",
+      "roots": [
+        "packages/zcode-cua/cua-driver-actions.js",
+        "packages/zcode-cua/cua-driver-apps.js",
+        "packages/zcode-cua/cua-driver-errors.js",
+        "packages/zcode-cua/cua-driver-runtime.js",
+        "packages/zcode-cua/cua-driver-targets.js"
+      ],
+      "modifiedFiles": [
+        "packages/zcode-cua/cua-driver-actions.js",
+        "packages/zcode-cua/cua-driver-apps.js",
+        "packages/zcode-cua/cua-driver-errors.js",
+        "packages/zcode-cua/cua-driver-runtime.js",
+        "packages/zcode-cua/cua-driver-targets.js"
+      ],
+      "scope": "Public CUA protocol translation only, adapted for an authenticated independent macOS Helper; no CE Host admission bypass is included.",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "file": "packages/zcode-cua/cua-driver-actions.js",
+          "sha256": "3b43abb671421b3c3154a559f01cbe0761741d380bbe40ebb0711c4a18ea64e5"
+        },
+        {
+          "file": "packages/zcode-cua/cua-driver-apps.js",
+          "sha256": "2d6883ce1669c2a083358bd4c357c38651c2c897ffd6e93a24895022dc580e61"
+        },
+        {
+          "file": "packages/zcode-cua/cua-driver-errors.js",
+          "sha256": "0094ef43748628a8ecb4244e87a1237a32f9d6a80408870b367559579f74396d"
+        },
+        {
+          "file": "packages/zcode-cua/cua-driver-runtime.js",
+          "sha256": "d1546e69178e8c2103e81c1aba7c5520ba2099af72612383ca70df834f377b37"
+        },
+        {
+          "file": "packages/zcode-cua/cua-driver-targets.js",
+          "sha256": "fdf3fff16693cb4a5e744baddd1a221bf6373ec2f19803be0e029cb12d0647d6"
+        }
+      ]
     }
   ],
   "patches": [
@@ -28455,6 +28715,11 @@
       "package": "@arms/rum-electron@0.0.3",
       "file": "patches/@arms__rum-electron@0.0.3.patch",
       "sha256": "36855354851ea495bc47a03340b0484ff62836b739cad56904b8a69f18e2ae97"
+    },
+    {
+      "package": "@jimp/plugin-print@1.6.1",
+      "file": "patches/@jimp__plugin-print@1.6.1.patch",
+      "sha256": "a2647164af82b933f77849c11a79098d891ed22e51a49c2bbc3d35336c4b6a8c"
     },
     {
       "package": "@radix-ui/react-collapsible@1.1.12",
@@ -28700,6 +28965,227 @@
       "reviewEvidence": {
         "checkedOn": "2026-10-08",
         "result": "Historical archive/source revision has no LICENSE. Preserve the pinned upstream project MIT notice as supplementary reference, without asserting it is the original version-specific notice."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver@0.28.2",
+      "file": "third-party/upstream/c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9.txt",
+      "sha256": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-darwin-arm64@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-darwin-x64@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-linux-arm64-gnu@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-linux-x64-gnu@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-win32-arm64-msvc@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@trycua/cua-driver-win32-x64-msvc@0.28.2",
+      "file": "third-party/upstream/e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41.txt",
+      "sha256": "e625e6f74f854b13e11b12b6c9d3b601efe3592ef6ef071e13b7144b509f3e41",
+      "source": "https://github.com/trycua/cua/blob/fc188250b4ca8549b8e61f937fdb1fb560770e86/LICENSE.md",
+      "license": "MIT AND MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "fc188250b4ca8549b8e61f937fdb1fb560770e86",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/core@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-darwin-arm64@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-darwin-x64@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-linux-arm64-gnu@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-linux-arm64-musl@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-linux-x64-gnu@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-linux-x64-musl@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-win32-arm64-msvc@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
+      }
+    },
+    {
+      "package": "@ubjs/node-win32-x64-msvc@0.31.0-3",
+      "file": "third-party/upstream/193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556.txt",
+      "sha256": "193c28936619c7ba9ec9c1f994aee7aa1eae650812f3df9d2d078c1eac1ec556",
+      "source": "https://github.com/jhugman/uniffi-bindgen-react-native/blob/dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449/LICENSE",
+      "license": "MPL-2.0",
+      "evidenceKind": "pinned-upstream-license-file",
+      "reviewEvidence": {
+        "checkedOn": "2026-10-26",
+        "sourceRevision": "dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449",
+        "result": "Publisher license declaration and pinned upstream original notice retained; MPL full standard terms and native runtime source notice included where applicable. Unmodified native source is available at the pinned release; code-signing changes distribution signatures only."
       }
     }
   ],
@@ -29031,6 +29517,74 @@
     },
     {
       "id": "https-proxy-agent@5.0.1",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-darwin-arm64@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-darwin-x64@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-linux-arm64-gnu@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-linux-x64-gnu@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-win32-arm64-msvc@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@trycua/cua-driver-win32-x64-msvc@0.28.2",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/core@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-darwin-arm64@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-darwin-x64@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-linux-arm64-gnu@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-linux-arm64-musl@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-linux-x64-gnu@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-linux-x64-musl@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-win32-arm64-msvc@0.31.0-3",
+      "reason": "Original version-specific publisher copyright/license material remains incomplete."
+    },
+    {
+      "id": "@ubjs/node-win32-x64-msvc@0.31.0-3",
       "reason": "Original version-specific publisher copyright/license material remains incomplete."
     },
     {

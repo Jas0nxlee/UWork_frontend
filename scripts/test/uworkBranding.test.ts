@@ -88,6 +88,7 @@ async function loadDesktopPathDeclarations() {
     "isTruthyRuntimeEnvOverride",
     "isLocalDevelopmentRuntime",
     "isPreviewPackagedRuntime",
+    "isLocalDevelopmentPackagedRuntime",
     "runtimeApplicationName",
     "shouldUseElectronDefaultUserDataPath",
     "runtimeUserDataPath",
@@ -118,6 +119,14 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
     const customSession = path.join(appData, "fixture-session");
     const cases = [
       { packaged: true, flavor: "production", name: "UWork", env: {}, data: "UWork" },
+      {
+        packaged: true,
+        flavor: "production",
+        localDevelopment: true,
+        name: "UWork Local Development",
+        env: {},
+        data: "UWork",
+      },
       { packaged: false, flavor: "production", name: "UWork Dev", env: {}, data: "UWork Dev" },
       { packaged: true, flavor: "preview", name: "UWork Preview", env: {}, data: "UWork Preview" },
       { packaged: false, flavor: "preview", name: "UWork Dev", env: {}, data: "UWork Dev" },
@@ -180,6 +189,8 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
         join: path.join,
         ZCODE_PRODUCT_FLAVOR: scenario.flavor,
         isElectronAppPackaged: () => scenario.packaged,
+        isLocalDevelopmentDesktopBuild:
+          "localDevelopment" in scenario && scenario.localDevelopment === true,
         getElectronAppPath: (name: string) => {
           assert.equal(name, "appData");
           return appData;

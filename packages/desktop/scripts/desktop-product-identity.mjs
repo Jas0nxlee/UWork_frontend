@@ -3,6 +3,8 @@
  * 典型用法是 `ZCODE_ENV=production ZCODE_PREVIEW_IDENTITY=1`，得到一个连接生产后端、
  * 可与正式版并排安装的 `ZCode Preview`。
  */
+import { isLocalDevelopmentBuild } from "./desktop-build-profile.mjs";
+
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
 const PRODUCTION_IDENTITY = Object.freeze({
@@ -64,7 +66,15 @@ export function resolveDesktopProductFlavor(env = process.env) {
 }
 
 export function resolveDesktopProductIdentity(env = process.env) {
-  return desktopProductIdentities[resolveDesktopProductFlavor(env)];
+  const identity = desktopProductIdentities[resolveDesktopProductFlavor(env)];
+  // 本地开发包必须可辨识，但不改 appId、协议及业务数据身份，避免用户会话被迁移。
+  return isLocalDevelopmentBuild(env)
+    ? {
+        ...identity,
+        productName: "UWork Local Development",
+        cuaHelperInstallVariant: "local-development",
+      }
+    : identity;
 }
 
 /**

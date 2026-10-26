@@ -577,6 +577,8 @@ import {
 } from "./runtime-tools/agentProxyEnv.js";
 import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
 import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-cua/broker/server";
+import { createLazyCuaBroker } from "@zcode/zcode-cua/broker/lazy";
+import { isRemoteWorkspaceIdentity } from "@zcode/shared";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import type { HighspeedMockScenario } from "@zcode/shared";
@@ -817,6 +819,7 @@ export function shouldEnableDefaultCuaProductHelper(
 export function shouldCreateDefaultCuaProductHelper(opts: {
   serviceAuthorityMode?: ServiceAuthorityMode;
   hasRemoteWorkspaceIdentity?: boolean;
+  workspaceIdentity?: string;
   hasInjectedResolver: boolean;
   hasBuiltInCuaPlugin: boolean;
 }): boolean {
@@ -824,6 +827,7 @@ export function shouldCreateDefaultCuaProductHelper(opts: {
     opts.hasBuiltInCuaPlugin &&
     opts.serviceAuthorityMode === "desktop-local" &&
     !opts.hasRemoteWorkspaceIdentity &&
+    !(opts.workspaceIdentity?.trim() && isRemoteWorkspaceIdentity(opts.workspaceIdentity.trim())) &&
     !opts.hasInjectedResolver
   );
 }
@@ -1913,7 +1917,8 @@ export function createLocalServices(options: {
       isAdmitted: () =>
         shouldCreateDefaultCuaProductHelper({
           serviceAuthorityMode: options?.serviceAuthorityMode,
-          hasRemoteWorkspaceIdentity: Boolean(context?.workspaceIdentity?.trim()),
+          // 非空 identity 用于本地隔离也是合法的，不能直接把它等同于远端。
+          workspaceIdentity: context?.workspaceIdentity,
           hasInjectedResolver: Boolean(options?.cuaProductMcpServerResolver),
           hasBuiltInCuaPlugin: isCuaEnabledForContext(context),
         }),
@@ -1924,6 +1929,25 @@ export function createLocalServices(options: {
   };
   const isDefaultCuaProductHelperCurrent = (helper: DefaultCuaProductHelper): boolean =>
     defaultCuaProductHelperLifecycle.peek()?.helper === helper;
+  // 原占位构建给每次 spawn 随机凭据，却没有实际 Helper 接纳它。恢复后由 Host 的
+  // 稳定代理 tuple 鉴权并在首个 CUA 请求时获取真实 transport；普通 Agent spawn 仍无 Helper IO。
+  const cuaAgentBroker =
+    options.serviceAuthorityMode === "desktop-local" && process.platform === "darwin"
+      ? createLazyCuaBroker({
+          resolveTransport: async (context) => {
+            const helper = await getOrCreateDefaultCuaProductHelper({
+              workspacePath: context.workspacePath,
+              workspaceIdentity: context.workspaceIdentity,
+            });
+            if (!helper) throw new Error("Computer Use is unavailable in this workspace");
+            const handle = await helper.host.start();
+            if (!isDefaultCuaProductHelperCurrent(helper)) {
+              throw new Error("Computer Use Host is disposed");
+            }
+            return handle;
+          },
+        })
+      : undefined;
   // Helper 懒启动：宿主启动时仅探测稳定 socket 上是否有一个
   // 自启动（SDK 首调拉起）的 Helper。只 ping，绝不拉起；300ms 预算。probe 结果仅用于
   // 状态展示 / PiP 凭据发现；权限详情与 onboarding 仍走显式 host 流。
@@ -2504,7 +2528,12 @@ export function createLocalServices(options: {
             };
       const cuaPluginEnabled = isCuaEnabledForContext(context);
       let cuaProductHelperEnv: Record<string, string> = {};
-      if (cuaPluginEnabled && (process.platform === "darwin" || process.platform === "win32")) {
+      if (cuaPluginEnabled && process.platform === "darwin" && cuaAgentBroker) {
+        cuaProductHelperEnv = {
+          [BROKER_SOCKET_ENV]: cuaAgentBroker.socketPath,
+          [ZCODE_CUA_PLUGIN_AUTHORITY_ENV_KEY]: cuaAgentBroker.pluginAuthority,
+        };
+      } else if (cuaPluginEnabled && process.platform === "win32") {
         const brokerSocket =
           process.platform === "win32" ? getStableCuaPipeName() : resolveBrokerSocketPath();
         cuaProductHelperEnv = {
@@ -3134,6 +3163,7 @@ export function createLocalServices(options: {
   // 恢复，不能把"当前还没有 Helper"误当成"不需要生命周期所有者"。dispose 时串行 stop host。
   registerManagedCuaHelperHostForDispose(services, {
     stop: async () => {
+      await cuaAgentBroker?.close();
       await defaultCuaProductHelperLifecycle.dispose();
     },
   });

@@ -1,15 +1,18 @@
 /* eslint-disable max-lines -- Electron Builder config keeps related packaging hooks together so build order stays explicit. */
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { access, readdir, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
-import { HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
 import { runCommand, runCommandAndReadStdout } from "../../scripts/spawn-command.mjs";
 import { loadBuiltinProviderConfig } from "../../scripts/builtin-provider-config.mjs";
 import { noticesFileName, stageElectronNotices } from "../../scripts/third-party-notices.mjs";
 import { resolveNativeSearchReleasePlan } from "../../scripts/native-search-tools-config.mjs";
 import { getBuildMetadata } from "./scripts/build-metadata.mjs";
+import {
+  resolveDesktopHelperPackaging,
+  validateDesktopHelperBuildManifest,
+} from "./scripts/desktop-build-profile.mjs";
 import { collectRuntimeModuleClosureEntries } from "./scripts/runtime-dependency-closure.mjs";
 import { DESKTOP_ASAR_RUNTIME_MODULES } from "./scripts/desktop-asar-runtime-modules.mjs";
 import {
@@ -27,7 +30,7 @@ import {
   isSharpRequiredByComputerUse,
   verifyStagedSharp,
 } from "./scripts/sharp-package-assets.mjs";
-import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
+import { isComputerUseProducerSupported } from "./scripts/computer-use-producer.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
   finalizePackagedWindowsCuaHelper,
@@ -86,7 +89,10 @@ const hasMobileRemoteControlConfig = await access(mobileRemoteControlConfigPath)
   () => false,
 );
 // Computer Use Helper（macOS .app、Windows runtime）只随真实 producer 打包；开源占位包下跳过随包资源与校验。
-const shouldPackageComputerUseHelper = isRealComputerUseProducerInstalled({ desktopPackageRoot });
+const shouldPackageComputerUseHelper = isComputerUseProducerSupported({
+  desktopPackageRoot,
+  platform: targetPlatform.os,
+});
 const HELPER_FILENAME = "zcode-browser-import-helper.exe";
 const runtimeModuleLookupRoots = [
   desktopPackageRoot,
@@ -95,12 +101,17 @@ const runtimeModuleLookupRoots = [
   resolve(workspaceRoot, "node_modules", ".pnpm", "node_modules"),
 ];
 const desktopDistDir = process.env.ZCODE_DESKTOP_DIST_DIR || "dist";
-const bundledCuaHelperSource = resolve(
-  desktopPackageRoot,
-  "bundled-cua-helper",
-  targetPlatform.arch,
-  HELPER_APP_NAME,
-);
+const helperPackaging = resolveDesktopHelperPackaging(workspaceRoot, targetPlatform.arch);
+const bundledCuaHelperSource = helperPackaging.source;
+if (targetPlatform.os === "darwin" && shouldPackageComputerUseHelper) {
+  const manifest = JSON.parse(
+    await readFile(
+      join(bundledCuaHelperSource, "Contents", "Resources", "runtime-manifest.json"),
+      "utf8",
+    ),
+  );
+  validateDesktopHelperBuildManifest(manifest);
+}
 const DEFAULT_ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/";
 // `pnpm exec asar` 依赖 `.bin/asar`，但 @electron/asar 仅是 electron-builder 传递依赖时，
 // Linux CI（pnpm hoisted）往往解析不到该二进制，`asar list` 未运行即 exit 1。
@@ -175,7 +186,7 @@ function assertPackagedCuaHelper(context) {
     "Contents",
     "Resources",
     "cua-helper",
-    HELPER_APP_NAME,
+    helperPackaging.appName,
   );
   if (!existsSync(appPath)) {
     throw new Error(`Packaged ZCode is missing bundled Computer Use Helper: ${appPath}`);
@@ -460,6 +471,7 @@ function assertPackagedCuaSharp(context) {
 
 function assertPackagedCuaKoffi(context) {
   const problems = verifyStagedKoffi({
+    desktopPackageRoot,
     resourcesDir: resolvePackagedResourcesDir(context),
     targetPlatform,
   });
@@ -693,7 +705,7 @@ export default {
             ? [
                 {
                   from: bundledCuaHelperSource,
-                  to: `cua-helper/${HELPER_APP_NAME}`,
+                  to: `cua-helper/${helperPackaging.appName}`,
                 },
               ]
             : []),

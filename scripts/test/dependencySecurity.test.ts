@@ -10,6 +10,77 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 
+test("Zod rejects an oversized bounded array before allocating per-item validation issues", () => {
+  const { z } = require("zod");
+  let visited = 0;
+  const schema = z
+    .array(
+      z.preprocess((value: unknown) => {
+        visited += 1;
+        return value;
+      }, z.number()),
+    )
+    .max(2);
+  // CVE-2023-54404：长度上限已知失败时，不能继续遍历并为每个坏元素分配错误对象。
+  const result = schema.safeParse(Array(1000).fill("invalid"));
+  assert.equal(result.success, false);
+  assert.equal(visited, 0);
+  assert.equal(result.error.issues.length, 1);
+  assert.equal(result.error.issues[0].code, "too_big");
+});
+
+for (const [line, resolveFrom] of [
+  ["6.x", createRequire(new URL("../../packages/desktop/package.json", import.meta.url))],
+  ["7.x", createRequire(require.resolve("cheerio"))],
+] as const) {
+  test(`undici ${line} rejects excessive content encodings without terminating the process`, async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    // CVE-2026-109869：fetch 的拒绝可捕获，但旧实现遗留的响应流仍会发未处理 error。
+    // 放进真实子进程，确保“请求拒绝后继续服务”成立，不能用父测试进程的异常监听掩盖崩溃。
+    const script = `
+      const assert = require('node:assert/strict');
+      const { once } = require('node:events');
+      const { createServer: createRawServer } = require('node:net');
+      const { createServer } = require('node:http');
+      const { fetch } = require(process.argv[1]);
+      (async () => {
+        const rawSockets = new Set();
+        const malicious = createRawServer(socket => {
+          rawSockets.add(socket);
+          socket.once('close', () => rawSockets.delete(socket));
+          socket.end('HTTP/1.1 200 OK\\r\\nContent-Encoding: gzip,gzip,gzip,gzip,gzip,gzip\\r\\nContent-Length: 1\\r\\n\\r\\n');
+        });
+        malicious.listen(0, '127.0.0.1');
+        await once(malicious, 'listening');
+        try {
+          await assert.rejects(fetch('http://127.0.0.1:' + malicious.address().port));
+        } finally {
+          for (const socket of rawSockets) socket.destroy();
+          await new Promise(resolve => malicious.close(resolve));
+        }
+        const healthy = createServer((_req, res) => res.end('healthy'));
+        healthy.listen(0, '127.0.0.1');
+        await once(healthy, 'listening');
+        try {
+          const result = await fetch('http://127.0.0.1:' + healthy.address().port);
+          assert.equal(await result.text(), 'healthy');
+        } finally {
+          healthy.closeAllConnections();
+          await new Promise(resolve => healthy.close(resolve));
+        }
+        process.stdout.write('rejected-and-still-serving');
+      })().catch(error => { console.error(error); process.exitCode = 1; });
+    `;
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ["-e", script, resolveFrom.resolve("undici")],
+      { timeout: 15_000, maxBuffer: 1024 * 1024 },
+    );
+    assert.equal(stdout, "rejected-and-still-serving");
+  });
+}
+
 test("debug forge rejects nested DigestAlgorithm garbage while accepting normal RSA signatures", () => {
   const forge = require("node-forge");
   const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });

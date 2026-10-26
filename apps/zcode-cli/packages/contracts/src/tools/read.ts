@@ -316,7 +316,7 @@ export const ReadCellOutputSchema = z
   .object({
     type: z.enum(["stream", "execute_result", "error", "display_data"]),
     text: z.string(),
-    metadata: z.record(z.unknown()).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

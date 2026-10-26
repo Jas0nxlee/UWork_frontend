@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   isRealComputerUseProducerInstalled,
+  isComputerUseProducerSupported,
   readComputerUseProducer,
 } from "../scripts/computer-use-producer.mjs";
 import { stageDevCuaPluginRuntime } from "../../../scripts/stage-dev-cua-plugin-runtime.mjs";
@@ -29,6 +30,21 @@ afterEach(() => {
 });
 
 describe("Computer Use producer detection", () => {
+  it("恢复的 macOS producer 不把尚未提供的 Windows Helper 纳入打包", () => {
+    const desktopRoot = createWorkspace({
+      name: "@zcode/zcode-cua",
+      zcodeCuaPlatforms: ["darwin"],
+    });
+    expect(
+      isComputerUseProducerSupported({ desktopPackageRoot: desktopRoot, platform: "darwin" }),
+    ).toBe(true);
+    expect(
+      isComputerUseProducerSupported({ desktopPackageRoot: desktopRoot, platform: "win32" }),
+    ).toBe(false);
+    expect(
+      isComputerUseProducerSupported({ desktopPackageRoot: desktopRoot, platform: "linux" }),
+    ).toBe(false);
+  });
   it("真实 producer：已安装且未声明占位", () => {
     const desktopRoot = createWorkspace({ name: "@zcode/zcode-cua", version: "0.6.4" });
     expect(readComputerUseProducer({ desktopPackageRoot: desktopRoot })).toMatchObject({
@@ -55,6 +71,21 @@ describe("Computer Use producer detection", () => {
 
   it("占位包下 dev 插件运行时暂存直接跳过，不要求 sharp 与插件清单", () => {
     const desktopRoot = createWorkspace({ name: "@zcode/zcode-cua", zcodeCuaPlaceholder: true });
+    expect(
+      stageDevCuaPluginRuntime({
+        env: { ZCODE_CUA_DEV_MODE: "1" },
+        desktopPackageRoot: desktopRoot,
+        pluginRoot: join(desktopRoot, "missing-plugin"),
+      }),
+    ).toEqual([]);
+  });
+
+  it("独立 Helper 驱动不依赖 Sharp 时，真实 producer 也不暂存旧原生依赖", () => {
+    const desktopRoot = createWorkspace({
+      name: "@zcode/zcode-cua",
+      version: "0.6.5",
+      dependencies: { "@trycua/cua-driver": "0.28.2" },
+    });
     expect(
       stageDevCuaPluginRuntime({
         env: { ZCODE_CUA_DEV_MODE: "1" },

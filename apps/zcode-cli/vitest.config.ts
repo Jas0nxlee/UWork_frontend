@@ -8,6 +8,7 @@ export default defineConfig({
       "tests/**/*.test.ts",
       "packages/*/test/**/*.test.ts",
       "packages/*/tests/**/*.test.ts",
+      "packages/*/src/**/contract.test.ts",
     ],
   },
 });

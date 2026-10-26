@@ -1,0 +1,32 @@
+diff --git a/dist/commonjs/index.js b/dist/commonjs/index.js
+index 2eb7745280116bb87e03196837fc2f580a558852..7377d53f62c9c15de56de0a62a57656c44efd225 100644
+--- a/dist/commonjs/index.js
++++ b/dist/commonjs/index.js
+@@ -42,8 +42,9 @@ const PrintOptionsSchema = zod_1.z.object({
+     /** the boundary height to draw in */
+     maxHeight: zod_1.z.number().optional(),
+     /** a callback for when complete that ahs the end co-ordinates of the text */
+-    cb: zod_1.z
+-        .function(zod_1.z.tuple([zod_1.z.object({ x: zod_1.z.number(), y: zod_1.z.number() })]))
++    // UWork 修复依据：Zod 4 旧 function(tuple) 不再声明入参；显式 input 保留坐标与 this 校验。
++    cb: zod_1.z.custom(value => typeof value === "function")
++        .transform(callback => zod_1.z.function({ input: [zod_1.z.object({ x: zod_1.z.number(), y: zod_1.z.number() })] }).implement(callback))
+         .optional(),
+ });
+ function xOffsetBasedOnAlignment(font, line, maxWidth, alignment) {
+diff --git a/dist/esm/index.js b/dist/esm/index.js
+index 6c91127018bfb4b7741ea7348ec7c955fa7d672f..17963f869ba793b69442bf50cfc476b6208f84d5 100644
+--- a/dist/esm/index.js
++++ b/dist/esm/index.js
+@@ -23,8 +23,9 @@ const PrintOptionsSchema = z.object({
+     /** the boundary height to draw in */
+     maxHeight: z.number().optional(),
+     /** a callback for when complete that ahs the end co-ordinates of the text */
+-    cb: z
+-        .function(z.tuple([z.object({ x: z.number(), y: z.number() })]))
++    // UWork 修复依据：Zod 4 旧 function(tuple) 不再声明入参；显式 input 保留坐标与 this 校验。
++    cb: z.custom(value => typeof value === "function")
++        .transform(callback => z.function({ input: [z.object({ x: z.number(), y: z.number() })] }).implement(callback))
+         .optional(),
+ });
+ function xOffsetBasedOnAlignment(font, line, maxWidth, alignment) {

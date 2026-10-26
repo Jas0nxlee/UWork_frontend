@@ -19,6 +19,23 @@ allowBuilds:
   ssh2: true
   unsafe-pointer: true
 overrides:
+  # Jimp 1.6.1 的公开参数校验迁移到安全 Zod 4；print 函数 schema 由精确 patch 保留语义。
+  "@jimp/plugin-blit@1.6.1>zod": 4.6.6
+  "@jimp/plugin-circle@1.6.1>zod": 4.6.6
+  "@jimp/plugin-color@1.6.1>zod": 4.6.6
+  "@jimp/plugin-contain@1.6.1>zod": 4.6.6
+  "@jimp/plugin-cover@1.6.1>zod": 4.6.6
+  "@jimp/plugin-crop@1.6.1>zod": 4.6.6
+  "@jimp/plugin-displace@1.6.1>zod": 4.6.6
+  "@jimp/plugin-fisheye@1.6.1>zod": 4.6.6
+  "@jimp/plugin-flip@1.6.1>zod": 4.6.6
+  "@jimp/plugin-mask@1.6.1>zod": 4.6.6
+  "@jimp/plugin-print@1.6.1>zod": 4.6.6
+  "@jimp/plugin-quantize@1.6.1>zod": 4.6.6
+  "@jimp/plugin-resize@1.6.1>zod": 4.6.6
+  "@jimp/plugin-rotate@1.6.1>zod": 4.6.6
+  "@jimp/plugin-threshold@1.6.1>zod": 4.6.6
+  "@jimp/types@1.6.1>zod": 4.6.6
   "@modelcontextprotocol/client": "2.3.0"
   "@modelcontextprotocol/core": "2.3.0"
   "@modelcontextprotocol/server": "2.3.0"
@@ -50,8 +67,8 @@ overrides:
   smol-toml: ^1.7.1
   source-map-js: 1.2.2
   tmp@^0.2: 0.2.7
-  undici@^6: ^6.28.1
-  undici@^7: ^7.29.0
+  undici@^6: 6.29.1
+  undici@^7: 7.30.1
   ws@8.18.0: ^8.21.0
   ws@^8: ^8.21.0
 packageExtensions:
@@ -62,6 +79,7 @@ patchedDependencies:
   "@ai-sdk/anthropic@3.0.81": patches/@ai-sdk__anthropic@3.0.81.patch
   "@ai-sdk/openai-compatible@2.0.60": patches/@ai-sdk__openai-compatible@2.0.60.patch
   "@arms/rum-electron@0.0.3": patches/@arms__rum-electron@0.0.3.patch
+  "@jimp/plugin-print@1.6.1": patches/@jimp__plugin-print@1.6.1.patch
   "@radix-ui/react-collapsible@1.1.12": patches/@radix-ui__react-collapsible@1.1.12.patch
   exceljs@4.4.0: patches/exceljs@4.4.0.patch
   playwright-core@1.59.1: patches/playwright-core@1.59.1.patch

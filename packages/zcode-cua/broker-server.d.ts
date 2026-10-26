@@ -4,6 +4,11 @@ export declare const HELPER_ADDON_ENV: string;
 export declare const WINDOWS_DEV_CONTROL_PROTOCOL: string;
 
 export interface HelperLaunchSpec {
+  appPath: string;
+  socketPath?: string;
+  permissionStatusFile?: string;
+  allowUnsignedLauncherLocalDev?: boolean;
+  allowExternalBrokerClientLocalDev?: boolean;
   [key: string]: unknown;
 }
 
@@ -28,6 +33,10 @@ export declare function resolveHelperPermissionSubjectIdentity(
 
 export interface CuaHelperVerifierDependencies {
   readExecutableArchs: (executablePath: string) => Promise<string[]>;
+  readPlist?: (appPath: string) => Promise<Record<string, unknown>>;
+  verifyCodeSignature?: (appPath: string) => Promise<void>;
+  readTeamIdentifier?: (appPath: string) => Promise<string | undefined>;
+  verifyGatekeeper?: (appPath: string) => Promise<void>;
   [key: string]: unknown;
 }
 
@@ -189,6 +198,7 @@ export interface CreateProductCuaHelperHostOptions {
   helperInstaller?: CuaHelperInstaller;
   bundledHelperAppPath?: string;
   healthTimeoutMs?: number;
+  launchHelper?: (appPath: string, args: string[]) => Promise<void>;
   [key: string]: unknown;
 }
 

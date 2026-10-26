@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  resolveDesktopBuildProfile,
+  resolveDesktopDisplayVersion,
+} from "./desktop-build-profile.mjs";
 
 const require = createRequire(import.meta.url);
 const moduleDir = import.meta.dirname;
@@ -84,7 +88,8 @@ export function collectBuildMetadata() {
   const desktopPackageJson = readJson(resolve(desktopDir, "package.json"));
 
   return {
-    appVersion: normalizeVersion(rootPackageJson.version),
+    appVersion: resolveDesktopDisplayVersion(normalizeVersion(rootPackageJson.version)),
+    buildProfile: resolveDesktopBuildProfile(),
     minCompatibleVersion: normalizeVersion(
       rootPackageJson.zcodeCompatibility?.minCompatibleVersion ?? rootPackageJson.version,
     ),
@@ -107,7 +112,8 @@ export function readBuildMetadata() {
     return {
       ...metadata,
       minCompatibleVersion:
-        typeof metadata.minCompatibleVersion === "string" && metadata.minCompatibleVersion.length > 0
+        typeof metadata.minCompatibleVersion === "string" &&
+        metadata.minCompatibleVersion.length > 0
           ? normalizeVersion(metadata.minCompatibleVersion)
           : normalizeVersion(metadata.appVersion),
     };
@@ -117,7 +123,12 @@ export function readBuildMetadata() {
 }
 
 export function getBuildMetadata() {
-  return readBuildMetadata() ?? collectBuildMetadata();
+  const cached = readBuildMetadata();
+  if (cached && (cached.buildProfile ?? "release") !== resolveDesktopBuildProfile())
+    throw new Error(
+      "Desktop metadata build profile changed; run prepare:build-meta before bundling",
+    );
+  return cached ?? collectBuildMetadata();
 }
 
 export function writeBuildMetadata() {

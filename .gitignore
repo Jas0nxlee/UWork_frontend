@@ -11,6 +11,8 @@ mock-cdn/
 packages/desktop/bundled-resources/
 packages/desktop/bundled-agents/
 packages/desktop/bundled-tools/
+# CUA Helper 的 SEA、原生库和签名由 prepare:macos-cua-helper 生成，源码入库、产物不入库。
+packages/desktop/bundled-cua-helper/
 packages/desktop/mock-cdn/
 packages/desktop/.e2e-home/
 # 修复原因：Windows shard runner 会生成带 run id 的 HOME；中断后不应把测试产物误判为源码改动。

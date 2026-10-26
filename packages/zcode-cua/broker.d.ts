@@ -4,7 +4,11 @@ export declare const BROKER_UNAVAILABLE_ENV: string;
 export declare class BrokerError extends Error {
   code: string;
   details?: unknown;
-  constructor(message?: string, options?: { code?: string; details?: unknown });
+  actionSent: boolean;
+  constructor(
+    message?: string,
+    options?: { code?: string; details?: unknown; actionSent?: boolean },
+  );
 }
 
 export declare class CuaHelperError extends Error {
@@ -31,6 +35,8 @@ export interface CallBrokerMethodArgs {
   method: string;
   params?: unknown;
   timeoutMs?: number;
+  token?: string;
+  signal?: AbortSignal;
 }
 
 export declare function callBrokerMethod<T = unknown>(args: CallBrokerMethodArgs): Promise<T>;
@@ -120,6 +126,7 @@ export type CuaPermissionStatusResult = CuaPermissionStatus | CuaPermissionStatu
 
 export interface CuaPermissionStatusQueryOptions {
   probeScreenCapture?: boolean;
+  includeFunctionalProbes?: boolean;
   [key: string]: unknown;
 }
 
