@@ -16,6 +16,14 @@ import {
   readKnownDevices,
   rememberKnownDevices,
 } from "#src/web-remote-control/app/webRemoteControlKnownDevices.js";
+import {
+  clearEnterpriseAuthToken,
+  exchangeEnterpriseAuthCode,
+  readEnterpriseAuthToken,
+  resolveEnterpriseAuthorizeUrl,
+  saveEnterpriseAuthToken,
+  type EnterpriseAuthContext,
+} from "#src/web-remote-control/app/enterpriseAuth.js";
 
 export function isWebRemoteControlOAuthCallback(url: URL): boolean {
   return (
@@ -90,6 +98,14 @@ export class WebRemoteControlEntry {
       if (!params) {
         this.options.onView({ kind: "failure", failure: { reason: "invalid-mobile-connection" } });
         return;
+      }
+      // 企业身份准入（方案 A）：二维码带 org + enterprise_auth 时，先拿企业身份再连。
+      if (params.enterpriseAuth && params.enterpriseOrg) {
+        const authorized = await this.ensureEnterpriseIdentity(
+          { apiBaseUrl: params.enterpriseAuth, orgId: params.enterpriseOrg },
+          url,
+        );
+        if (!authorized) return;
       }
       this.connect(params);
       return;
@@ -231,6 +247,56 @@ export class WebRemoteControlEntry {
     for (const key of ["sid", "mid", "name", "hash", "t"]) url.searchParams.delete(key);
     this.options.replaceHref(url.href);
     await this.openDevices(false);
+  }
+
+  /**
+   * 企业身份准入：拿 token 或把浏览器送去企微授权。
+   * 返回 false 表示这次不连（已跳转 / 已给出失败视图），调用方直接结束。
+   */
+  private async ensureEnterpriseIdentity(
+    context: EnterpriseAuthContext,
+    url: URL,
+  ): Promise<boolean> {
+    const code = url.searchParams.get("code");
+    if (code) {
+      try {
+        const token = await exchangeEnterpriseAuthCode({ context, code });
+        saveEnterpriseAuthToken(this.options.storage, context, token);
+      } catch (error) {
+        clearEnterpriseAuthToken(this.options.storage, context);
+        this.options.onView({
+          kind: "failure",
+          failure: {
+            reason: "enterprise-identity-required",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return false;
+      }
+      // 回调带回的 code 只消费一次：清掉它再继续，刷新页面不会重复兑换。
+      const cleaned = new URL(url.href);
+      cleaned.searchParams.delete("code");
+      this.options.replaceHref(cleaned.href);
+      return true;
+    }
+    if (readEnterpriseAuthToken(this.options.storage, context)) return true;
+    try {
+      const authorizeUrl = await resolveEnterpriseAuthorizeUrl({
+        context,
+        returnTo: url.href,
+      });
+      this.options.onView({ kind: "login" });
+      window.location.assign(authorizeUrl);
+    } catch (error) {
+      this.options.onView({
+        kind: "failure",
+        failure: {
+          reason: "enterprise-identity-required",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+    return false;
   }
 
   private rememberDevice(sid: string, mid: string | undefined): void {

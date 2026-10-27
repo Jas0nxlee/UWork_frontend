@@ -38,7 +38,13 @@ export type WebRemoteControlEntryView =
   | { kind: "failure"; failure: WebRemoteControlFailure };
 
 export interface WebRemoteControlEntryConnection {
-  params: WebRemoteControlV2QrParams & { deviceSid: string; passHash?: string };
+  params: WebRemoteControlV2QrParams & {
+    deviceSid: string;
+    passHash?: string;
+    /** 企业身份准入（方案 A）：只有 HMAC 通道的二维码会带这两个参数。 */
+    enterpriseAuth?: string;
+    enterpriseOrg?: string;
+  };
   protocol?: "hmac-v1" | "oauth-v2";
   signal: AbortSignal;
   getToken(signal: AbortSignal): Promise<string>;

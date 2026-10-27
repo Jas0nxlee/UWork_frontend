@@ -249,3 +249,36 @@ describe("打包布局读取", () => {
     });
   });
 });
+
+describe("企业身份准入配置（方案 A）", () => {
+  it("enterpriseAuth 合法时解析出基址与放宽开关", () => {
+    expect(
+      parseMobileRemoteControlConfig({
+        remotePageBaseUrl: "https://aihub.example.com/remote/v4",
+        relayWsUrl: "wss://aihub.example.com/remote/ws",
+        enterpriseAuth: { apiBaseUrl: "https://pivot.example.com", allowSameOrgAnyUser: true },
+      }),
+    ).toMatchObject({
+      enterpriseAuth: { apiBaseUrl: "https://pivot.example.com", allowSameOrgAnyUser: true },
+    });
+  });
+
+  it("allowSameOrgAnyUser 缺省为 false；基址不合法时整个准入配置被忽略但不影响远控", () => {
+    const parsed = parseMobileRemoteControlConfig({
+      remotePageBaseUrl: "https://aihub.example.com/remote/v4",
+      relayWsUrl: "wss://aihub.example.com/remote/ws",
+      enterpriseAuth: { apiBaseUrl: "https://pivot.example.com" },
+    });
+    expect(parsed?.enterpriseAuth).toEqual({
+      apiBaseUrl: "https://pivot.example.com",
+      allowSameOrgAnyUser: false,
+    });
+    const rejected = parseMobileRemoteControlConfig({
+      remotePageBaseUrl: "https://aihub.example.com/remote/v4",
+      relayWsUrl: "wss://aihub.example.com/remote/ws",
+      enterpriseAuth: { apiBaseUrl: "http://pivot.example.com" },
+    });
+    expect(rejected).toMatchObject({ remotePageBaseUrl: "https://aihub.example.com/remote/v4" });
+    expect(rejected?.enterpriseAuth).toBeUndefined();
+  });
+});

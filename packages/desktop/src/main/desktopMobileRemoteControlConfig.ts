@@ -12,6 +12,18 @@ import { join } from "node:path";
 export interface MobileRemoteControlConfig {
   remotePageBaseUrl: string;
   relayWsUrl: string;
+  /**
+   * 企业身份准入（方案 A，见 specs/remote-control-enterprise-auth.md）。
+   * 缺省 = 不启用：二维码不带 `org`/`enterprise_auth`，行为与以前一致。
+   */
+  enterpriseAuth?: MobileRemoteControlEnterpriseAuthConfig;
+}
+
+export interface MobileRemoteControlEnterpriseAuthConfig {
+  /** ucas-proxy control-plane 基址（手机页拿它做企微授权与换 token）。 */
+  apiBaseUrl: string;
+  /** 放宽为"同组织任意员工可控制"；默认 false = 必须同一个人。 */
+  allowSameOrgAnyUser: boolean;
 }
 
 const MAX_CONFIG_BYTES = 16_384;
@@ -71,13 +83,44 @@ function parseRelayWsUrl(raw: unknown): string | null {
   return url.toString();
 }
 
+/**
+ * 准入基址与手机页地址的约束不同：手机页必须是子路径（二维码往后面拼 query），
+ * 而 control-plane 就在域名根上（`https://pivot.ucas.com.cn`），所以这里允许根路径。
+ */
+function parseEnterpriseAuthBaseUrl(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  const secure =
+    url.protocol === "https:" || (url.protocol === "http:" && isLocalHost(url.hostname));
+  if (!secure || url.search || url.hash) return null;
+  return `${url.origin}${url.pathname.replace(/\/+$/u, "")}`;
+}
+
+function parseEnterpriseAuth(raw: unknown): MobileRemoteControlEnterpriseAuthConfig | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const apiBaseUrl = parseEnterpriseAuthBaseUrl(record["apiBaseUrl"]);
+  if (!apiBaseUrl) return null;
+  return {
+    apiBaseUrl,
+    allowSameOrgAnyUser: record["allowSameOrgAnyUser"] === true,
+  };
+}
+
 export function parseMobileRemoteControlConfig(raw: unknown): MobileRemoteControlConfig | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const record = raw as Record<string, unknown>;
   const remotePageBaseUrl = parseRemotePageBaseUrl(record["remotePageBaseUrl"]);
   const relayWsUrl = parseRelayWsUrl(record["relayWsUrl"]);
   if (!remotePageBaseUrl || !relayWsUrl) return null;
-  return { remotePageBaseUrl, relayWsUrl };
+  // 准入配置坏掉不等于远控坏掉：解析不出来就当作没启用，只记一条日志由调用方决定。
+  const enterpriseAuth = parseEnterpriseAuth(record["enterpriseAuth"]);
+  return { remotePageBaseUrl, relayWsUrl, ...(enterpriseAuth ? { enterpriseAuth } : {}) };
 }
 
 export interface MobileRemoteControlOverrides {

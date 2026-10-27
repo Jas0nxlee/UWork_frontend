@@ -126,6 +126,8 @@ export function createWindow(options: {
   }
 
   const wcId = win.webContents.id;
+  // 远控按 BrowserWindow id 注销窗口，与 webContents id 不是同一个编号。
+  const browserWindowId = win.id;
   // 资源遥测据此把主窗口 renderer 归 renderer_main；辅助窗口与 DevTools 归 chromium_other。
   registerMainApplicationWindow(wcId);
   let domReadyGeneration = 0;

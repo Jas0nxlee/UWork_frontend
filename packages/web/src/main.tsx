@@ -101,6 +101,7 @@ import {
   type WebRemoteControlWorkspaceBridgeServiceRegistration,
   markWebRemoteControlBridgeTaskRead,
   markWebRemoteControlTaskRead,
+  readEnterpriseAuthToken,
 } from "#src/web-remote-control/index.js";
 
 import {
@@ -1472,6 +1473,16 @@ async function bootstrapExternalRelayWebRemoteControl(
         return;
       }
       connection.onPaired();
+      // 企业身份准入：配对后立刻把身份交给桌面，桌面校验通过前会丢弃其它 payload。
+      if (relayParams.enterpriseAuth && relayParams.enterpriseOrg) {
+        const enterpriseToken = readEnterpriseAuthToken(webRemoteControlStorage, {
+          apiBaseUrl: relayParams.enterpriseAuth,
+          orgId: relayParams.enterpriseOrg,
+        });
+        if (enterpriseToken) {
+          transport.sendPayload({ zcode_type: "enterprise-identity", token: enterpriseToken });
+        }
+      }
       // 已有校验操作自行跨重连消费一次重试；配对事件不能启动另一个恢复 owner。
       if (bootstrapping && pendingVersionCheck) return;
       // healthy bridge 与在途初始化都不能并发新建 bridge，但新配对仍必须检查桌面版本。

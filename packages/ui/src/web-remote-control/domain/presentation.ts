@@ -203,6 +203,17 @@ export function getFailureDescription(
     case "device-not-owned":
     case "auth-required":
       return failure.message ?? null;
+    // 企业准入：桌面已经给出可读原因，原样透出；缺失时用兜底文案（i18n key 见 locales）。
+    case "enterprise-identity-required":
+      return (
+        failure.message ??
+        formatMessage({ id: "webRemoteControl.failure.enterpriseIdentityRequired" })
+      );
+    case "enterprise-identity-rejected":
+      return (
+        failure.message ??
+        formatMessage({ id: "webRemoteControl.failure.enterpriseIdentityRejected" })
+      );
     case "unexpected-error":
       return formatMessage({ id: "webRemoteControl.failure.unexpectedError" });
   }

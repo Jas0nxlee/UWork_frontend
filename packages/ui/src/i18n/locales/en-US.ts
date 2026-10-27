@@ -2568,6 +2568,10 @@ const enUS: Record<string, string> = {
     "The external relay connection is unavailable. Make sure desktop is online, then try again.",
   "webRemoteControl.failure.unsupportedAction":
     "Web remote control mode can only open workspaces that are already open in the current desktop window.",
+  "webRemoteControl.failure.enterpriseIdentityRequired":
+    "This device only accepts employees of the same company. Sign in with WeCom first.",
+  "webRemoteControl.failure.enterpriseIdentityRejected":
+    "The signed-in company identity does not match this device, so desktop rejected the connection.",
   "webRemoteControl.failure.unexpectedError":
     "Could not start mobile remote control. Try again from desktop.",
   "webRemoteControl.copyLink": "Copy link",

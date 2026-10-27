@@ -2389,6 +2389,10 @@ const zhCN: Record<string, string> = {
   "webRemoteControl.failure.relayUnavailable": "外部 relay 连接不可用，请确认桌面端在线后重试。",
   "webRemoteControl.failure.unsupportedAction":
     "当前是 Web 远程控制模式，只支持访问桌面端当前窗口已经打开的工作区。",
+  "webRemoteControl.failure.enterpriseIdentityRequired":
+    "这台设备只允许本公司员工连接，请先完成企业微信授权。",
+  "webRemoteControl.failure.enterpriseIdentityRejected":
+    "登录的企业身份与这台设备不匹配，桌面端已拒绝本次连接。",
   "webRemoteControl.failure.unexpectedError": "无法启动移动端远程控制，请回到桌面端重试。",
   "webRemoteControl.copyLink": "复制链接",
   "webRemoteControl.copyLink.copied": "已复制远程控制链接",

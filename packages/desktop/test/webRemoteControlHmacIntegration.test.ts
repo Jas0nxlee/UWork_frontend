@@ -20,7 +20,21 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function fixture(options: { relayWsUrl?: string; remoteUrl?: string } = {}) {
+async function fixture(
+  options: {
+    relayWsUrl?: string;
+    remoteUrl?: string;
+    enterpriseAuth?: {
+      apiBaseUrl: string;
+      allowSameOrgAnyUser: boolean;
+      resolveLocalSubject?: () => Promise<{
+        orgId: string;
+        userId: string;
+        displayName?: string;
+      } | null>;
+    };
+  } = {},
+) {
   const relay = await createHmacTestRelay();
   cleanups.push(() => relay.close());
   const credentials = new Map<string, string>();
@@ -52,6 +66,7 @@ async function fixture(options: { relayWsUrl?: string; remoteUrl?: string } = {}
     },
     relayWsUrl: options.relayWsUrl ?? relay.wsUrl,
     mobileRemoteControlUrl: options.remoteUrl ?? `${relay.httpUrl}/remote/v4`,
+    ...(options.enterpriseAuth ? { enterpriseAuth: options.enterpriseAuth } : {}),
     deviceMid: "test-desktop",
     deviceName: "UWork Desktop",
     appVersion: "3.16.6",
@@ -355,5 +370,122 @@ describe("UWork HMAC 双端真实 loopback 配对", () => {
       deviceSid: params.deviceSid,
       passHash: params.passHash,
     });
+  });
+});
+
+describe("手机远控的企业身份准入（方案 A）", () => {
+  it("二维码带组织与准入基址；校验通过前丢弃其它 payload，通过后才放行", async () => {
+    const refresh = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        token: "phone-token-2",
+        user: { id: "user-1", org_id: "org-a", wecom_userid: "wx-1", name: "张三" },
+      }),
+    }));
+    vi.stubGlobal("fetch", refresh);
+    cleanups.push(() => vi.unstubAllGlobals());
+    const f = await fixture({
+      enterpriseAuth: {
+        apiBaseUrl: "https://pivot.example.com",
+        allowSameOrgAnyUser: false,
+        resolveLocalSubject: async () => ({
+          orgId: "org-a",
+          userId: "user-1",
+          displayName: "张三",
+        }),
+      },
+    });
+    const started = await f.start();
+    const params = parseWebRemoteControlHmacQrParams(new URL(started.qrUrl).searchParams)!;
+    expect(params.enterpriseOrg).toBe("org-a");
+    expect(params.enterpriseAuth).toBe("https://pivot.example.com");
+
+    const received: WebRemoteControlAppPayload[] = [];
+    const terminal = new WebRemoteControlHmacTerminalTransport({
+      relayWsUrl: f.relay.wsUrl,
+      deviceSid: params.deviceSid,
+      passHash: params.passHash,
+      authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
+      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
+      onStateChange: () => {},
+      onFailure: vi.fn(),
+      onError: vi.fn(),
+      reloadPage: vi.fn(),
+      onPayload: (payload) => received.push(payload),
+    });
+    cleanups.push(() => terminal.dispose());
+    terminal.start();
+    await vi.waitFor(() => expect(received.length).toBeGreaterThanOrEqual(0));
+    await vi.waitFor(() => expect(f.manager.getStatus(1).mobileConnected).toBe(true));
+
+    // 校验前：bootstrap-request 必须被丢弃（桌面不回应，也不排队）。
+    terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-1" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(received.filter((payload) => payload.zcode_type === "bootstrap-response")).toHaveLength(
+      0,
+    );
+
+    // 带上身份后：桌面向 control-plane 校验一次，随后放行。
+    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(String(refresh.mock.calls[0]?.[0])).toBe("https://pivot.example.com/api/auth/refresh");
+    await vi.waitFor(() =>
+      expect(
+        received.filter((payload) => payload.zcode_type === "bootstrap-response"),
+      ).toHaveLength(0),
+    );
+    terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-2" });
+    await vi.waitFor(() =>
+      expect(
+        received.filter((payload) => payload.zcode_type === "bootstrap-response"),
+      ).toHaveLength(1),
+    );
+  });
+
+  it("组织不符时拒绝连接并把原因回给手机", async () => {
+    const refresh = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        token: "phone-token-2",
+        user: { id: "user-2", org_id: "org-b", wecom_userid: "wx-2", name: "李四" },
+      }),
+    }));
+    vi.stubGlobal("fetch", refresh);
+    cleanups.push(() => vi.unstubAllGlobals());
+    const f = await fixture({
+      enterpriseAuth: {
+        apiBaseUrl: "https://pivot.example.com",
+        allowSameOrgAnyUser: false,
+        resolveLocalSubject: async () => ({ orgId: "org-a", userId: "user-1" }),
+      },
+    });
+    const params = parseWebRemoteControlHmacQrParams(
+      new URL((await f.start()).qrUrl).searchParams,
+    )!;
+    const received: WebRemoteControlAppPayload[] = [];
+    const terminal = new WebRemoteControlHmacTerminalTransport({
+      relayWsUrl: f.relay.wsUrl,
+      deviceSid: params.deviceSid,
+      passHash: params.passHash,
+      authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
+      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
+      onStateChange: () => {},
+      onFailure: vi.fn(),
+      onError: vi.fn(),
+      reloadPage: vi.fn(),
+      onPayload: (payload) => received.push(payload),
+    });
+    cleanups.push(() => terminal.dispose());
+    terminal.start();
+    await vi.waitFor(() => expect(f.manager.getStatus(1).mobileConnected).toBe(true));
+    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
+    await vi.waitFor(() =>
+      expect(received.some((payload) => payload.zcode_type === "app-error")).toBe(true),
+    );
+    const error = received.find((payload) => payload.zcode_type === "app-error");
+    expect(error).toMatchObject({ reason: "enterprise-identity-rejected" });
+    expect(String(error?.error ?? "")).toContain("公司");
   });
 });

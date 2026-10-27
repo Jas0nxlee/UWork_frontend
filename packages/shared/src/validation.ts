@@ -126,6 +126,8 @@ export const webRemoteControlFailureReasonSchema = z.enum([
   "connection-recovery-timeout",
   "relay-unavailable",
   "unsupported-action",
+  "enterprise-identity-required",
+  "enterprise-identity-rejected",
   "unexpected-error",
 ]);
 
@@ -224,6 +226,13 @@ const webRemoteControlAppPayloadSchemas = [
     .object({
       zcode_type: z.literal("telemetry-report"),
       event: z.union([sessionCreateTelemetrySchema, mobilePluginDiscoveryTelemetrySchema]),
+    })
+    .strict(),
+  // 企业身份准入（方案 A）：手机端配对后先发这一帧，桌面校验前丢弃它的其它 payload。
+  z
+    .object({
+      zcode_type: z.literal("enterprise-identity"),
+      token: nonEmptyStringSchema.max(16_384),
     })
     .strict(),
   z.object({

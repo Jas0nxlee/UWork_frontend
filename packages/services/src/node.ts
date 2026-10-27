@@ -80,6 +80,7 @@ export {
 export { createTopicResourceRelayChannel } from "./zcode-agent/topicResourceRelayChannel.js";
 
 export { createFileService } from "./file/fileService.js";
+export { readEnterpriseIdentitySubject } from "./enterprise-identity/identitySessionStore.js";
 export {
   attributeHostProcessTree,
   createProcessResourceSampler,

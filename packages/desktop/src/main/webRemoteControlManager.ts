@@ -141,6 +141,12 @@ interface WindowControlRuntime {
   mobileTaskViewEpoch?: string;
   mobileTaskViewSeq?: number;
   mobileDeviceInfo?: WebRemoteControlMobileDeviceInfo;
+  /** 企业准入状态：仅在本机身份可用且二维码带上准入参数时存在。 */
+  enterpriseGate?: "pending" | "verified";
+  /** 本机身份（组织 + 人），用于与手机上报的身份比对。 */
+  enterpriseSubject?: { orgId: string; userId: string; displayName?: string };
+  /** 校验通过后记下的远端身份，用于日志与状态展示。 */
+  remoteEnterpriseName?: string;
   currentBridge?: WorkspaceBridgeRuntime;
   bridgeOpen?: {
     bridgeSessionId: string;
@@ -169,6 +175,20 @@ interface WebRemoteControlManagerDependencies {
     ) => WebRemoteControlDeviceTransportLike;
   };
   getEndpointUrls?: () => Promise<ZCodeEndpointUrls> | ZCodeEndpointUrls;
+  /**
+   * 企业身份准入（方案 A，见 specs/remote-control-enterprise-auth.md）。缺省 = 不启用：
+   * 二维码不带 org/enterprise_auth，行为与以前一致。`resolveLocalSubject` 拿不到本机身份时
+   * 同样按未启用处理——不生成一张必然被拒的码。
+   */
+  enterpriseAuth?: {
+    apiBaseUrl: string;
+    allowSameOrgAnyUser: boolean;
+    resolveLocalSubject?: () => Promise<{
+      orgId: string;
+      userId: string;
+      displayName?: string;
+    } | null>;
+  };
   relayWsUrl: string;
   mobileRemoteControlUrl: string;
   deviceMid: string;
@@ -223,6 +243,8 @@ interface WebRemoteControlManagerDependencies {
 // Bugfix: 外部 relay 首次鉴权会受边缘层冷启动和网络抖动影响，实测可能略超 15s。
 // 这里等待到 30s，避免在 device 已经快进入 waiting_terminal 时过早销毁可用连接。
 const EXTERNAL_RELAY_QR_READY_TIMEOUT_MS = 30_000;
+/** 企业身份校验请求的上限：宁可拒绝也不让配对一直挂在 pending。 */
+const ENTERPRISE_IDENTITY_TIMEOUT_MS = 10_000;
 const MOBILE_DISCONNECT_STATUS_GRACE_MS = 3_000;
 
 function createFailure(
@@ -1321,7 +1343,94 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     });
   }
 
+  /**
+   * 企业准入校验（方案 A）：拿手机上报的 JWT 向 ucas-proxy 换一次身份，
+   * 同组织且（默认）同一个人放行；其余一律拒绝，并把原因回给手机。
+   */
+  async function verifyEnterpriseIdentity(
+    runtime: WindowControlRuntime,
+    token: string,
+  ): Promise<void> {
+    const enterprise = dependencies.enterpriseAuth;
+    const local = runtime.enterpriseSubject;
+    if (runtime.enterpriseGate !== "pending" || !enterprise || !local) return;
+    const reject = (message: string) => {
+      runtime.enterpriseGate = undefined;
+      dependencies.logger.warn("[web-remote-control] enterprise identity rejected", {
+        windowId: runtime.windowId,
+        message,
+      });
+      preserveWindowRuntimeFailure(
+        runtime.windowId,
+        runtime,
+        "enterprise-identity-rejected",
+        createFailure("enterprise-identity-rejected", message),
+      );
+    };
+    if (typeof token !== "string" || !token.trim() || token.length > 16_384) {
+      reject("企业身份令牌缺失或过长。");
+      return;
+    }
+    let user: { id?: unknown; org_id?: unknown; wecom_userid?: unknown; name?: unknown };
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ENTERPRISE_IDENTITY_TIMEOUT_MS);
+      try {
+        const response = await fetch(`${enterprise.apiBaseUrl}/api/auth/refresh`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          reject(`企业身份校验失败（HTTP ${response.status}）。`);
+          return;
+        }
+        const body = (await response.json()) as { user?: typeof user };
+        user = body.user ?? {};
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (error) {
+      reject(`企业身份校验请求失败：${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    const remoteOrg = typeof user.org_id === "string" ? user.org_id : "";
+    if (!remoteOrg || remoteOrg !== local.orgId) {
+      reject("当前登录的企业与这台设备所属公司不一致。");
+      return;
+    }
+    const remoteIds = [user.id, user.wecom_userid]
+      .filter((value): value is string => typeof value === "string" && value !== "")
+      .map((value) => value.trim().toLowerCase());
+    if (!enterprise.allowSameOrgAnyUser && !remoteIds.includes(local.userId.trim().toLowerCase())) {
+      reject("只能由登录这台设备的同一个人控制。");
+      return;
+    }
+    runtime.enterpriseGate = "verified";
+    runtime.remoteEnterpriseName = typeof user.name === "string" ? user.name : undefined;
+    dependencies.logger.info("[web-remote-control] enterprise identity verified", {
+      windowId: runtime.windowId,
+      orgId: remoteOrg,
+      sameUser: remoteIds.includes(local.userId.trim().toLowerCase()),
+    });
+  }
+
   function routePayload(runtime: WindowControlRuntime, payload: WebRemoteControlAppPayload): void {
+    // 企业准入：身份帧先处理，其余 payload 在校验通过前一律丢弃（不排队——排队等于先放行后校验）。
+    if (payload.zcode_type === "enterprise-identity") {
+      void verifyEnterpriseIdentity(runtime, payload.token);
+      return;
+    }
+    if (runtime.enterpriseGate === "pending") {
+      dependencies.logger.warn(
+        "[web-remote-control] payload dropped before enterprise verification",
+        {
+          windowId: runtime.windowId,
+          zcodeType: payload.zcode_type,
+        },
+      );
+      return;
+    }
     switch (payload.zcode_type) {
       case "bootstrap-request":
         sendAppPayload(runtime, {
@@ -1521,6 +1630,20 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         [relayWsUrl, mobileRemoteControlUrl].some((url) => new URL(url).hostname === "zcode.z.ai")
       )
         throw new Error("UWork self-hosted relay endpoints are required");
+      // 企业准入（方案 A）：本机身份拿不到就当作没启用——宁可少一道门，也不给一张必然被拒的码。
+      const enterprise = dependencies.enterpriseAuth;
+      const enterpriseSubject = enterprise?.resolveLocalSubject
+        ? await enterprise.resolveLocalSubject().catch((error: unknown) => {
+            dependencies.logger.warn("[web-remote-control] enterprise subject lookup failed", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+            return null;
+          })
+        : null;
+      const enterpriseQr =
+        enterprise && enterpriseSubject
+          ? { enterpriseAuth: enterprise.apiBaseUrl, enterpriseOrg: enterpriseSubject.orgId }
+          : undefined;
       const stored = await persistHmac(async () => {
         assertActive();
         return hmac.authStorageProvider.load();
@@ -1619,6 +1742,10 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         hasEverPaired: false,
         hasObservedSendReadyForPairing: false,
         pendingOutboundPayloads: [],
+        // 企业准入一旦落到二维码上就进入 pending：校验通过前其它 payload 一律丢弃。
+        ...(enterpriseQr && enterpriseSubject
+          ? { enterpriseGate: "pending" as const, enterpriseSubject }
+          : {}),
       };
       runtimes.set(windowId, runtime);
       emitRuntimeStatus(runtime);
@@ -1647,6 +1774,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         deviceMid: dependencies.deviceMid,
         deviceName: dependencies.deviceName,
         appVersion: dependencies.appVersion,
+        ...enterpriseQr,
       });
       emitRuntimeStatus(runtime);
       return {

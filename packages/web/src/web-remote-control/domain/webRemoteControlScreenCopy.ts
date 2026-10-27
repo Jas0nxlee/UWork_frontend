@@ -138,6 +138,32 @@ const WEB_REMOTE_CONTROL_SCREEN_COPY = {
       nextSteps: ["刷新页面再试一次。", "如果仍然失败，请回到桌面端重新生成二维码。"],
       action: "重试",
     },
+    "enterprise-identity-required": {
+      tone: "neutral",
+      badge: "需要企业微信登录",
+      title: "请先用企业微信登录",
+      description: "这台设备只允许本公司员工连接，需要先完成企业微信授权。",
+      detailLabel: "授权说明",
+      nextStepsTitle: "下一步",
+      nextSteps: [
+        "在手机浏览器里允许跳转到企业微信完成登录。",
+        "如果授权没有回跳，请重新扫描二维码。",
+      ],
+      action: "重新登录",
+    },
+    "enterprise-identity-rejected": {
+      tone: "danger",
+      badge: "身份未通过",
+      title: "没有控制这台设备的权限",
+      description: "登录的企业身份与这台设备不匹配，桌面端已拒绝本次连接。",
+      detailLabel: "拒绝原因",
+      nextStepsTitle: "下一步",
+      nextSteps: [
+        "确认用的是登录这台电脑的同一个企业微信账号。",
+        "如果是帮同事看问题，请让对方在自己的客户端里生成二维码。",
+      ],
+      action: "重新登录",
+    },
   },
   "en-US": {
     "device-not-owned": {
@@ -292,6 +318,34 @@ const WEB_REMOTE_CONTROL_SCREEN_COPY = {
         "If it still fails, generate a new QR code on desktop.",
       ],
       action: "Retry",
+    },
+    "enterprise-identity-required": {
+      tone: "neutral",
+      badge: "WeCom sign-in required",
+      title: "Sign in with WeCom first",
+      description:
+        "This device only accepts employees of the same company. Sign in with WeCom to continue.",
+      detailLabel: "Why sign-in",
+      nextStepsTitle: "Next steps",
+      nextSteps: [
+        "Allow the redirect to WeCom to finish signing in.",
+        "Scan the QR code again if the redirect does not come back.",
+      ],
+      action: "Sign in again",
+    },
+    "enterprise-identity-rejected": {
+      tone: "danger",
+      badge: "Identity rejected",
+      title: "Not allowed to control this device",
+      description:
+        "The signed-in company identity does not match this device, so desktop rejected the connection.",
+      detailLabel: "Rejection reason",
+      nextStepsTitle: "Next steps",
+      nextSteps: [
+        "Use the same WeCom account that is signed in on this computer.",
+        "If you are helping a colleague, ask them to generate the QR code on their own client.",
+      ],
+      action: "Sign in again",
     },
   },
 } satisfies Record<

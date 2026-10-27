@@ -51,7 +51,7 @@ import type { UtilityProcess as ElectronUtilityProcess } from "electron";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import {
   createCredentialService,
   createSettingService,
@@ -68,6 +68,7 @@ import {
   setDataBaseDir,
   migrateApplicationStorage,
   resolveDefaultZCodeAgentCommand,
+  readEnterpriseIdentitySubject,
   startupStorage,
 } from "@zcode/services/node";
 import {
@@ -90,6 +91,7 @@ import {
   type TelemetryEventPayload,
   HostMessageTypes,
   InternalChannels,
+  shouldEnableE2ETestBridge,
 } from "@zcode/shared";
 import { logger, webRemoteControlRelayLogger } from "./logger.js";
 import { markMainLaunchAppReady } from "./desktopLaunchMarks.js";
@@ -878,18 +880,21 @@ const defaultZCodeEndpointUrls = buildZCodeEndpointUrls(DEFAULT_ZCODE_ENDPOINT_O
 });
 // 远控入口（桌面自己的 relay + 二维码指向的手机页）：随包配置 > 内置默认；env 仅作调试覆盖。
 // 部署方换入口只改 config/mobile-remote-control.json，不必重新写死代码里的默认地址。
+const mobileRemoteControlConfig = readMobileRemoteControlConfigSync({
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  appPath: app.getAppPath(),
+  warn: (message, meta) => logger.warn(message, meta),
+});
 const mobileRemoteControlOverrides = resolveMobileRemoteControlOverrides({
   envRelayWsUrl: process.env["ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL"],
   envRemotePageBaseUrl: process.env["ZCODE_WEB_REMOTE_CONTROL_URL"],
-  config: readMobileRemoteControlConfigSync({
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    appPath: app.getAppPath(),
-    warn: (message, meta) => logger.warn(message, meta),
-  }),
+  config: mobileRemoteControlConfig,
 });
 const webRemoteControlRelayWsEnvOverride = mobileRemoteControlOverrides.relayWsUrl;
 const webRemoteControlUrlEnvOverride = mobileRemoteControlOverrides.remotePageBaseUrl;
+// 企业身份准入（方案 A）：随包配置开启；本机身份读不到时由 manager 按未启用处理。
+const webRemoteEnterpriseAuth = mobileRemoteControlConfig?.enterpriseAuth;
 
 function extractOpenWorkspacePathFromDeepLinkUrl(url: string): string | null {
   try {
@@ -941,6 +946,17 @@ const webRemoteControlManager = createWebRemoteControlManager({
     overrideUrl: webRemoteControlRelayWsEnvOverride,
   }),
   mobileRemoteControlUrl: webRemoteControlUrlEnvOverride || defaultZCodeEndpointUrls.remoteUrl,
+  ...(webRemoteEnterpriseAuth
+    ? {
+        enterpriseAuth: {
+          apiBaseUrl: webRemoteEnterpriseAuth.apiBaseUrl,
+          allowSameOrgAnyUser: webRemoteEnterpriseAuth.allowSameOrgAnyUser,
+          // 身份事实在 Host，但会话存在共享凭据里；读不到就返回 null（manager 会按未启用处理）。
+          resolveLocalSubject: () =>
+            readEnterpriseIdentitySubject(webRemoteControlCredentialService),
+        },
+      }
+    : {}),
   deviceMid,
   deviceName: hostname(),
   appVersion: webRemoteControlAppVersion,
