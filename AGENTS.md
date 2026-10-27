@@ -29,7 +29,7 @@ affected 使用 Vitest 官方选择，只运行选中的根 UT；选中整个套
 测试入口以目标包当前的 `package.json` 和实际测试文件为准，不假定存在统一的单测或 E2E 命令。
 
 - `packages/desktop`：Electron main、host、renderer。
-- `packages/server`：HTTP / WebSocket 服务与 Source Server 运行入口；当前客户端不包含浏览器/手机远控页。
+- `packages/web`、`packages/server`：Web 客户端（含手机远控页）与服务端。
 - `packages/ui`：共享 React 组件、hooks 与 Zustand store。
 - `packages/services`：业务服务；`packages/rpc`：RPC 框架。
 - `packages/shared`：共享协议与类型；`packages/client`：Agent 客户端 SDK。
@@ -58,8 +58,6 @@ affected 使用 Vitest 官方选择，只运行选中的根 UT；选中整个套
 - hooks 中含 JSX 的文件使用 `.tsx`。
 
 ## 进程、协议与远程控制
-
-当前客户端已移除手机远控页、Android 壳、桌面远控宿主与入口；保留的 relay 服务端和共享协议不代表客户端仍有远控能力，边界见 `specs/release-branch-without-mobile-remote-control.md`。
 
 - Desktop app 通过 stdio 与 Agent 通信。协议改动同步更新 `packages/shared/src/zcode-protocol/index.ts`，提供严格类型与运行时校验。
 - Main 负责窗口、原生操作、进程调度和消息转发，不承载 task/session 业务状态。
