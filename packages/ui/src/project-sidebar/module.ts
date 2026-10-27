@@ -10,6 +10,7 @@ export const projectSidebarModule = {
     "ui",
     "next-frame",
     "conversation-workspace-target",
+    "web-remote-control-ui",
     "remote-connection-flow",
   ],
   provides: ["project-sidebar"],

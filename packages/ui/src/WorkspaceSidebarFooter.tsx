@@ -18,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import {
-  Bot,
   PencilRuler,
   Globe,
   Maximize,
@@ -28,7 +27,6 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { BotsDialog } from "@/BotsDialog.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useImNotifications } from "@/im/useImNotifications.js";
@@ -38,6 +36,7 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
 import type { Theme } from "@/useTheme.js";
+import { WorkspaceWebRemoteControlTrigger } from "@/WorkspaceWebRemoteControlTrigger.js";
 
 const DESKTOP_ZOOM_MIN_LEVEL = -3;
 const DESKTOP_ZOOM_MAX_LEVEL = 5;
@@ -52,8 +51,9 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   settingsButtonMode = "settings",
   isDesktop = false,
   workspacePath,
-  // workspaceIdentity / workspaceRemoteSessionId / activeTaskId 原为远控入口透传参数；
-  // 发布分支删除入口后不再读取，仍在 props 契约中保留给侧栏调用方。
+  workspaceIdentity,
+  workspaceRemoteSessionId,
+  activeTaskId,
   className,
 }: {
   theme: Theme;
@@ -102,8 +102,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
     imUnread > 0
       ? `${intl.formatMessage({ id: "im.title" })} (${imUnread})`
       : intl.formatMessage({ id: "im.title" });
-  // 发布分支移除手机远控后，Bot/IM 通道配置入口从原远控弹层迁到这里，能力不回退。
-  const [botsDialogOpen, setBotsDialogOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [desktopZoomLevel, setDesktopZoomLevel] = useState(0);
   const runDesktopZoomCommand = useCallback(
@@ -275,18 +273,13 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">
           {isDesktop && workspacePath ? (
-            <ControlHintTooltip title={intl.formatMessage({ id: "bots.manage.open" })}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-lg"
-                aria-label={intl.formatMessage({ id: "bots.manage.open" })}
-                data-testid="sidebar-bots-button"
-                onClick={() => setBotsDialogOpen(true)}
-              >
-                <Bot className="size-4" />
-              </Button>
-            </ControlHintTooltip>
+            <WorkspaceWebRemoteControlTrigger
+              workspacePath={workspacePath}
+              workspaceIdentity={workspaceIdentity}
+              remoteSessionId={workspaceRemoteSessionId}
+              initialTaskId={activeTaskId ?? undefined}
+              compact
+            />
           ) : null}
           {onMessagesButtonClick ? (
             <ControlHintTooltip title={messagesLabel}>
@@ -326,9 +319,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
           </ControlHintTooltip>
         </div>
       </div>
-      {botsDialogOpen ? (
-        <BotsDialog open onOpenChange={setBotsDialogOpen} />
-      ) : null}
     </footer>
   );
 });

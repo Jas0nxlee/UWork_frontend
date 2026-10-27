@@ -103,7 +103,10 @@ describe("Feishu runtime error Desktop UI", () => {
 });
 
 async function openBotsDialog() {
-  const openBots = await $('[data-testid="sidebar-bots-button"]');
+  const remoteControl = await $('button[aria-label="移动端远程控制"]');
+  await remoteControl.waitForClickable({ timeout: 20_000 });
+  await remoteControl.click();
+  const openBots = await $('[data-testid="web-remote-control-open-bots"]');
   await openBots.waitForClickable({ timeout: 20_000 });
   await openBots.click();
 }

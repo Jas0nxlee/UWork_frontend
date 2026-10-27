@@ -99,6 +99,7 @@ import { createE2EStartupCredentialSeed } from "./test/e2e/helpers/e2e-startup-c
 import { seedRemoteOnboardingFixture } from "./test/e2e/helpers/remote-startup-profile.js";
 import { getE2EProviderEndpointEnv } from "#e2e/helpers/e2e-provider-endpoint";
 import { prepareOAuthCompletionRaceFixture } from "./test/e2e/helpers/oauth-completion-race-fixture.js";
+import { prepareWebRemoteControlAuthGateFixture } from "./test/e2e/helpers/web-remote-control-auth-gate-fixture.js";
 import { prepareAccessToken401Fixture } from "./test/e2e/helpers/access-token-401-fixture.js";
 import { createE2EReplayFixtureVariables } from "./test/e2e/helpers/e2e-runtime-paths.js";
 import { stageE2EAppOutput } from "./test/e2e/helpers/e2e-app-output-stage.js";
@@ -620,6 +621,7 @@ let modelContextBudgetConfigMockServer: ModelContextBudgetConfigMockServer | nul
 let dynamicWorkflowConfigMockServer: DynamicWorkflowConfigMockServer | null = null;
 let clientScenesMockServer: ClientScenesMockServer | null = null;
 let stopOAuthCompletionRaceFixture: (() => Promise<void>) | null = null;
+let stopWebRemoteControlAuthGateFixture: (() => Promise<void>) | null = null;
 let stopAccessToken401Fixture: (() => Promise<void>) | null = null;
 let pluginCdnZipFixtureServer: PluginCdnZipFixtureServer | null = null;
 let upstreamE2EBaseUrl: string = e2eProviderPreset.baseUrl;
@@ -4985,6 +4987,12 @@ export const config: WebdriverIO.Config = {
           credentialsFile: E2E_APP_CREDENTIALS_FILE,
           settingsFile: E2E_APP_SETTINGS_FILE,
         });
+        stopWebRemoteControlAuthGateFixture = await prepareWebRemoteControlAuthGateFixture({
+          specs,
+          credentialsFile: E2E_APP_CREDENTIALS_FILE,
+          settingsFile: E2E_APP_SETTINGS_FILE,
+          workspacePath: resolve(E2E_HOME_DIR, "ZCodeProject"),
+        });
         // resetHome 之后、Electron 启动之前安装，Main -> Host -> Agent 才会同时继承
         // case-owned PATH；其他 spec 由 helper 保持 no-op。
         await installBashPrefixPermissionPnpmShim({
@@ -5070,6 +5078,8 @@ export const config: WebdriverIO.Config = {
           currentE2EElectronAppPid = null;
           await stopOAuthCompletionRaceFixture?.();
           stopOAuthCompletionRaceFixture = null;
+          await stopWebRemoteControlAuthGateFixture?.();
+          stopWebRemoteControlAuthGateFixture = null;
           await stopAccessToken401Fixture?.();
           stopAccessToken401Fixture = null;
           currentE2EBeforeSessionError = null;
@@ -5150,6 +5160,8 @@ export const config: WebdriverIO.Config = {
           await stopClientScenesE2EMock();
           await stopOAuthCompletionRaceFixture?.();
           stopOAuthCompletionRaceFixture = null;
+          await stopWebRemoteControlAuthGateFixture?.();
+          stopWebRemoteControlAuthGateFixture = null;
           await stopAccessToken401Fixture?.();
           stopAccessToken401Fixture = null;
           await stopPluginCdnZipFixture();
