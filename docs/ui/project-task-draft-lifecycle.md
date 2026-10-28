@@ -263,3 +263,31 @@ PD06 的 rejected/unknown/duplicate、刷新重建账本、TTL 与旧 ACK，PD07
 ### PR 扩大验证中的夹具维护
 
 干净工作树以 PR 的 `origin/main` 为显式基线执行推送检查，affected 选择 582 个测试文件。发现三个 E2E helper 消费者仍按 `.zcode` 用户根准备/读取配置，已随 helper 合同同步改为 `.uwork`；工作区内 `.zcode/config.json` 保持不变。另在未修改的主干上复现五个文件、六项既有失败：四项文案仍期待旧 ZCode 品牌，静态路由两项测试在 HTTP listening 事件之前读取端口。按当前 UWork 文案和异步 listen 合同修正测试夹具，保留所有内容、路径隔离和 HTTP 响应断言，不跳过测试或降低门槛；未改变对应产品行为。Electron 缺失属于新工作树忽略安装脚本的环境准备，执行已有安装脚本恢复。
+
+## 2026-10-28 插件资产扫描与草稿首发
+
+调用轨迹 E2E 已确认首发卡在预热创建：`workspace/readPresentation` 装配命令目录时，官方 Computer Use 插件把源码目录下整个 `node_modules` 当作运行资产。同步读取一份与运行无关的 macOS dataless 依赖副本后，CLI 普通请求队列无法继续处理 `provider/refreshRegistry`，Host 的预热创建与 Composer 首发均等待同一结果。
+
+- 官方插件定义拥有运行时依赖根，Computer Use 的原生依赖根为 `sharp` / `koffi`。现有 staging 仅在真实 producer 可用时物化原生依赖；开源占位 producer 下根包缺席是合法状态，不安装或恢复私有 producer。filesystem seed 只收集已暂存的这些根及其包清单声明的生产依赖、已安装的可选依赖闭包，不遍历开发依赖或未声明的兄弟模块；不能通过修改超时、禁用 CUA 或删除本地依赖来通过验证。
+- 缓存复制、哈希、原生文件权限和插件锁仍复用现有 seed 机制；项目命令发现、Provider Registry 权威、协议串行顺序及 draft/prewarm 单一 owner 不变。正常声明的运行依赖保留完整资产，已暂存根包缺失必需传递依赖时明确报错，缺席的可选依赖可跳过。
+- 回归用一个不可读取的无关模块证明扫描不会进入它，并核验 Sharp 的传递依赖、可选平台包、原生文件与可执行位确实进入缓存。桌面 E2E 必须等待真实 assistant 行，不能把输入框中的同名 READY marker 当作回复；继续验证真实 CLI model-io、调用轨迹侧栏及全部既有交互。
+- 本次不移动会话数据库或修改用户工作目录内容。
+
+```mermaid
+sequenceDiagram
+    participant Composer as Composer / prewarm owner
+    participant Host as Host
+    participant Queue as CLI 普通请求队列
+    participant Seed as 官方插件资产装配
+    Composer->>Host: 预热 createSession
+    Host->>Queue: workspace/readPresentation
+    Queue->>Seed: 发现命令与声明的运行依赖闭包
+    Seed-->>Queue: 有界资产范围（排除无关开发依赖）
+    Queue-->>Host: 工作区展示信息
+    Host->>Queue: provider/refreshRegistry → createSession
+    Queue-->>Composer: 预热创建 ACK
+    Composer->>Queue: 首次 sendText
+    Queue-->>Composer: accepted → 会话投影 / assistant
+```
+
+验证（macOS arm64、Node 24.14.0、Electron 41.10.7）：官方插件相关六文件 79 项、轨迹相关五文件 25 项定向测试通过；桌面 `TRJ01–TRJ09` 及窄侧栏摘要不重叠断言通过。最终运行 `desktop-e2e-20261028021834458-p28347-597614635d563fd5` 的 summary 与宽/窄窗口截图位于同名 `.e2e-artifacts` 目录。窄窗断言在旧布局检测出 9 处重叠，修复后为 0。Root / E2E 类型检查通过，Lint 为 0 error / 331 warning；未移动会话数据库或替换已安装应用。

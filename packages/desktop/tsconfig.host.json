@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "out/host",
+    // tsup 会清理 out/host；声明缓存独立保存，类型检查也不覆盖已打包的 Host JS。
+    "outDir": "../../.cache/types/desktop-host",
+    "emitDeclarationOnly": true,
     "rootDir": "src/host",
     "lib": ["es2025"]
   },

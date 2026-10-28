@@ -27,7 +27,13 @@ import {
   openProtocolStartupStorage,
   prepareProtocolStartupStorage,
 } from "./zcode-protocol/storage-startup.js";
-import { closeSessionStore, getSessionDbPath } from "./app/session-store.js";
+import {
+  closeSessionStore,
+  getSessionDbPath,
+  resolveLegacySessionDatabaseMigration,
+  createSessionDatabaseRouteResolver,
+} from "./app/session-store.js";
+import { sessionDatabaseMigration } from "./session-storage-migration/index.js";
 import { startProcessProviderRegistryRuntime } from "./app/process-provider-registry-runtime.js";
 import { scheduleStartupLogRetentionCleanup } from "./log-retention.js";
 import { resolveProcessProviderEndpointRoutingPort } from "./provider-endpoint-routing.js";
@@ -85,9 +91,20 @@ export async function runZCodeProtocolAgent(
   options: RunZCodeProtocolAgentOptions = {},
 ): Promise<void> {
   if (options.prepareStorageOnly) {
-    const config = createConfig({ env: options.env });
+    // 存储 Worker 不会 chdir，配置必须与业务 Agent 使用同一个显式工作目录。
+    const config = createConfig({ env: options.env, workingDirectory: options.cwd });
+    const legacyMigration = resolveLegacySessionDatabaseMigration(config, {
+      env: options.env,
+      workingDirectory: options.cwd,
+    });
     await prepareProtocolStartupStorage({
-      dbPath: getSessionDbPath(config, options.cwd),
+      dbPath: getSessionDbPath(config, options.cwd, options.env),
+      legacyMigration: legacyMigration
+        ? {
+            ...legacyMigration,
+            resolveSessionDatabase: createSessionDatabaseRouteResolver(options.env),
+          }
+        : undefined,
       input: options.input ?? process.stdin,
       output: options.output ?? process.stdout,
     });
@@ -137,14 +154,20 @@ export async function runZCodeProtocolAgent(
     | undefined;
   try {
     // 数据库准备先于账号、Registry 和遥测，不把远端材料等待混进迁移门禁。
-    const configResult = createConfig({ env: options.env });
+    const configResult = createConfig({ env: options.env, workingDirectory: options.cwd });
+    const legacyMigration = resolveLegacySessionDatabaseMigration(configResult, {
+      env: options.env,
+      workingDirectory: options.cwd,
+    });
+    // 正常 Agent 不能绕过 Host 的迁移/归属门禁，用一个新空库掩盖旧会话。
+    if (legacyMigration) await sessionDatabaseMigration.assertReady(legacyMigration);
     sessionStore = await acquireProtocolStartupResource({
       signal: options.lifecycle?.signal,
       logger,
       disposeLate: (store) => closeSessionStore(store),
       create: () =>
         openProtocolStartupStorage({
-          dbPath: getSessionDbPath(configResult),
+          dbPath: getSessionDbPath(configResult, options.cwd, options.env),
           output,
           onProgress: (progress) =>
             logger.info("SQLite startup state", {

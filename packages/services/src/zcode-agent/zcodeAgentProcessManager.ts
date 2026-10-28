@@ -62,6 +62,8 @@ export type ZCodeAgentCommandResolver = (
 ) => Promise<ZCodeAgentCommand | null> | ZCodeAgentCommand | null;
 
 export interface ZCodeAgentProcessManagerOptions {
+  /** 仅由已完成 Desktop 存储门禁的本地 Host 启用；Source Server 尚未接入该门禁。 */
+  sessionDatabaseMigrationEnabled?: boolean;
   commandResolver?: ZCodeAgentCommandResolver;
   presentationSurface?: ZCodeAgentPresentationSurface;
   requestTimeoutMs?: number;
@@ -579,6 +581,7 @@ export class ZCodeAgentProcessManager {
   private readonly spawnFallbackCwd: string | undefined;
   private readonly lane: string | undefined;
   private readonly idleTimeoutMs: number | undefined;
+  private readonly sessionDatabaseMigrationEnabled: boolean;
   private readonly runtimeRestartedEmitter = new Emitter<ZCodeAgentRuntimeRestartedEvent>();
   private readonly runtimeLifecycleEmitter = new Emitter<ZCodeAgentRuntimeLifecycleEvent>();
   private disposeAllInFlight: Promise<void> | undefined;
@@ -590,6 +593,7 @@ export class ZCodeAgentProcessManager {
   readonly onRuntimeLifecycle = this.runtimeLifecycleEmitter.event;
 
   constructor(options?: ZCodeAgentProcessManagerOptions) {
+    this.sessionDatabaseMigrationEnabled = options?.sessionDatabaseMigrationEnabled === true;
     this.commandResolver = options?.commandResolver ?? resolveDefaultZCodeAgentCommand;
     this.presentationSurface = options?.presentationSurface;
     this.requestTimeoutMs = options?.requestTimeoutMs;
@@ -1039,6 +1043,8 @@ export class ZCodeAgentProcessManager {
         [ZCODE_RUNTIME_ENV_KEY]: runtimeEnv,
         ...spawnEnv,
         ...effectiveCommand.env,
+        // 默认会话库必须先经过 Host 的升级门禁；业务 Agent 不得抢先创建空目标库。
+        UWORK_SESSION_DB_MIGRATION: this.sessionDatabaseMigrationEnabled ? "1" : undefined,
         // 生成文件根目录由执行端 Host 唯一决定，保证 Agent 写入与 Host 读取授权一致。
         [GEN_UI_OUTPUT_ROOT_ENV]: join(getAppConfigDir(), GEN_UI_OUTPUT_DIRECTORY),
         // 身份/隔离语义使用 workspaceIdentity；cwd 继续使用 workspacePath。

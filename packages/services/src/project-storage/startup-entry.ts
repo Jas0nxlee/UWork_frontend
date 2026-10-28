@@ -1,4 +1,5 @@
 export { prepareTasksIndexStorage } from "#src/project-storage/startup.js";
+export { createSessionStorageOwnershipManifest } from "#src/project-storage/startupOwnershipManifest.js";
 export { markTasksStoragePrepared } from "#src/session/tasksDatabase/prepared.js";
 export { getTasksIndexDatabasePath } from "#src/paths.js";
 export { resolveDefaultZCodeAgentCommand } from "#src/zcode-agent/zcodeAgentProcessManager.js";

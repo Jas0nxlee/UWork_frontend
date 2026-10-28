@@ -132,6 +132,7 @@ export {
   getFeedbackLogArchiveDir,
   getGitCheckpointIndexRootDir,
   copyDataDirectory,
+  listDataDirectorySqliteFiles,
   validateDataBaseDirTarget,
   ZCODE_WINDOWS_APP_INSTALL_DIR_ENV,
 } from "./paths.js";
@@ -2448,6 +2449,9 @@ export function createLocalServices(options: {
     workspaceIdentity: undefined,
   });
   const zcodeAgentService = createZCodeAgentService({
+    // Source Server 尚无 Desktop prepare-storage 门禁，不能继承本地升级开关后创建空库。
+    sessionDatabaseMigrationEnabled:
+      !options?.projectStorageHostId || options.projectStorageHostId === "local",
     prepareProjectExecution,
     prepareSessionCreation: async (target) =>
       (await taskIndexRepo.getProjectRepository()).reserveCreatedTask({
@@ -3494,7 +3498,13 @@ export async function createServerHostServices(options: {
   );
   if (!projectStorageHostId) throw new Error("Invalid Source Server storage identity");
   await migrateApplicationStorage(await createSettingService().get(), projectStorageHostId);
-  const workspaceAliasRepo = new SourceServerWorkspaceAliasRepo();
+  // Source Server 尚未接入桌面的默认库迁移门禁，保留其 legacy 默认并尊重显式配置；
+  // 不能因桌面发布切换目录，就让未升级的持库端打开一个新的空库。
+  const serverSessionDbPath = await resolveAgentSessionDbPath({
+    defaultSessionDbPath: join(homedir(), ".zcode", "cli", "db", "db.sqlite"),
+  });
+  if (!serverSessionDbPath) throw new Error("Source Server alias migration requires an absolute session database path");
+  const workspaceAliasRepo = new SourceServerWorkspaceAliasRepo({ sessionDbPath: serverSessionDbPath });
   const workspaceIdentityMapper = new SourceServerWorkspaceIdentityMapper();
   const sourceServerWorkspaceService = createSourceServerWorkspaceService(workspaceAliasRepo, {
     defaultWorkspaceIdentity: (workspacePath) =>

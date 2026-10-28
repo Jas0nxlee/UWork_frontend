@@ -19,6 +19,13 @@ import {
   sourceServerWorkspaceHistoryEntrySchema,
 } from "./source-server/contracts.js";
 
+export const pendingDataDirectoryMigrationSchema = z.object({
+  requestId: z.string().uuid(),
+  sourceBaseDir: z.string().trim().min(1).max(32768),
+  targetBaseDir: z.string().trim().min(1).max(32768),
+  resetToDefault: z.boolean(),
+}).strict();
+
 /** 引导职业枚举；单独导出供 onboarding 记录回填 settings 时做窄化校验。 */
 const appSettingsOccupationSchema = z.enum([
   "office",
@@ -571,6 +578,7 @@ const appSettingsObjectSchema = z.object({
   lastActiveTabIndex: z.number().int().nonnegative().default(0),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),
   dataBaseDir: z.string().trim().min(1).optional(),
+  pendingDataDirectoryMigration: pendingDataDirectoryMigrationSchema.optional(),
   pendingPostUpdateReleaseNotes: postUpdateReleaseNotesPayloadSchema.optional(),
   receivePreviewUpdates: z.boolean().default(false),
   autoDownloadAndInstallUpdates: z.boolean().default(false),
@@ -681,6 +689,7 @@ export const appSettingsPatchSchema = z.object({
   lastActiveTabIndex: z.number().int().nonnegative().optional(),
   lastActiveTaskByWorkspace: z.record(z.string(), z.string()).optional(),
   dataBaseDir: z.string().trim().min(1).optional(),
+  pendingDataDirectoryMigration: pendingDataDirectoryMigrationSchema.optional(),
   pendingPostUpdateReleaseNotes: postUpdateReleaseNotesPayloadSchema.optional(),
   receivePreviewUpdates: z.boolean().optional(),
   autoDownloadAndInstallUpdates: z.boolean().optional(),

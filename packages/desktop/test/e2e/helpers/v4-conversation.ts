@@ -157,6 +157,25 @@ export async function prepareV4ConversationE2E(options: PrepareV4ConversationE2E
 
 async function ensureV4ShellReady() {
   try {
+    // 企业登录是覆盖整个页面的独立 dialog；其下已挂载引导不代表“跳过”可点击。
+    // 先走产品提供的可选登录跳过入口，等弹层退出后再完成职业引导。
+    await browser.waitUntil(
+      async () =>
+        (await $('[data-testid="enterprise-login-page"]').isExisting()) ||
+        (await $('[data-testid="onboarding-page"]').isExisting()) ||
+        (await $(sel(TID_TASK_NEW_BUTTON)).isExisting()) ||
+        (await hasApiKeyLoginButton()),
+      { timeout: 30_000, timeoutMsg: "登录页或工作区尚未就绪" },
+    );
+    const enterpriseLoginSkip = $('[data-testid="enterprise-login-skip"]');
+    if (await enterpriseLoginSkip.isExisting()) {
+      await enterpriseLoginSkip.waitForClickable({ timeout: 15_000 });
+      await enterpriseLoginSkip.click();
+      await $('[data-testid="enterprise-login-page"]').waitForExist({
+        reverse: true,
+        timeout: 15_000,
+      });
+    }
     // 新隔离 profile 的职业引导会遮住工作区，先复用真实 UI 跳过流程。
     await skipOccupationOnboardingIfPresent();
     await waitForProjectRow(DEFAULT_WORKSPACE, { timeout: 30000 });

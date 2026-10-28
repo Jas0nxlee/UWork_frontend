@@ -15,6 +15,11 @@ export interface ObservableSettingService extends ISettingService {
  */
 export function createObservableSettingService(base: ISettingService): ObservableSettingService {
   const listeners = new Set<(event: SettingServiceUpdatedEvent) => void>();
+  const emit = (keys: readonly (keyof AppSettings)[]) => {
+    if (!keys.length) return;
+    const event = Object.freeze({ keys: Object.freeze([...keys]) });
+    for (const listener of listeners) listener(event);
+  };
   return {
     ...base,
     onDidUpdate(listener): () => void {
@@ -24,10 +29,11 @@ export function createObservableSettingService(base: ISettingService): Observabl
     async update(patch, expectedAccountSettings): Promise<void> {
       if (expectedAccountSettings) await base.update(patch, expectedAccountSettings);
       else await base.update(patch);
-      const keys = Object.freeze(Object.keys(patch) as (keyof AppSettings)[]);
-      if (keys.length === 0) return;
-      const event = Object.freeze({ keys });
-      for (const listener of listeners) listener(event);
+      emit(Object.keys(patch) as (keyof AppSettings)[]);
+    },
+    async updateDataBaseDir(newDir): Promise<void> {
+      await base.updateDataBaseDir(newDir);
+      emit(["pendingDataDirectoryMigration"]);
     },
   };
 }

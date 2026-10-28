@@ -9,8 +9,8 @@ import {
   getV4PaneSnapshot,
   prepareV4ConversationE2E,
   sendV4Prompt,
+  waitForV4AssistantMessageContaining,
   waitForV4Pane,
-  waitForV4TimelineContaining,
 } from "../helpers/v4-conversation.js";
 
 const paths = getE2EAppDataPaths();
@@ -35,7 +35,8 @@ describe("模型调用轨迹查看器 E2E", () => {
     await prepareV4ConversationE2E();
     await setRendererLocale("zh-CN");
     await sendV4Prompt("E2E_TRJ_TASK_SEED reply with E2E_TRJ_TASK_READY");
-    await waitForV4TimelineContaining("E2E_TRJ_TASK_READY", 45_000);
+    // READY 同时出现在用户输入里；只等 assistant 正文，避免草稿就满足回复验收。
+    await waitForV4AssistantMessageContaining("E2E_TRJ_TASK_READY", 45_000);
     await waitForV4Pane(
       (snapshot) => snapshot.sessionId !== null && snapshot.sessionId !== "draft",
       "trajectory case 没有建立真实 task/session",
@@ -57,6 +58,7 @@ describe("模型调用轨迹查看器 E2E", () => {
     await seedUnreadableTrajectoryCandidate(actualTrajectoryFile.filePath);
     await openTrajectoryThroughTaskMenu(taskId);
     await waitForTrajectory();
+    await scrollTrajectoryToStart();
 
     const initial = await trajectorySnapshot();
     expect(initial.callCount).toBeLessThan(90);
@@ -87,8 +89,6 @@ describe("模型调用轨迹查看器 E2E", () => {
     expect(initial.text).toContain("工具结果");
     expect(initial.text).toContain("mcp__computer-use__open_application_with_full_name");
     expect(initial.text).toContain("e2e_trj_0");
-    expect(initial.text).toContain(DELTA_MARKER);
-    expect(initial.text).not.toContain("E2E_TRJ02_OLD_ASSISTANT_INPUT");
     expect(initial.text).toContain("E2E_TRJ02_ERROR_VALUE");
     expect(initial.errorIconCount).toBeGreaterThan(0);
     expect(initial.callErrorCount).toBeGreaterThan(0);
@@ -96,9 +96,22 @@ describe("模型调用轨迹查看器 E2E", () => {
     expect(initial.text).toContain("内容过滤");
     expect(initial.text).toContain("custom-e2e-finish");
     expect(initial.text).toContain("1.25s");
+    await captureTrajectoryScreenshot("trajectory-populated");
 
     // TRJ02：错误投影和工具元数据必须从真实 host 文件读取链路进入 UI。
     // 首屏同时包含 full→delta 与错误 payload，能直接区分“仅写 fixture”与 UI 投影成功。
+
+    // overscan=3 时首屏不保证挂载第5条；通过真实搜索定位delta调用，再验证还原结果。
+    await searchAndNavigate(DELTA_MARKER);
+    const delta = await trajectorySnapshot();
+    expect(delta.expandedText).toContain(DELTA_MARKER);
+    expect(delta.expandedText).not.toContain("E2E_TRJ02_OLD_ASSISTANT_INPUT");
+    await browser.keys("Escape");
+    await browser.waitUntil(async () => !(await searchHighlightSnapshot()).registered, {
+      timeout: 10_000,
+      timeoutMsg: "delta验证后搜索高亮未清除",
+    });
+    await scrollTrajectoryToStart();
 
     // TRJ03：默认展开；点击整行收起再恢复，复制按钮只在展开态存在，原始换行保留。
     const beforeCollapse = await trajectoryRoleRowSnapshot("system");
@@ -224,6 +237,8 @@ describe("模型调用轨迹查看器 E2E", () => {
     expect(narrow.text).toContain("mcp__computer-use__open_application_with_full_name");
     expect(narrow.pageHorizontalOverflow).toBe(false);
     expect(narrow.chevronRightEdgeDelta).toBeLessThanOrEqual(2);
+    expect(narrow.overlappingSummaryCount).toBe(0);
+    await captureTrajectoryScreenshot("trajectory-narrow-search");
 
     // TRJ09：稀疏扩展到 33 MiB 后只读取尾部完整记录，并显式呈现 truncated。
     await seedOversizedTrajectoryTail(actualTrajectoryFile.filePath, taskId);
@@ -237,6 +252,14 @@ describe("模型调用轨迹查看器 E2E", () => {
     );
   });
 });
+
+async function captureTrajectoryScreenshot(name: string) {
+  const artifactDir = process.env.ZCODE_E2E_ARTIFACT_DIR;
+  if (!artifactDir) throw new Error("轨迹 UI 验收缺少 E2E artifact 目录");
+  const directory = join(artifactDir, "screenshots");
+  await mkdir(directory, { recursive: true });
+  await browser.saveScreenshot(join(directory, `${name}.png`));
+}
 
 async function seedTrajectory(taskId: string, filePath: string) {
   const safeTaskId = taskId
@@ -592,10 +615,30 @@ async function searchAndNavigate(query: string) {
   );
   if (!hasSearchBar) await clickFirst('[data-trajectory-search-trigger=""]');
   await setSearchValue(query);
-  await browser.waitUntil(async () => (await trajectorySnapshot()).text.includes(query), {
-    timeout: 15_000,
-    timeoutMsg: `搜索命中没有被虚拟列表挂载并 reveal: ${query}`,
-  });
+  try {
+    await browser.waitUntil(async () => (await trajectorySnapshot()).text.includes(query), {
+      timeout: 15_000,
+      timeoutMsg: `搜索命中没有被虚拟列表挂载并 reveal: ${query}`,
+    });
+  } catch (error) {
+    const diagnostics = await browser.execute(() => {
+      const bar = document.querySelector('[data-trajectory-search-bar=""]');
+      const root = document.querySelector<HTMLElement>('[data-trajectory-timeline=""]');
+      return {
+        input: bar?.querySelector<HTMLInputElement>("input")?.value,
+        counter: bar?.textContent,
+        scrollTop: root?.parentElement?.scrollTop,
+        mounted: Array.from(root?.querySelectorAll('[data-trajectory-call-summary=""]') ?? []).map(
+          (item) => item.firstElementChild?.textContent,
+        ),
+      };
+    });
+    if (process.env.ZCODE_E2E_ARTIFACT_DIR)
+      await browser.saveScreenshot(
+        join(process.env.ZCODE_E2E_ARTIFACT_DIR, "trajectory-search-failure.png"),
+      );
+    throw new Error(`轨迹搜索未定位 ${query}: ${JSON.stringify(diagnostics)}`, { cause: error });
+  }
 }
 
 async function setSearchValue(query: string) {
@@ -717,6 +760,30 @@ async function trajectorySnapshot() {
         );
         return rightEdges.length > 1 ? Math.max(...rightEdges) - Math.min(...rightEdges) : 0;
       })(),
+      overlappingSummaryCount: Array.from(
+        document.querySelectorAll<HTMLElement>('[data-trajectory-call-summary=""]'),
+      ).filter((summary) => {
+        const metadata = summary.querySelector<HTMLElement>('[data-trajectory-call-metadata=""]');
+        if (!metadata) return false;
+        const bounds = summary.getBoundingClientRect();
+        const meta = metadata.getBoundingClientRect();
+        if (meta.right > bounds.right + 1 || meta.left < bounds.left - 1) return true;
+        return Array.from(
+          summary.querySelectorAll<HTMLElement>(
+            '[data-trajectory-source-title=""], [data-trajectory-finish-pill=""]',
+          ),
+        ).some((label) => {
+          const rect = label.getBoundingClientRect();
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.left < meta.right - 1 &&
+            rect.right > meta.left + 1 &&
+            rect.top < meta.bottom - 1 &&
+            rect.bottom > meta.top + 1
+          );
+        });
+      }).length,
     };
   });
 }
@@ -774,4 +841,22 @@ async function searchSnapshot() {
     );
     return { counter: counter?.textContent ?? null };
   });
+}
+
+async function scrollTrajectoryToStart() {
+  await browser.waitUntil(
+    () =>
+      browser.execute(() => {
+        const timeline = document.querySelector<HTMLElement>('[data-trajectory-timeline=""]');
+        const viewport = timeline?.parentElement;
+        if (!timeline || !viewport) return false;
+        viewport.scrollTop = 0;
+        return (
+          timeline
+            .querySelector('[data-trajectory-call-summary=""]')
+            ?.firstElementChild?.textContent?.trim() === "01"
+        );
+      }),
+    { timeout: 10_000, timeoutMsg: "轨迹没有定位到首条调用" },
+  );
 }

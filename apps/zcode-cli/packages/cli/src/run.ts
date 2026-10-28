@@ -257,7 +257,9 @@ const runZCodeProtocolCommand = async (
   prepareStorageOnly = false,
 ): Promise<number> => {
   try {
-    const env = prepareCliRuntimeEnv(deps.env ?? process.env);
+    const invocationArgv = [...process.argv.slice(0, 2), ...ctx.argv];
+    const env = prepareCliRuntimeEnv(deps.env ?? process.env, invocationArgv);
+    const hostMigrationEnabled = env.UWORK_SESSION_DB_MIGRATION === "1";
     const workingDirectory = (deps.cwd ?? process.cwd)();
     // 打包态 app-server 是 desktop host 的内部协议子进程。
     // 如果这里继续从 workspace 向上读取用户 .env，读文件失败或环境污染会在协议建立前
@@ -271,7 +273,10 @@ const runZCodeProtocolCommand = async (
           keys: [],
           loaded: false,
         };
-    applyCliRuntimeEnvSanitization(env);
+    // 工作区 .env 不能自行授予 Host 升级标志；只恢复进入本入口前已验证的 marker。
+    if (hostMigrationEnabled) env.UWORK_SESSION_DB_MIGRATION = "1";
+    else delete env.UWORK_SESSION_DB_MIGRATION;
+    applyCliRuntimeEnvSanitization(env, invocationArgv);
 
     if (dotenvResult.error) {
       throw new Error(`Failed to load environment file: ${dotenvResult.path}`, {
@@ -303,6 +308,7 @@ const runZCodeProtocolCommand = async (
 };
 
 export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<number> => {
+  const invocationArgv = [...process.argv.slice(0, 2), ...ctx.argv];
   if (ctx.argv[0] === STORAGE_MIGRATION_COMMAND) {
     try {
       if (ctx.argv.length !== 1) throw new Error("storage-migrate accepts no arguments");
@@ -312,7 +318,9 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
           // 复用正常启动的配置解析与存储入口，不初始化 Provider/MCP/Agent 运行态。
           const { createConfig, resolvePath } = await import("@zcode/adapters/config");
           const { openStartupSqliteSessionStore } = await import("@zcode/adapters/storage");
-          const config = createConfig({ env: deps.env ?? process.env });
+          const config = createConfig({
+            env: prepareCliRuntimeEnv(deps.env ?? process.env, invocationArgv),
+          });
           const store = await openStartupSqliteSessionStore({
             dbPath: resolvePath(config.config.storage.sessionDbPath),
           });
@@ -424,7 +432,7 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return 1;
   }
 
-  const env = prepareCliRuntimeEnv(deps.env ?? process.env);
+  const env = prepareCliRuntimeEnv(deps.env ?? process.env, invocationArgv);
   const detectedLocale = detectCliLocale(env);
   let outputFormat: GlobalOptions["outputFormat"];
   try {
@@ -557,7 +565,7 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       createNodeLoggerFactory({ env }).createLogger("zcode").child({ module: "cli" }),
     loadDotenv: (dotenvOptions = {}) => {
       const dotenvResult = (deps.loadDotenv ?? loadCliDotenv)(dotenvOptions);
-      applyCliRuntimeEnvSanitization(dotenvOptions.env ?? env);
+      applyCliRuntimeEnvSanitization(dotenvOptions.env ?? env, invocationArgv);
       return dotenvResult;
     },
   };

@@ -3,23 +3,20 @@ import { canRetryDatabaseStartup, type DatabaseStartupState } from "@zcode/share
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { Button } from "@/components/ui/button.js";
 import { RootStartupLoading } from "@/root/RootStartupLoading.js";
+import type { GlobalDatabaseStartupProps } from "./database-startup-contract/contract.js";
 
 export function GlobalDatabaseStartupLoading({
   state,
   onRetry,
   onCopy,
   onExit,
-}: {
-  state: DatabaseStartupState | null;
-  onRetry: () => void;
-  onCopy: (details: string) => Promise<void>;
-  onExit: () => void;
-}) {
+  onCancel,
+}: GlobalDatabaseStartupProps) {
   const { intl } = useZCodeIntl();
   const [now, setNow] = useState(Date.now);
   const [copyStatus, setCopyStatus] = useState<"copied" | "copyFailed" | null>(null);
   const failed = state?.phase === "failed";
-  const showProgress = state?.migration !== undefined && state.migration.kind !== "none";
+  const showProgress = state?.operation === "data-directory-migration" || (state?.migration !== undefined && state.migration.kind !== "none");
   const visible = failed || showProgress;
   useEffect(() => {
     if (failed || !visible) return;
@@ -101,6 +98,11 @@ export function GlobalDatabaseStartupLoading({
           </p>
         ) : null}
         <div className="flex flex-wrap justify-center gap-2">
+          {failed&&state.operation==="data-directory-migration"&&state.canCancelDataDirectoryMigration&&onCancel?(
+            <Button variant="outline" data-testid="data-directory-startup-cancel" onClick={onCancel}>
+              {intl.formatMessage({id:"startup.global.cancelDataDirectoryMigration"})}
+            </Button>
+          ):null}
           {canRetry ? (
             <Button data-testid="database-startup-retry" onClick={onRetry}>
               {intl.formatMessage({ id: "common.retry" })}
@@ -129,6 +131,8 @@ export function GlobalDatabaseStartupLoading({
 function startupLabelId(state: DatabaseStartupState | null, visible: boolean): string {
   if (state?.phase === "failed") return "startup.global.failed";
   if (!visible) return "startup.global.silent";
+  if (state?.operation === "data-directory-migration" && state.phase !== "ready")
+    return "startup.global.dataDirectoryMigration";
   if (
     state?.phase === "starting_services" ||
     state?.phase === "ready" ||

@@ -18,7 +18,7 @@ const envDataBaseDir =
   process.env[UWORK_DATA_BASE_DIR_ENV]?.trim() ||
   process.env[LEGACY_DATA_BASE_DIR_ENV]?.trim() ||
   null;
-const defaultDataBaseDir = process.env.HOME?.trim() || homedir();
+const defaultDataBaseDir = process.env.ZCODE_DESKTOP_HOME_DIR?.trim() || process.env.HOME?.trim() || homedir();
 
 export interface DataBaseDirTargetValidationOptions {
   platform?: NodeJS.Platform | string;
@@ -46,6 +46,11 @@ export function getDataBaseDir(): string {
   // 服务实例会启动后台刷新任务；若每次调用都动态读取 HOME，
   // 测试或宿主切换环境变量后，旧实例可能把数据写到新实例目录。
   return defaultDataBaseDir;
+}
+
+/** 不含运行时 setter 的初始默认根，用于“恢复默认”冷迁移的目标。 */
+export function getDefaultDataBaseDir(): string {
+  return envDataBaseDir || defaultDataBaseDir;
 }
 
 /** {dataBaseDir}/.uwork —— UWork 自己的用户级数据根，与上游 ZCode 的 ~/.zcode 分离。 */
@@ -273,4 +278,4 @@ export function getProviderWorkspaceConfigDir(): string {
 }
 
 // 上游只复制 .zcode/v2 会遗漏 UWork 自有状态甚至复制另一应用的数据；统一委托整根原子迁移。
-export { copyDataDirectory } from "./dataDirectoryMigration.js";
+export { copyDataDirectory, listDataDirectorySqliteFiles } from "./dataDirectoryMigration.js";

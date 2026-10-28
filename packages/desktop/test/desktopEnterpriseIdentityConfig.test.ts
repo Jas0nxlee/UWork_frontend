@@ -71,6 +71,7 @@ test("the actual Main window callback injects bundled config into every Local Ho
       "spawnHostProcess",
       "resolveZCodeBuiltinProviderConfigFilePath",
       "resolveBundledEnterpriseIdentityConfigFilePath",
+      "getInitialDataDirectoryDefaultBaseDir",
       "app",
       "process",
       `${js} return callback;`,
@@ -80,10 +81,16 @@ test("the actual Main window callback injects bundled config into every Local Ho
       },
       () => "/fixture/provider.json",
       resolveBundledEnterpriseIdentityConfigFilePath,
+      // 生产回调新增可信默认根注入；执行抽取的回调时也须提供其真实外部依赖。
+      () => "/fixture/original-default-root",
       { isPackaged, getAppPath: () => "/fixture/desktop" },
       { resourcesPath: "/fixture/resources" },
     );
-    invoke({}, "fixture-window", { type: "init-local", hostId: "fixture-host" });
+    invoke({}, "fixture-window", {
+      type: "init-local",
+      hostId: "fixture-host",
+      defaultDataBaseDir: "/fixture/stale-root",
+    });
     const parsed = hostInitLocalMessageSchema.parse(message);
     assert.equal(
       parsed.enterpriseIdentityBuiltinConfigFilePath,
@@ -94,5 +101,6 @@ test("the actual Main window callback injects bundled config into every Local Ho
       }),
     );
     assert.equal(parsed.hostId, "fixture-host");
+    assert.equal(parsed.defaultDataBaseDir, "/fixture/original-default-root");
   }
 });

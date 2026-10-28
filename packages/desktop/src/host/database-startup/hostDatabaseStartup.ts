@@ -1,4 +1,5 @@
 import {
+  createSessionStorageOwnershipManifest,
   getTasksIndexDatabasePath,
   markTasksStoragePrepared,
   resolveZCodeAgentSpawnCwd,
@@ -61,9 +62,8 @@ export function createHostDatabaseStartup(options: {
         );
         markTasksStoragePrepared(tasksPath);
         report("preparing_session_storage", "checking");
-        const candidates = options.workingDirectories?.length
-          ? options.workingDirectories
-          : [options.cwd];
+        // 项目都覆盖 sessionDbPath 时也须先准备 fallback 的默认库，否则全局新任务会被 assertReady 拒绝。
+        const candidates = [options.cwd, ...(options.workingDirectories ?? [])];
         const directories = new Set<string>();
         for (const candidate of candidates) {
           // 历史项目 ENOTDIR/无权限不是数据库失败；与普通 Agent 使用同一 cwd 选择规则。
@@ -89,6 +89,7 @@ export function createHostDatabaseStartup(options: {
                 finalDatabase: index === pendingDirectories.length - 1,
               }),
             observePath,
+            createOwnershipManifest: () => createSessionStorageOwnershipManifest(tasksPath),
           });
         report("starting_services");
         await options.initializeServices();

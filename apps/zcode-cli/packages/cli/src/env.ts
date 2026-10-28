@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
+import { isProtocolServerInvocation } from "./arguments.js";
 import {
   ZCODE_RUNTIME_ENV_KEY,
   buildZCodeToolEnvPassthroughEnv,
@@ -29,10 +30,12 @@ export function prepareCliRuntimeEnv(
   env: CliEnv = process.env,
   argv: readonly string[] = process.argv,
 ): CliEnv {
+  const preserveHostMigration = shouldPreserveHostMigration(env, argv);
   const prepared = {
     ...sanitizeZCodeRuntimeEnv(env),
     ...buildZCodeToolEnvPassthroughEnv(env),
   };
+  if (preserveHostMigration) prepared.UWORK_SESSION_DB_MIGRATION = "1";
   applyCliRuntimeEnvDefaults(prepared, argv);
   return prepared;
 }
@@ -41,10 +44,17 @@ export function applyCliRuntimeEnvSanitization(
   env: CliEnv,
   argv: readonly string[] = process.argv,
 ): void {
+  const preserveHostMigration = shouldPreserveHostMigration(env, argv);
   const toolEnvPassthrough = buildZCodeToolEnvPassthroughEnv(env);
   sanitizeZCodeRuntimeEnvInPlace(env);
   Object.assign(env, toolEnvPassthrough);
+  if (preserveHostMigration) env.UWORK_SESSION_DB_MIGRATION = "1";
   applyCliRuntimeEnvDefaults(env, argv);
+}
+
+function shouldPreserveHostMigration(env: CliEnv, argv: readonly string[]): boolean {
+  // 通用清洗剥离 Host marker 后，仅真实协议入口可定向恢复；prompt 等参数值不算入口。
+  return env.UWORK_SESSION_DB_MIGRATION === "1" && isProtocolServerInvocation(argv.slice(2));
 }
 
 export const findDotenv = (startDir: string): string | undefined => {

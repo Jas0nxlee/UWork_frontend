@@ -84,39 +84,77 @@ async function loadDesktopPathDeclarations() {
   const source = await readFile(file, "utf8");
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const names = new Set([
-    "readRuntimeEnvOverride",
-    "isTruthyRuntimeEnvOverride",
     "isLocalDevelopmentRuntime",
+    "desktopRuntimeEnv",
     "isPreviewPackagedRuntime",
     "isLocalDevelopmentPackagedRuntime",
     "runtimeApplicationName",
+    "runtimeHomePath",
     "shouldUseElectronDefaultUserDataPath",
     "runtimeUserDataPath",
     "runtimeSessionDataPath",
   ]);
-  // 旧测试绑定源码里的 ZCode 字面量，与独立目录 spec 冲突；执行真实初始化声明，
-  // 只替换 Electron 边界，避免启动应用或触碰开发者的真实配置目录。
-  const declarations = parsed.statements.filter((statement) => {
-    if (ts.isFunctionDeclaration(statement)) return names.has(statement.name?.text ?? "");
-    return (
-      ts.isVariableStatement(statement) &&
-      statement.declarationList.declarations.some(
-        (declaration) => ts.isIdentifier(declaration.name) && names.has(declaration.name.text),
-      )
+  const bindingNames = (binding: ts.BindingName): string[] =>
+    ts.isIdentifier(binding)
+      ? [binding.text]
+      : binding.elements.flatMap((element) =>
+          ts.isOmittedExpression(element) ? [] : bindingNames(element.name),
+        );
+  const declaredNames = (statement: ts.Statement): string[] => {
+    if (ts.isFunctionDeclaration(statement)) return statement.name ? [statement.name.text] : [];
+    if (!ts.isVariableStatement(statement)) return [];
+    return statement.declarationList.declarations.flatMap((declaration) =>
+      bindingNames(declaration.name),
     );
+  };
+  // 身份解析提取后，多个真实字段由同一对象解构声明初始化；统计语义字段而非语句数，
+  // 并继续执行实际声明，避免把品牌或目录规则复制进测试后掩盖产品回归。
+  const declarations = parsed.statements.filter((statement) => {
+    return declaredNames(statement).some((name) => names.has(name));
   });
-  assert.equal(declarations.length, names.size, "runtime path declarations must remain available");
-  return ts.transpileModule(declarations.map((statement) => statement.getText(parsed)).join("\n"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
+  const available = new Set(declarations.flatMap(declaredNames).filter((name) => names.has(name)));
+  assert.equal(available.size, names.size, "all nine runtime path fields must remain available");
+  const identityFile = resolve("packages/desktop/src/main/data-directory-startup/identity.ts");
+  const identitySource = await readFile(identityFile, "utf8");
+  const identityParsed = ts.createSourceFile(
+    identityFile,
+    identitySource,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const resolver = identityParsed.statements.find(
+    (statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === "resolveDesktopLifecycleIdentity",
+  );
+  assert.ok(resolver, "public lifecycle resolver must remain available");
+  assert.ok(resolver.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword));
+  const transpile = (contents: string) =>
+    ts.transpileModule(contents, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+  return {
+    declarations: transpile(
+      [
+        ...declarations.map((statement) => statement.getText(parsed)),
+        `Object.assign(exports, { ${[...names].join(", ")} });`,
+      ].join("\n"),
+    ),
+    resolver: transpile(resolver.getText(identityParsed)),
+  };
 }
 
 test("desktop userData and sessionData use isolated UWork namespaces and respect overrides", async () => {
-  const declarations = await loadDesktopPathDeclarations();
+  const code = await loadDesktopPathDeclarations();
   for (const path of [posix, win32]) {
     const appData = path === win32 ? "C:\\fixture\\AppData" : "/fixture/app-data";
     const customData = path.join(appData, "fixture-profile");
     const customSession = path.join(appData, "fixture-session");
+    const customHome = path.join(appData, "fixture-home");
+    const identity: Record<string, unknown> = {};
+    // 在同一平台边界执行真实导出的纯 resolver；不能直接导入宿主 POSIX 闭包来冒充 Windows。
+    runInNewContext(code.resolver, { exports: identity, join: path.join });
+    assert.equal(typeof identity.resolveDesktopLifecycleIdentity, "function");
     const cases = [
       { packaged: true, flavor: "production", name: "UWork", env: {}, data: "UWork" },
       {
@@ -157,6 +195,7 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
         flavor: "production",
         name: "UWork",
         data: undefined,
+        electronDefault: true,
         env: { ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA: "1" },
       },
       {
@@ -164,6 +203,7 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
         flavor: "production",
         name: "UWork",
         data: customData,
+        electronDefault: true,
         env: {
           ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA: "true",
           ZCODE_DESKTOP_USER_DATA_DIR: customData,
@@ -180,13 +220,22 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
           ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA: "0",
         },
       },
+      {
+        packaged: true,
+        flavor: "production",
+        name: "UWork",
+        data: "UWork",
+        home: customHome,
+        env: { ZCODE_DESKTOP_HOME_DIR: ` ${customHome} `, HOME: "ignored-parent-home" },
+      },
     ];
     for (const scenario of cases) {
       const exports: Record<string, unknown> = {};
-      runInNewContext(declarations, {
+      runInNewContext(code.declarations, {
         exports,
         process: { env: scenario.env },
         join: path.join,
+        resolveDesktopLifecycleIdentity: identity.resolveDesktopLifecycleIdentity,
         ZCODE_PRODUCT_FLAVOR: scenario.flavor,
         isElectronAppPackaged: () => scenario.packaged,
         isLocalDevelopmentDesktopBuild:
@@ -198,7 +247,22 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
       });
       const expectedData =
         scenario.data === undefined ? undefined : path.resolve(appData, scenario.data);
+      assert.equal(exports.isLocalDevelopmentRuntime, !scenario.packaged);
+      assert.equal(exports.desktopRuntimeEnv, scenario.packaged ? "production" : "development");
+      assert.equal(
+        exports.isPreviewPackagedRuntime,
+        scenario.packaged && scenario.flavor === "preview",
+      );
+      assert.equal(
+        exports.isLocalDevelopmentPackagedRuntime,
+        scenario.packaged && "localDevelopment" in scenario && scenario.localDevelopment === true,
+      );
       assert.equal(exports.runtimeApplicationName, scenario.name);
+      assert.equal(exports.runtimeHomePath, "home" in scenario ? scenario.home : undefined);
+      assert.equal(
+        exports.shouldUseElectronDefaultUserDataPath,
+        "electronDefault" in scenario && scenario.electronDefault === true,
+      );
       assert.equal(exports.runtimeUserDataPath, expectedData);
       assert.equal(
         exports.runtimeSessionDataPath,

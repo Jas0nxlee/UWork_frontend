@@ -137,6 +137,8 @@ export function GeneralSectionContent({
   keepAwakeWhileRunning = false,
   desktopChromiumHardwareAccelerationEnabled = true,
   dataBaseDir,
+  pendingDataDirectoryMigration,
+  dataDirectoryInfoUnavailable=false,
   terminalInheritSystemProfile = true,
   terminalFontFamily = "",
   integratedTerminalShell = { mode: "auto" },
@@ -197,6 +199,8 @@ export function GeneralSectionContent({
   receivePreviewUpdates: boolean;
   autoDownloadAndInstallUpdates: boolean;
   dataBaseDir: string;
+  pendingDataDirectoryMigration?:import("@zcode/shared").PendingDataDirectoryMigration;
+  dataDirectoryInfoUnavailable?:boolean;
   terminalInheritSystemProfile: boolean;
   terminalFontFamily: string;
   integratedTerminalShell?: IntegratedTerminalShellSelection;
@@ -921,6 +925,8 @@ export function GeneralSectionContent({
           control={
             <DataBaseDirControl
               dataBaseDir={dataBaseDir}
+              pendingMigration={pendingDataDirectoryMigration}
+              infoUnavailable={dataDirectoryInfoUnavailable}
               defaultHomeDir={defaultHomeDir}
               onDataBaseDirChange={onDataBaseDirChange}
               onSelectDataBaseDir={onSelectDataBaseDir}

@@ -2377,6 +2377,31 @@ describe("NodeExecutionAdapter", () => {
     }
   });
 
+  it("does not give Bash or standalone CLI children the Host session migration marker", () => {
+    const env = buildExecutionEnv(undefined, {
+      processEnv: {
+        PATH: "/bin",
+        UWORK_SESSION_DB_MIGRATION: "1",
+        ZCODE_TOOL_ENV_PASSTHROUGH_JSON: JSON.stringify({ UWORK_SESSION_DB_MIGRATION: "1" }),
+      },
+    });
+    expect(env.UWORK_SESSION_DB_MIGRATION).toBeUndefined();
+  });
+
+  it("removes the Host session migration marker from explicit Bash overlays", () => {
+    const env = buildExecutionEnv({
+      base: "empty",
+      set: {
+        UWORK_SESSION_DB_MIGRATION: "1",
+        uwork_session_db_migration: "1",
+        KEEP_EXPLICIT: "yes",
+      },
+    });
+    expect(env.UWORK_SESSION_DB_MIGRATION).toBeUndefined();
+    expect(env.uwork_session_db_migration).toBeUndefined();
+    expect(env.KEEP_EXPLICIT).toBe("yes");
+  });
+
   it("deduplicates Windows environment keys when applying overlays", () => {
     const env = buildExecutionEnv(
       {

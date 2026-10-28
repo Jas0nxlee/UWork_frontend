@@ -65,6 +65,10 @@ export function buildExecutionEnv(
     setEnvKey(env, key, value, platform);
   }
 
+  // Host 保留键不能由工具 overlay 重新授予，且 Windows 环境键大小写等价。
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === "UWORK_SESSION_DB_MIGRATION") delete env[key];
+  }
   return env;
 }
 

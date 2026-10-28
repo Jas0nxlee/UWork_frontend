@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/*/test/**/*.test.ts",
       "packages/*/tests/**/*.test.ts",
       "packages/*/src/**/contract.test.ts",
+      "packages/bootstrap/src/session-storage-migration/**/*.test.ts",
     ],
   },
 });

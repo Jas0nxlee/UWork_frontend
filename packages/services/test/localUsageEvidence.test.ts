@@ -1,5 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { setDataBaseDir } from "../src/paths.js";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +29,8 @@ function makeTempDir(): string {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  setDataBaseDir(null);
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -157,9 +160,28 @@ describe("hasAnyAgentSessionRow", () => {
 });
 
 describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则，无法确定按未知跳过）", () => {
+  it("未升级宿主可注入旧默认库，但显式env和配置继续优先", async () => {
+    const { HOME, USER_CONFIG } = freshHome();
+    const legacyDefault = join(HOME, ".zcode", "cli", "db", "db.sqlite");
+    const fromConfig = join(HOME, "configured.sqlite");
+    const fromEnv = join(HOME, "environment.sqlite");
+    const options = { env: {}, homedirPath: HOME, defaultSessionDbPath: legacyDefault };
+    await expect(resolveAgentSessionDbPath(options)).resolves.toBe(legacyDefault);
+    mkdirSync(join(USER_CONFIG, ".."), { recursive: true });
+    writeFileSync(USER_CONFIG, JSON.stringify({ storage: { sessionDbPath: fromConfig } }));
+    await expect(resolveAgentSessionDbPath(options)).resolves.toBe(fromConfig);
+    await expect(
+      resolveAgentSessionDbPath({ ...options, env: { ZCODE_SESSION_DB_PATH: fromEnv } }),
+    ).resolves.toBe(fromEnv);
+    writeFileSync(USER_CONFIG, JSON.stringify({ storage: { sessionDbPath: "relative.sqlite" } }));
+    await expect(resolveAgentSessionDbPath(options)).resolves.toBeNull();
+  });
+
   function freshHome(): { HOME: string; USER_CONFIG: string } {
     const HOME = join(makeTempDir(), "home");
-    return { HOME, USER_CONFIG: join(HOME, ".zcode", "cli", "config.json") };
+    setDataBaseDir(HOME);
+    vi.stubEnv("ZCODE_STORAGE_DIR", "");
+    return { HOME, USER_CONFIG: join(HOME, ".uwork", "cli", "config.json") };
   }
 
   it("env 单别名：绝对路径原样可用", async () => {
@@ -220,7 +242,7 @@ describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则
 
   it("user config（home 默认位置）storage.sessionDbPath 覆盖，~/ 展开", async () => {
     const { HOME, USER_CONFIG } = freshHome();
-    mkdirSync(join(HOME, ".zcode", "cli"), { recursive: true });
+    mkdirSync(join(HOME, ".uwork", "cli"), { recursive: true });
     writeFileSync(USER_CONFIG, JSON.stringify({ storage: { sessionDbPath: "~/data/s.sqlite" } }));
     await expect(
       resolveAgentSessionDbPath({ env: {}, homedirPath: HOME, userConfigPath: USER_CONFIG }),
@@ -229,23 +251,21 @@ describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则
 
   it("user config 相对路径 → null（不按 host cwd 猜测）", async () => {
     const { HOME, USER_CONFIG } = freshHome();
-    mkdirSync(join(HOME, ".zcode", "cli"), { recursive: true });
+    mkdirSync(join(HOME, ".uwork", "cli"), { recursive: true });
     writeFileSync(USER_CONFIG, JSON.stringify({ storage: { sessionDbPath: "db/rel.sqlite" } }));
     await expect(
       resolveAgentSessionDbPath({ env: {}, homedirPath: HOME, userConfigPath: USER_CONFIG }),
     ).resolves.toBeNull();
   });
 
-  it("user config 不存在 → 默认 ~/.zcode/cli/db/db.sqlite（homedir 展开）", async () => {
+  it("user config 不存在 → 与新版 writer 一致的有效 CLI 根会话库", async () => {
     const { HOME, USER_CONFIG } = freshHome();
     await expect(
       resolveAgentSessionDbPath({ env: {}, homedirPath: HOME, userConfigPath: USER_CONFIG }),
-    ).resolves.toBe(join(HOME, ".zcode", "cli", "db", "db.sqlite"));
+    ).resolves.toBe(join(HOME, ".uwork", "cli", "db", "db.sqlite"));
   });
 
-  it("默认 userConfigPath 钉住为 {home}/.zcode/cli/config.json（评审 SG-01）", async () => {
-    // host 侧默认字面量与 CLI file-config.adapter 的 DEFAULT_BASE_DIR 是两处独立
-    // 硬编码，漂移时镜像策略失效；此处显式锁定 host 侧拼装结果。
+  it("默认 userConfigPath 使用产品根，不读取同一 home 中的上游配置", async () => {
     const { HOME } = freshHome();
     const readPaths: string[] = [];
     await resolveAgentSessionDbPath({
@@ -256,7 +276,68 @@ describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则
         return "{}";
       },
     });
-    expect(readPaths).toEqual([join(HOME, ".zcode", "cli", "config.json")]);
+    expect(readPaths).toEqual([join(HOME, ".uwork", "cli", "config.json")]);
+  });
+
+  it("产品配置和上游配置并存时只读取产品配置，缺失时使用 writer 默认库", async () => {
+    const { HOME, USER_CONFIG } = freshHome();
+    const upstreamConfig = join(HOME, ".zcode", "cli", "config.json");
+    const productDb = join(HOME, "product.sqlite");
+    const upstreamDb = join(HOME, "upstream.sqlite");
+    for (const config of [USER_CONFIG, upstreamConfig]) {
+      mkdirSync(join(config, ".."), { recursive: true });
+    }
+    writeFileSync(USER_CONFIG, JSON.stringify({ storage: { sessionDbPath: productDb } }));
+    writeFileSync(upstreamConfig, JSON.stringify({ storage: { sessionDbPath: upstreamDb } }));
+    createSessionDb(productDb, 1);
+    createSessionDb(upstreamDb, 1);
+    await expect(resolveAgentSessionDbPath({ env: {}, homedirPath: HOME })).resolves.toBe(
+      productDb,
+    );
+    rmSync(USER_CONFIG);
+    const emptyProductDb = await resolveAgentSessionDbPath({ env: {}, homedirPath: HOME });
+    expect(emptyProductDb).toBe(join(HOME, ".uwork", "cli", "db", "db.sqlite"));
+    await expect(hasAnyAgentSessionRow(emptyProductDb!)).resolves.toBe(false);
+  });
+
+  it("显式注入 CLI storage root 隔离配置，默认会话库同样跟随该根", async () => {
+    const { HOME } = freshHome();
+    const storageRoot = join(makeTempDir(), "external-storage");
+    vi.stubEnv("ZCODE_STORAGE_DIR", join(makeTempDir(), "other-process-storage"));
+    const configPath = join(storageRoot, "cli", "config.json");
+    mkdirSync(join(storageRoot, "cli"), { recursive: true });
+    writeFileSync(configPath, "{}");
+    const readPaths: string[] = [];
+    await expect(
+      resolveAgentSessionDbPath({
+        env: { ZCODE_STORAGE_DIR: storageRoot },
+        homedirPath: HOME,
+        readConfigFile: async (path) => {
+          readPaths.push(path);
+          return "{}";
+        },
+      }),
+    ).resolves.toBe(join(storageRoot, "cli", "db", "db.sqlite"));
+    expect(readPaths).toEqual([configPath]);
+  });
+
+  it.each(["home", "env"] as const)("%s 注入不使用进程全局的另一个配置根", async (source) => {
+    const isolatedHome = join(makeTempDir(), "isolated-home");
+    const processRoot = join(makeTempDir(), "process-storage");
+    vi.stubEnv("ZCODE_STORAGE_DIR", processRoot);
+    const readPaths: string[] = [];
+    const options =
+      source === "home" ? { homedirPath: isolatedHome } : { env: { HOME: isolatedHome } };
+    await expect(
+      resolveAgentSessionDbPath({
+        ...options,
+        readConfigFile: async (path) => {
+          readPaths.push(path);
+          return "{}";
+        },
+      }),
+    ).resolves.toBe(join(isolatedHome, ".uwork", "cli", "db", "db.sqlite"));
+    expect(readPaths).toEqual([join(isolatedHome, ".uwork", "cli", "config.json")]);
   });
 
   it("user config 非 ENOENT 读取失败 → 上抛", async () => {
@@ -276,7 +357,7 @@ describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则
 
   it("user config 非法 JSON → 上抛", async () => {
     const { HOME, USER_CONFIG } = freshHome();
-    mkdirSync(join(HOME, ".zcode", "cli"), { recursive: true });
+    mkdirSync(join(HOME, ".uwork", "cli"), { recursive: true });
     writeFileSync(USER_CONFIG, "{broken json");
     await expect(
       resolveAgentSessionDbPath({ env: {}, homedirPath: HOME, userConfigPath: USER_CONFIG }),

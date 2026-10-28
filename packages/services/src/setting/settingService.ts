@@ -1,6 +1,13 @@
+import {
+  createDataDirectorySettingOwner,
+  dataDirectoryMigrationControlPaths,
+  assertPendingMigrationValid,
+  assertDataDirectorySettingsPatch,
+  type DataDirectoryMigrationCommitOwner,
+} from "#src/project-storage/data-directory-settings-entry.js";
+export { dataDirectoryMigrationControlPaths } from "#src/project-storage/data-directory-settings-entry.js";
 import { readFile, mkdir, rename } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
 import type {
   AppSettings,
   ProviderFamilyDomain,
@@ -11,11 +18,10 @@ import {
   appSettingsSchema,
   formatLogPrefix,
   formatZodError,
-  UWORK_DATA_ROOT_DIR_NAME,
 } from "@zcode/shared";
 import type { ISettingService, WorkspaceSettingsProjection } from "./setting.js";
 import { normalizeSettingsPatch } from "#src/setting/normalizeSettingsPatch.js";
-import { copyDataDirectory, getDataBaseDir, validateDataBaseDirTarget } from "../paths.js";
+import { getDefaultDataBaseDir } from "../paths.js";
 import { isEffectiveDevelopmentNodeEnv } from "../runtime-tools/nodeEnv.js";
 import { maybeThrowInjectedFsFault } from "../fs/fsFaultInjection.js";
 import { atomicWriteText, withAtomicFileLock } from "../fs/atomicFileUtils.js";
@@ -41,16 +47,6 @@ const debugLog = (...args: unknown[]) => {
   }
   console.debug(formatLogPrefix("settingService", process.pid), ...args);
 };
-
-function resolveUserHomeDir() {
-  // 独立桌面 Dev 实例已设置自己的 home，设置服务却仍写真实 HOME，
-  // 导致启动迁移和外观操作污染其他实例。与 Electron 的显式 home 覆盖保持一致。
-  const envHome =
-    process.env.ZCODE_DESKTOP_HOME_DIR?.trim() ||
-    process.env.HOME?.trim() ||
-    process.env.USERPROFILE?.trim();
-  return envHome && envHome.length > 0 ? envHome : homedir();
-}
 
 function defaultSettings(): AppSettings {
   return appSettingsSchema.parse({});
@@ -138,8 +134,10 @@ async function readSettingsWithMetaAt(settingsFile: string): Promise<ReadSetting
         };
       }
     }
+    assertPendingMigrationValid(rawValue);
     const result = appSettingsSchema.safeParse(migrateLegacyAccountConnectionSettings(rawValue));
     if (!result.success) {
+      assertPendingMigrationValid(rawValue, true);
       log(
         "read failed schema validation, returning defaults. error:",
         formatZodError(result.error),
@@ -154,6 +152,7 @@ async function readSettingsWithMetaAt(settingsFile: string): Promise<ReadSetting
       needsMigrationPersist: shouldPersistSettingsMigrations(rawValue),
     };
   } catch (err) {
+    if (err && typeof err === "object" && (err as { kind?: unknown }).kind === "corrupt") throw err;
     if (
       err &&
       typeof err === "object" &&
@@ -184,7 +183,7 @@ async function writeSettingsAt(
   commitAccountSelection = false,
 ): Promise<void> {
   const settingsDir = dirname(settingsFile);
-  log("writing settings to:", settingsFile, JSON.stringify(settings));
+  log("writing settings");
   maybeThrowInjectedFsFault({ operation: "mkdir", path: settingsDir });
   await mkdir(settingsDir, { recursive: true });
   if (!shouldCommit()) return;
@@ -210,12 +209,12 @@ async function writeSettingsAt(
   log("write done");
 }
 
-export function createSettingService(): ISettingService {
-  return createSettingServiceWithMigrations().service;
+export function createSettingService(options?: { defaultDataBaseDir?: string }): ISettingService {
+  return createSettingServiceWithMigrations(options).service;
 }
 
 /** Host 私有迁移入口，不加入 Setting RPC；普通 get/update 从不等待 OAuth 查询。 */
-export function createSettingServiceWithMigrations(): {
+export function createSettingServiceWithMigrations(options?: { defaultDataBaseDir?: string }): {
   service: ISettingService;
   setWorkspaceProjection: (
     reader: (settings: AppSettings) => Promise<WorkspaceSettingsProjection>,
@@ -223,11 +222,12 @@ export function createSettingServiceWithMigrations(): {
   prepareLegacyAccountConnections: (
     resolveOrganization: (connection: LegacyTeamConnection) => Promise<string | null>,
   ) => Promise<readonly ProviderFamilyDomain[]>;
-} {
+} & DataDirectoryMigrationCommitOwner {
   // 原因：每次 IO 动态读 HOME 会让旧异步投影写进后来实例的目录。
   // 在实例创建时取值，既支持测试/Host 注入，也让读取、文件锁与替换始终同源。
   // 设置启动目录必须与 UWork 数据根同名，否则 UWork 会继续读写 ZCode 的 setting.json。
-  const settingsFile = join(resolveUserHomeDir(), UWORK_DATA_ROOT_DIR_NAME, "v2", "setting.json");
+  const settingsFile = dataDirectoryMigrationControlPaths().settingsFile;
+  const defaultBaseDir = resolve(options?.defaultDataBaseDir || getDefaultDataBaseDir());
   const getSettingsFile = () => settingsFile;
   const getSettingsDir = () => dirname(settingsFile);
   const readSettingsWithMeta = () => readSettingsWithMetaAt(settingsFile);
@@ -277,7 +277,16 @@ export function createSettingServiceWithMigrations(): {
     await queued;
   };
 
+  const dataDirectoryOwner = createDataDirectorySettingOwner({
+    settingsFile,
+    defaultBaseDir,
+    requestLockPath: dataDirectoryMigrationControlPaths().requestLockPath,
+    enqueueSettingsWrite,
+    readSettings,
+    writeSettings,
+  });
   const service: ISettingService = {
+    getDataDirectoryInfo: dataDirectoryOwner.getDataDirectoryInfo,
     async get(): Promise<AppSettings> {
       // 设置切换后可能立即创建或冷恢复 Session；读取若越过已入队写入，
       // runtime 会固定旧开关值。先等待现有写队列，保证启动偏好读取到已提交的选择。
@@ -310,6 +319,7 @@ export function createSettingServiceWithMigrations(): {
     },
 
     async update(patch: Partial<AppSettings>, expectedAccountSettings): Promise<void> {
+      assertDataDirectorySettingsPatch(patch);
       const runUpdate = async (shouldCommit: () => boolean, enterCommitPhase: () => void) => {
         const validatedPatch = appSettingsPatchSchema.parse(normalizeSettingsPatch(patch));
         const current = await readSettings();
@@ -368,32 +378,15 @@ export function createSettingServiceWithMigrations(): {
       await enqueueSettingsWrite(runUpdate);
     },
 
-    async updateDataBaseDir(newDir: string | undefined): Promise<void> {
-      const currentBaseDir = getDataBaseDir();
-      const targetBaseDir = newDir?.trim() || homedir();
-      const validation = validateDataBaseDirTarget(targetBaseDir);
-      if (!validation.ok) {
-        // Windows 安装目录由安装器/自动更新管理，把 .zcode/v2 放进去可能在升级时被覆盖。
-        // 迁移前在 service 层拦截，避免 UI 入口变化或 RPC 调用绕过前端判断。
-        const error = new Error(`${validation.code}: ${validation.forbiddenDir}`);
-        (error as Error & { code: string }).code = validation.code;
-        throw error;
-      }
-
-      if (currentBaseDir !== targetBaseDir) {
-        log("copying data directory from", currentBaseDir, "to", targetBaseDir);
-        await copyDataDirectory(currentBaseDir, targetBaseDir);
-        log("data directory copy done");
-      }
-
-      await this.update({ dataBaseDir: newDir });
-    },
+    updateDataBaseDir: dataDirectoryOwner.updateDataBaseDir,
   };
 
   let inFlight: Promise<readonly ProviderFamilyDomain[]> | null = null;
   let migrationComplete = false;
   return {
     service,
+    commitPendingDataDirectoryMigration: dataDirectoryOwner.commitPendingDataDirectoryMigration,
+    cancelPendingDataDirectoryMigration: dataDirectoryOwner.cancelPendingDataDirectoryMigration,
     setWorkspaceProjection(reader) {
       if (workspaceProjection) throw new Error("settings.workspace-projection-already-bound");
       workspaceProjection = reader;

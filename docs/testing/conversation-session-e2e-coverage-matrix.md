@@ -4285,3 +4285,11 @@ Linux Electron 重建后 run `desktop-e2e-20261014-120739-442`，TD01/03/04 1/1 
 - Action：确认真实 systemctl 探测退出 0 且属性响应为空，然后通过桌面设备行重连并续发任务。
 - Assertions：新 Supervisor/Core ready、`serviceRegistered=false`、Host 数不变、任务仍属原 workspace；恢复远端 shell 配置。
 - 验证（2026-10-19）：macOS Desktop → Linux ARM64 SSH 定向回放 1/1 PASS，run `r3-server-zct-probe-fix2`；真实 systemd 正常注册、非交互环境恢复、offline/chroot 能力判断均通过。受影响单测 6 文件 / 62 项、typecheck、E2E typecheck、lint、架构与改动代码格式检查通过。候选保持 pending；未复现用户原设备，也未运行 Windows/Linux Desktop 或手机实机回归。
+
+### DBROOT-01（2026-10-28）
+
+Accepted / pending：`conversation-session/manual-review/pending/conversation-session-session-database-root-upgrade.test.ts`。隔离旧布局 → 首次启动迁移 → 历史/上下文续聊 → 新任务新库 → 幂等重启；源旧库不变。使用同名 case-local provider fixtures，不把源码桌面验收等同于已发布安装包升级。
+
+CDD01（2026-10-28，冷迁移合同）：正式 configurable-data-directory spec 验证真实 UI 保存 pending→继续写原根→完整重启→新根 App/CLI→原任务续聊→旧库不再写。最终 1/1 PASS，run `desktop-e2e-20261028045602804-p14831-dfc1e5904a6c79e1`；明确退出登录/职业弹层后截图验收。证据见 [本轮报告](session-database-root-upgrade-2026-10-28.md)，不继承旧路径断言结果。
+
+DBROOT-01/02（accepted/pending）：同 spec 验证自动升级续聊、新任务写新库、幂等重启，以及目标冲突后取消、活动根不变、原会话可读、foreign 文件保持。与调用轨迹最终同轮 2/2 PASS，run `desktop-e2e-20261028045412236-p12017-9759934ff5e1b8f8`。报告及截图见 [本轮报告](session-database-root-upgrade-2026-10-28.md)；候选仍 pending，不自动晋级或等同于发布包升级。

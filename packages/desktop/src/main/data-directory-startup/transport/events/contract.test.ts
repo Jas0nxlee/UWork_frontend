@@ -1,0 +1,24 @@
+import { EventEmitter } from "node:events";
+import { expect, it, vi } from "vitest";
+import { bufferMainLifecycleIntents } from "../../events.js";
+it("buffers platform intent order without executing routes before Main and removes temporary listeners once", () => {
+  const app = new EventEmitter();
+  const buffer = bufferMainLifecycleIntents(app);
+  const prevented = vi.fn();
+  app.emit("open-url", { preventDefault: prevented }, "uwork://first");
+  app.emit("second-instance", {}, ["uwork://second"], "/cwd", {});
+  app.emit("open-url", { preventDefault: prevented }, "uwork://third");
+  const routed: string[] = [];
+  expect(routed).toEqual([]);
+  expect(prevented).toHaveBeenCalledTimes(2);
+  app.on("open-url", (_event, url) => routed.push(url));
+  app.on("second-instance", (_event, argv) => routed.push(argv[0]));
+  buffer.handoff();
+  buffer.handoff();
+  expect(routed).toEqual(["uwork://first", "uwork://second", "uwork://third"]);
+  expect(app.listenerCount("open-url")).toBe(1);
+  expect(app.listenerCount("second-instance")).toBe(1);
+  app.emit("open-url", {}, "uwork://normal");
+  expect(routed.at(-1)).toBe("uwork://normal");
+  expect(routed).toHaveLength(4);
+});

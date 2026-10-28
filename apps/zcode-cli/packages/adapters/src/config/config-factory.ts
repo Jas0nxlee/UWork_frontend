@@ -1,6 +1,8 @@
 // Config Factory - Load and merge all config sources
 
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { resolveUserCliConfigPath, resolveUserCliRoot } from "@zcode/shared";
 import type {
   ConfigPort,
   HookConfigSource,
@@ -21,7 +23,7 @@ import {
   type WorkspaceHookRuntimeRoot,
 } from "@zcode/shared/workspace-hook-discovery";
 import { createConfigPort } from "./index.js";
-import { loadFileConfig, getDefaultConfigPath, type LoadedConfig } from "./file-config.adapter.js";
+import { loadFileConfig, type LoadedConfig } from "./file-config.adapter.js";
 import { parseEnvConfig } from "./env-config.adapter.js";
 import { mergeConfigs, createPrioritizedConfig } from "./config-merger.js";
 import { createNodeLoggerFactory } from "../logging/index.js";
@@ -56,6 +58,8 @@ export interface ConfigResult {
   configPort: ConfigPort;
   config: RuntimeConfig;
   sources: {
+    /** 实际声明 sessionDbPath 的最高优先级来源；缺席的旧快照不可自动迁移。 */
+    sessionDb?: "system" | "user" | "project" | "env" | "cli";
     user: {
       diagnostics: LoadedConfig["diagnostics"];
       path: string;
@@ -127,15 +131,30 @@ export interface PluginConfigSources {
  * 5. CLI overrides
  */
 export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
+  const env = options.env ?? process.env;
+  const storageEnv = { ...env, HOME: env.HOME?.trim() || env.USERPROFILE?.trim() || homedir() };
   // 1. System defaults
+  // 只有配套 Host 启动门禁的进程才能切换默认库；未接入升级的 Source Server / CLI
+  // 保留历史默认。最低优先级生成新值，显式 user/project/env/CLI 选择仍然优先。
+  const systemDefaults: RuntimeConfig = {
+    ...DefaultRuntimeConfig,
+    storage: {
+      ...DefaultRuntimeConfig.storage,
+      sessionDbPath:
+        env.UWORK_SESSION_DB_MIGRATION === "1"
+          ? join(resolveUserCliRoot(storageEnv), "db", "db.sqlite")
+          : DefaultRuntimeConfig.storage.sessionDbPath,
+    },
+  };
   const configs: ReturnType<typeof createPrioritizedConfig>[] = [
-    createPrioritizedConfig(DefaultRuntimeConfig, ConfigScope.System),
+    createPrioritizedConfig(systemDefaults, ConfigScope.System),
   ];
 
   // 2. User config file
+  const userConfigPath = options.userConfigPath ?? resolveUserCliConfigPath(storageEnv);
   const userConfigResult: LoadedConfig = options.skipUserConfig
-    ? { config: {}, diagnostics: [], path: getDefaultConfigPath(), loaded: false }
-    : loadFileConfig(options.userConfigPath);
+    ? { config: {}, diagnostics: [], path: userConfigPath, loaded: false }
+    : loadFileConfig(userConfigPath);
 
   if (userConfigResult.loaded) {
     configs.push(
@@ -254,6 +273,16 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
     configPort,
     config: configPort.getAll(),
     sources: {
+      sessionDb:
+        options.cliOverrides?.storage?.sessionDbPath !== undefined
+          ? "cli"
+          : envConfig.storage?.sessionDbPath !== undefined
+            ? "env"
+            : projectConfigFiles.some((file) => file.config.storage?.sessionDbPath !== undefined)
+              ? "project"
+              : userConfigResult.config.storage?.sessionDbPath !== undefined
+                ? "user"
+                : "system",
       user: {
         diagnostics: userConfigResult.diagnostics,
         path: userConfigResult.path,

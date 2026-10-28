@@ -8,6 +8,7 @@ import {
   zcodeProviderRuntimeHeadersResponseSchema,
   zcodeProtocolMethods,
   zcodeProtocolMessageSchema,
+  zcodeStorageStartupStateSchema,
   zcodeProcessResourceSampleSchema,
   zcodeProtocolNotifications,
   zcodeMcpListParamsSchema,
@@ -2942,3 +2943,26 @@ describe("session kind policies", () => {
     expect(isReadonlyAgentSessionKind(kind)).toBe(readonly);
   });
 });
+
+it.each(["session_ownership_unknown", "session_source_changed", "data_directory_target_conflict"])(
+  "启动协议严格接受安全门禁错误 %s",
+  (errorCode) => {
+    const message = {
+      schemaVersion: 1,
+      attemptId: "migration-attempt",
+      sequence: 1,
+      databaseId: "session-db",
+      databaseKind: "session",
+      phase: "failed",
+      elapsedMs: 1,
+      errorCode,
+    };
+    expect(zcodeStorageStartupStateSchema.parse(message).errorCode).toBe(errorCode);
+    expect(
+      zcodeStorageStartupStateSchema.safeParse({
+        ...message,
+        errorCode: "unrecognized_migration_code",
+      }).success,
+    ).toBe(false);
+  },
+);

@@ -43,7 +43,8 @@ export function CallCard({
     <article data-trajectory-call="" className="col-span-full grid grid-cols-subgrid">
       <div
         data-trajectory-call-summary=""
-        className="sticky top-0 z-10 col-span-full flex w-full min-w-0 items-center gap-1.5 border-b border-border/50 bg-surface/90 px-3 py-2 text-left supports-[backdrop-filter]:backdrop-blur-sm"
+        // 窄侧栏里元数据不可压缩，旧单行布局会挤压来源并与结束标签重叠；按内容换行保留信息。
+        className="sticky top-0 z-10 col-span-full flex w-full min-w-0 items-center gap-1.5 border-b border-border/50 bg-surface/90 px-3 py-2 text-left @max-sm/trajectory-pane:flex-wrap supports-[backdrop-filter]:backdrop-blur-sm"
       >
         <span className="flex size-5 shrink-0 items-center justify-center font-mono text-ui-xs text-foreground-subtlest">
           {String(index + 1).padStart(2, "0")}
@@ -393,7 +394,7 @@ function CallMetadata({
   return (
     <span
       data-trajectory-call-metadata=""
-      className="ml-auto flex shrink-0 items-center gap-1 font-mono text-ui-xs text-foreground-subtlest"
+      className="ml-auto flex max-w-full shrink-0 items-center gap-1 font-mono text-ui-xs text-foreground-subtlest @max-sm/trajectory-pane:flex-wrap"
     >
       {items.map((item, index) => (
         <span key={`${item.text}:${index}`} title={item.title}>

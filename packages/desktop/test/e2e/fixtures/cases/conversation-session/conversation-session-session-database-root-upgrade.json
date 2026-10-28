@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-session-database-root-upgrade",
+  "spec": "./test/e2e/conversation-session/conversation-session-session-database-root-upgrade.test.ts",
+  "providerFixtures": [
+    "./test/e2e/fixtures/upstream/common.json",
+    "./test/e2e/fixtures/upstream/conversation-session/conversation-session-session-database-root-upgrade.json"
+  ],
+  "fileFixtures": [
+    {
+      "path": ".zcode/cli/db/db.sqlite",
+      "source": "created-by-spec",
+      "description": "从真实CLI写入的隔离库构造旧版本路径布局，删除仅属于新版的私有迁移marker；不是用户真实数据。"
+    }
+  ],
+  "requests": [
+    {
+      "id": "session-db-root-title",
+      "description": "轨迹查看器 case 内的标题生成固定响应，避免标题请求占用主流程 fixture。",
+      "kind": "common",
+      "timingPolicy": "fast-text",
+      "source": "synthetic",
+      "syntheticReason": "标题生成不是轨迹交互的产品语义，只需稳定完成。"
+    },
+    {
+      "id": "session-db-root-seed",
+      "description": "数据库升级seed受控回复",
+      "kind": "main",
+      "timingPolicy": "fast-text",
+      "source": "synthetic",
+      "syntheticReason": "验证真实CLI持久化及迁移后上下文恢复，不依赖开放模型措辞。"
+    },
+    {
+      "id": "session-db-root-resume",
+      "description": "数据库升级resume受控回复",
+      "kind": "main",
+      "timingPolicy": "fast-text",
+      "source": "synthetic",
+      "syntheticReason": "验证真实CLI持久化及迁移后上下文恢复，不依赖开放模型措辞。"
+    },
+    {
+      "id": "session-db-root-new",
+      "description": "数据库升级new受控回复",
+      "kind": "main",
+      "timingPolicy": "fast-text",
+      "source": "synthetic",
+      "syntheticReason": "验证真实CLI持久化及迁移后上下文恢复，不依赖开放模型措辞。"
+    }
+  ]
+}

@@ -103,10 +103,55 @@ async function readZipEntries(zipPath: string): Promise<Map<string, string>> {
   });
 }
 
-afterEach(() => vi.unstubAllEnvs());
+let suiteHome: string | undefined;
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  if (suiteHome) await rm(suiteHome, { recursive: true, force: true });
+  suiteHome = undefined;
+});
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  vi.resetModules();
+  suiteHome = await mkdtemp(join(tmpdir(), "export-logs-isolated-home-"));
+  vi.stubEnv("HOME", suiteHome);
+  vi.stubEnv("ZCODE_DESKTOP_HOME_DIR", undefined);
+  vi.stubEnv("UWORK_DATA_BASE_DIR", undefined);
+  vi.stubEnv("ZCODE_DATA_BASE_DIR", undefined);
+  vi.stubEnv("ZCODE_STORAGE_DIR", undefined);
+});
+
+it("运行时提交数据根后，日志和Helper诊断只从当前根收集", async () => {
+  await withTempDir(async (root) => {
+    const home = join(root, "bootstrap-home");
+    const active = join(root, "active-data");
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("ZCODE_DESKTOP_HOME_DIR", home);
+    vi.stubEnv("UWORK_DATA_BASE_DIR", "");
+    vi.stubEnv("ZCODE_DATA_BASE_DIR", "");
+    vi.stubEnv("ZCODE_STORAGE_DIR", "");
+    const { setDataBaseDir } = await import("@zcode/services/node");
+    const { createLogArchiveArtifacts } = await import("../src/main/exportLogs.js");
+    const cli = join(active, ".uwork", "cli", "log", "active.log");
+    const helper = join(active, ".uwork", "computer-use", "run", "active.sock.exit.log");
+    const stale = join(home, ".uwork", "cli", "log", "stale.log");
+    for (const path of [cli, helper, stale]) {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, "fixture diagnostic");
+    }
+    const source = join(active, ".uwork", "v2");
+    await mkdir(source, { recursive: true });
+    setDataBaseDir(active);
+    try {
+      const artifacts = await createLogArchiveArtifacts(source);
+      const paths = artifacts.files.map((file) => file.absolutePath);
+      expect(paths).toContain(cli);
+      expect(paths).toContain(helper);
+      expect(paths).not.toContain(stale);
+    } finally {
+      setDataBaseDir(null);
+    }
+  });
 });
 
 describe("export logs archive", () => {

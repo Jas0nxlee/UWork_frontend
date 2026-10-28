@@ -16,7 +16,12 @@ import {
   type SourceServerMigrationReport,
   type SourceServerMigrationReportRow,
 } from "@zcode/shared";
-import { getDataBaseDir, getTasksIndexDatabasePath, getWorkspaceHash } from "#src/paths.js";
+import {
+  getTasksIndexDatabasePath,
+  getUWorkDataRootDir,
+  getUworkUserCliRootDir,
+  getWorkspaceHash,
+} from "#src/paths.js";
 
 type Database = InstanceType<typeof DatabaseSync>;
 const require = createRequire(import.meta.url);
@@ -298,10 +303,11 @@ export class SourceServerWorkspaceAliasRepo {
 
   public constructor(options: SourceServerWorkspaceAliasRepoOptions = {}) {
     this.taskDbPath = options.taskDbPath ?? getTasksIndexDatabasePath();
-    this.sessionDbPath =
-      options.sessionDbPath ?? join(getDataBaseDir(), ".zcode", "cli", "db", "db.sqlite");
+    // 默认库跟随新版 Agent 的有效 CLI 根；旧库升级归启动门禁，alias 不另行搬迁。
+    // 装配层解析出的显式会话库路径继续优先，不能用默认路径覆盖用户配置。
+    this.sessionDbPath = options.sessionDbPath ?? join(getUworkUserCliRootDir(), "db", "db.sqlite");
     this.backupRoot =
-      options.backupRoot ?? join(getDataBaseDir(), ".zcode", "server", "migration-backups");
+      options.backupRoot ?? join(getUWorkDataRootDir(), "server", "migration-backups");
     this.now = options.now ?? Date.now;
     this.createMigrationId = options.migrationId ?? randomUUID;
     this.afterPhaseCommitted = options.afterPhaseCommitted;

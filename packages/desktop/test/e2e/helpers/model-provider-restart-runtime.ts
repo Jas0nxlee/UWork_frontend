@@ -2,6 +2,7 @@ import { NodePersonalProviderConfigRepository } from "@zcode/provider-node";
 import { getE2EAppDataPaths, waitForWorkspaceApp } from "./desktop-app.js";
 import { reloadElectronSessionSafely } from "./e2e-electron-reload.js";
 import { flushElectronStorageData } from "./e2e-electron-storage.js";
+import { waitForE2EBusinessRendererHandoff } from "./e2e-electron-service-lifecycle.js";
 import { skipOccupationOnboardingIfPresent } from "./occupation-onboarding.js";
 
 const paths = getE2EAppDataPaths();
@@ -58,6 +59,7 @@ export async function restartIntoWorkspacePreservingProfile(
   await reloadElectronSessionSafely(browser, {
     afterElectronProcessExit: options.afterElectronProcessExit,
   });
+  await waitForE2EBusinessRendererHandoff(browser);
   // 隔离账号首次登录会出现职业引导，须通过真实 UI 完成后才能等待工作区就绪。
   await skipOccupationOnboardingIfPresent();
   // Bug 根因：Puppeteer targetId 不保证同时是 ChromeDriver window handle，

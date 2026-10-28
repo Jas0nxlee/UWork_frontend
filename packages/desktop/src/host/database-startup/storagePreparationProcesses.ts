@@ -1,14 +1,24 @@
-import { mkdir, realpath } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
+import { lstat, mkdir, realpath } from "node:fs/promises";
+import { dirname, resolve as resolvePath } from "node:path";
 import { Worker } from "node:worker_threads";
 import { createInterface } from "node:readline";
 import {
   type DatabaseMigrationFacts,
   zcodeStoragePreparationFrameSchema,
+  ZCODE_STORAGE_PREPARATION_FRAME_MAX_CHARS,
   type DatabaseStartupState,
 } from "@zcode/shared";
-import { resolveDefaultZCodeAgentCommand } from "@zcode/services/storage-startup";
+import {
+  createSessionStorageOwnershipManifest,
+  getTasksIndexDatabasePath,
+  resolveDefaultZCodeAgentCommand,
+} from "@zcode/services/storage-startup";
 import { classifyStorageWorkerStderr } from "../storageWorkerDiagnostics.js";
+import { assertNoLegacySessionWriters } from "./legacySessionWriterGate.js";
+export {
+  assertNoLegacySessionWriters,
+  collectLegacySessionWriters,
+} from "./legacySessionWriterGate.js";
 
 type Phase = NonNullable<DatabaseStartupState["databasePhase"]>;
 import { workerMessageSchema } from "./contract.js";
@@ -30,6 +40,25 @@ const statusError = (
     migrationUpdate:
       databaseId && details?.migration ? { databaseId, migration: details.migration } : undefined,
   });
+
+/** ENOENT 才是新装；断链文件或祖先目录软链不能被当成“旧库不存在”。 */
+async function databaseEntryExists(sourcePath: string): Promise<boolean> {
+  const source = resolvePath(sourcePath);
+  let candidate = source;
+  for (;;) {
+    const entry = await lstat(candidate).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (entry) {
+      if (entry.isSymbolicLink()) await realpath(candidate);
+      return candidate === source;
+    }
+    const parent = dirname(candidate);
+    if (parent === candidate) throw statusError("open_failed");
+    candidate = parent;
+  }
+}
 
 /** 仅创建 Main 提供的 app-managed 备用目录，不能在遍历历史项目时重建已删除的项目。 */
 export async function ensureHostFallbackCwd(path: string): Promise<void> {
@@ -95,6 +124,8 @@ export async function prepareSessionStorage(options: {
   ) => void;
   preparedPaths?: Set<string>;
   observePath: (path: string) => Promise<void>;
+  createOwnershipManifest?: () => Promise<{ path: string; dispose(): Promise<void> }>;
+  checkLegacyWriters?: (sourcePath: string) => Promise<void>;
 }): Promise<void> {
   const command = resolveDefaultZCodeAgentCommand({
     workspacePath: options.cwd,
@@ -104,122 +135,177 @@ export async function prepareSessionStorage(options: {
   if (!command?.supportsStorageStartup || !command.storagePreparationEntry)
     throw statusError("unsupported_runtime");
   const entry = command.storagePreparationEntry;
-  await new Promise<void>((resolve, reject) => {
-    const child = new Worker(entry, {
-      argv: ["app-server", "--stdio", "--prepare-storage", "--cwd", command.cwd ?? options.cwd],
-      env: { ...process.env, ...options.env, ...command.env },
-      stdin: true,
-      stdout: true,
-      stderr: true,
-    });
-    const input = child.stdin!;
-    const lines = createInterface({ input: child.stdout });
-    let settled = false;
-    let prepared = false;
-    let pathReceived = false;
-    let preparedPath: string | undefined;
-    let failure: unknown;
-    let frameCount = 0;
-    let stderrBytes = 0;
-    let stderrPrefix = "";
-    const terminate = () => {
-      void child.terminate();
-    };
-    const abort = () => {
-      failure ??= statusError("transport_closed");
-      terminate();
-    };
-    const firstStateTimer = setTimeout(() => {
-      failure = statusError("startup_status_timeout");
-      terminate();
-    }, 30_000);
-    options.signal.addEventListener("abort", abort, { once: true });
-    // stdout 只有有界控制帧，stderr 排空但不把可能含本地路径的原始文本上报。
-    child.stderr.on("data", (chunk: Uint8Array) => {
-      stderrBytes += chunk.byteLength;
-      if (stderrPrefix.length < 4096)
-        stderrPrefix += Buffer.from(chunk)
-          .toString("utf8")
-          .slice(0, 4096 - stderrPrefix.length);
-    });
-    input.on("error", (error) => {
-      failure ??= error;
-      terminate();
-    });
-    lines.on("line", (line) => {
-      try {
-        if (line.length > 65536) throw statusError("transport_closed");
-        const frame = zcodeStoragePreparationFrameSchema.parse(JSON.parse(line));
-        frameCount++;
-        clearTimeout(firstStateTimer);
-        if (frame.method === "startup/storagePath") {
-          if (pathReceived) throw statusError("transport_closed");
-          pathReceived = true;
-          void (async () => {
-            // 仅复用同一次准备中已成功关闭的真实库，不能按不同 cwd 误判为不同数据库。
-            preparedPath = await realpath(frame.params.path).catch(
-              (error: NodeJS.ErrnoException) => {
-                if (error.code === "ENOENT") return resolvePath(frame.params.path);
-                throw error;
-              },
-            );
-            if (settled || failure || options.signal.aborted) return;
-            const reuse = options.preparedPaths?.has(preparedPath) ?? false;
-            if (!reuse) await options.observePath(frame.params.path);
-            if (!settled && !failure && !options.signal.aborted)
-              input.write(`${JSON.stringify({ method: "startup/storagePathReady", reuse })}\n`);
-          })().catch((error) => {
-            failure ??= error;
-            terminate();
-          });
-        } else if (frame.method === "startup/storagePrepared") {
-          prepared = pathReceived;
-          input.end();
-        } else if (frame.params.phase === "failed")
-          failure ??= statusError(
-            frame.params.errorCode ?? "sql_failed",
-            frame.params,
-            frame.params.databaseId,
-          );
-        else
-          options.report(frame.params.phase, {
-            databaseId: frame.params.databaseId,
-            migration: frame.params.migration,
-          });
-      } catch (error) {
+  let manifest: Promise<{ path: string; dispose(): Promise<void> }> | undefined;
+  let preparationFailure: unknown;
+  let failed = false;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = new Worker(entry, {
+        argv: ["app-server", "--stdio", "--prepare-storage", "--cwd", command.cwd ?? options.cwd],
+        env: { ...process.env, ...options.env, ...command.env, UWORK_SESSION_DB_MIGRATION: "1" },
+        stdin: true,
+        stdout: true,
+        stderr: true,
+      });
+      const input = child.stdin!;
+      const lines = createInterface({ input: child.stdout });
+      let settled = false;
+      let prepared = false;
+      let pathReceived = false;
+      let pathAcknowledged = false;
+      let preparedPath: string | undefined;
+      let failure: unknown;
+      let frameCount = 0;
+      let stderrBytes = 0;
+      let stderrPrefix = "";
+      const terminate = () => {
+        void child.terminate();
+      };
+      const abort = () => {
+        failure ??= statusError("transport_closed");
+        terminate();
+      };
+      const firstStateTimer = setTimeout(() => {
+        failure = statusError("startup_status_timeout");
+        terminate();
+      }, 30_000);
+      options.signal.addEventListener("abort", abort, { once: true });
+      // stdout 只有有界控制帧，stderr 排空但不把可能含本地路径的原始文本上报。
+      child.stderr.on("data", (chunk: Uint8Array) => {
+        stderrBytes += chunk.byteLength;
+        if (stderrPrefix.length < 4096)
+          stderrPrefix += Buffer.from(chunk)
+            .toString("utf8")
+            .slice(0, 4096 - stderrPrefix.length);
+      });
+      input.on("error", (error) => {
         failure ??= error;
         terminate();
+      });
+      lines.on("line", (line) => {
+        try {
+          if (line.length > ZCODE_STORAGE_PREPARATION_FRAME_MAX_CHARS)
+            throw statusError("transport_closed");
+          const frame = zcodeStoragePreparationFrameSchema.parse(JSON.parse(line));
+          frameCount++;
+          clearTimeout(firstStateTimer);
+          if (frame.method === "startup/storagePath") {
+            if (pathReceived) throw statusError("transport_closed");
+            pathReceived = true;
+            void (async () => {
+              // 仅复用同一次准备中已成功关闭的真实库，不能按不同 cwd 误判为不同数据库。
+              preparedPath = await realpath(frame.params.path).catch(
+                (error: NodeJS.ErrnoException) => {
+                  if (error.code === "ENOENT") return resolvePath(frame.params.path);
+                  throw error;
+                },
+              );
+              if (settled || failure || options.signal.aborted) return;
+              // 显式自定义路径的 schema 准备不能代替默认路径升级的完成账本。
+              // Worker 仍报告 legacy 时必须完成迁移，不能仅按相同目标路径复用。
+              const reuse =
+                !frame.params.legacySourcePath &&
+                (options.preparedPaths?.has(preparedPath) ?? false);
+              if (!reuse) await options.observePath(frame.params.path);
+              if (settled || failure || options.signal.aborted) return;
+              let ownershipManifestPath: string | undefined;
+              if (!reuse && frame.params.legacySourcePath) {
+                if (await databaseEntryExists(frame.params.legacySourcePath))
+                  await (options.checkLegacyWriters ?? assertNoLegacySessionWriters)(
+                    frame.params.legacySourcePath,
+                  );
+                if (settled || failure || options.signal.aborted) return;
+                // 已有目标的快照合并也必须离线，不能在其他 CLI 仍写目标时覆盖激活。
+                const targetExists = await databaseEntryExists(frame.params.path);
+                if (targetExists && frame.params.path !== frame.params.legacySourcePath)
+                  await (options.checkLegacyWriters ?? assertNoLegacySessionWriters)(
+                    frame.params.path,
+                  );
+                if (settled || failure || options.signal.aborted) return;
+                manifest =
+                  options.createOwnershipManifest?.() ??
+                  createSessionStorageOwnershipManifest(getTasksIndexDatabasePath());
+                ownershipManifestPath = (await manifest).path;
+              }
+              if (!settled && !failure && !options.signal.aborted) {
+                pathAcknowledged = true;
+                input.write(
+                  `${JSON.stringify({
+                    method: "startup/storagePathReady",
+                    reuse,
+                    ...(ownershipManifestPath ? { ownershipManifestPath } : {}),
+                  })}\n`,
+                );
+              }
+            })().catch((error) => {
+              failure ??= error;
+              terminate();
+            });
+          } else if (frame.method === "startup/storagePrepared") {
+            prepared = pathReceived && pathAcknowledged;
+            input.end();
+          } else if (frame.params.phase === "failed")
+            failure ??= statusError(
+              frame.params.errorCode ?? "sql_failed",
+              frame.params,
+              frame.params.databaseId,
+            );
+          else
+            options.report(frame.params.phase, {
+              databaseId: frame.params.databaseId,
+              migration: frame.params.migration,
+            });
+        } catch (error) {
+          failure ??= error;
+          terminate();
+        }
+      });
+      child.once("error", (error) => {
+        failure ??= error;
+      });
+      child.once("exit", (code) => {
+        settled = true;
+        clearTimeout(firstStateTimer);
+        options.signal.removeEventListener("abort", abort);
+        lines.close();
+        if (code === 0 && prepared && !failure) {
+          if (preparedPath) options.preparedPaths?.add(preparedPath);
+          resolve();
+        } else {
+          const error = failure ?? statusError("transport_closed");
+          // 独立 Worker 可完成而完整 Host 提前退出；只保留控制帧事实，不能将 stderr 中的路径或凭据写入诊断。
+          if (error instanceof Error)
+            Object.assign(error, {
+              workerExitFacts: {
+                code,
+                frameCount,
+                pathReceived,
+                prepared,
+                stderrBytes,
+                stderrPrefixChars: stderrPrefix.length,
+                stderrHints: classifyStorageWorkerStderr(stderrPrefix),
+              },
+            });
+          reject(error);
+        }
+      });
+      if (options.signal.aborted) abort();
+    });
+  } catch (error) {
+    preparationFailure = error;
+    failed = true;
+  } finally {
+    // Worker 可能在异步清单生成期间失败；等该生成结束后再删除，避免遗留归属文件。
+    if (manifest) {
+      try {
+        await (await manifest).dispose();
+      } catch (error) {
+        if (!failed) {
+          preparationFailure = error;
+          failed = true;
+        }
       }
-    });
-    child.once("error", (error) => {
-      failure ??= error;
-    });
-    child.once("exit", (code) => {
-      settled = true;
-      clearTimeout(firstStateTimer);
-      options.signal.removeEventListener("abort", abort);
-      lines.close();
-      if (code === 0 && prepared && !failure) {
-        if (preparedPath) options.preparedPaths?.add(preparedPath);
-        resolve();
-      } else {
-        const error = failure ?? statusError("transport_closed");
-        // 独立 Worker 可完成而完整 Host 提前退出；只保留控制帧事实，不能将 stderr 中的路径或凭据写入诊断。
-        if (error instanceof Error)
-          Object.assign(error, {
-            workerExitFacts: {
-              code,
-              frameCount,
-              pathReceived,
-              prepared,
-              stderrBytes,
-              stderrPrefixChars: stderrPrefix.length,
-              stderrHints: classifyStorageWorkerStderr(stderrPrefix),
-            },
-          });
-        reject(error);
-      }
-    });
-    if (options.signal.aborted) abort();
-  });
+    }
+  }
+  if (failed) throw preparationFailure;
 }

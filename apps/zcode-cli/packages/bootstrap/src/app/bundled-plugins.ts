@@ -377,22 +377,71 @@ function collectFilesystemPluginFiles(
   definition: OfficialPluginDefinition,
 ): OfficialPluginSeedFile[] {
   const files: OfficialPluginSeedFile[] = [];
-  const allowedTopLevelPaths = new Set([
-    ...includedTopLevelPaths,
-    ...(definition.runtimeTopLevelPaths ?? []),
-  ]);
-  for (const sourcePath of walkFiles(rootPath, allowedTopLevelPaths)) {
+  const allowedTopLevelPaths = includedTopLevelPaths;
+  const runtimeTopLevelPaths = new Set(["node_modules"]);
+  const excludedDependencyDirectories = new Set<string>();
+  const addFile = (sourcePath: string) => {
     const relativePath = toPosixPath(sourcePath.slice(rootPath.length + 1));
-    if (!shouldIncludePluginFile(relativePath, allowedTopLevelPaths)) continue;
-    const bytes = readFileSync(sourcePath);
     files.push({
       mode: modeForSeedFile(relativePath, statSync(sourcePath).mode),
       path: relativePath,
-      sha256: hashBytes(bytes),
+      sha256: hashBytes(readFileSync(sourcePath)),
       sourcePath,
     });
+  };
+  for (const sourcePath of walkFiles(rootPath, allowedTopLevelPaths)) {
+    const relativePath = toPosixPath(sourcePath.slice(rootPath.length + 1));
+    if (!shouldIncludePluginFile(relativePath, allowedTopLevelPaths)) continue;
+    addFile(sourcePath);
+  }
+  for (const dependencyRoot of resolveRuntimeDependencyRoots(rootPath, definition)) {
+    for (const sourcePath of walkFiles(dependencyRoot, excludedDependencyDirectories)) {
+      const relativePath = toPosixPath(sourcePath.slice(rootPath.length + 1));
+      if (shouldIncludePluginFile(relativePath, runtimeTopLevelPaths)) addFile(sourcePath);
+    }
   }
   return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function resolveRuntimeDependencyRoots(
+  pluginRoot: string,
+  definition: OfficialPluginDefinition,
+): string[] {
+  const roots: string[] = [];
+  const visited = new Set<string>();
+  const visit = (name: string, requiredBy: string, optional: boolean): void => {
+    if (visited.has(name)) return;
+    if (
+      !/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(name) ||
+      name.split("/").some((segment) => segment === "." || segment === "..")
+    ) {
+      throw new Error(`Invalid runtime dependency ${name} in official plugin ${definition.name}`);
+    }
+    const root = join(pluginRoot, "node_modules", name);
+    if (!existsSync(root)) {
+      if (optional) return;
+      throw new Error(
+        `Official plugin ${definition.name} is missing runtime dependency ${name} required by ${requiredBy}`,
+      );
+    }
+    // 暂存器已将运行闭包扁平化；禁止向 workspace hoist 继续查找，掩盖缺失的打包资产。
+    // optionalDependencies 只跳过未暂存包，包已存在但清单损坏时仍暴露原始错误。
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+    };
+    visited.add(name);
+    roots.push(root);
+    const optionalDependencies = manifest.optionalDependencies ?? {};
+    for (const dependency of Object.keys(manifest.dependencies ?? {}).sort()) {
+      visit(dependency, name, Object.hasOwn(optionalDependencies, dependency));
+    }
+    for (const dependency of Object.keys(optionalDependencies).sort())
+      visit(dependency, name, true);
+  };
+  // 开源占位 producer 不暂存 native 根是合法状态；一旦存在，必需传递依赖必须完整。
+  for (const name of definition.runtimeDependencyRoots ?? []) visit(name, definition.name, true);
+  return roots;
 }
 
 function* walkFiles(

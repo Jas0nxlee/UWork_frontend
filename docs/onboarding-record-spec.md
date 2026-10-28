@@ -116,10 +116,10 @@ v1 文件不做启动迁移：读取时视为 `decisions: []`，下一次业务�
 - **使用证据（2026-10 修订）按"任一命中"判断，三个来源按序检查**：
   1. 设备全局 tasks-index 存在任意 Task（`includeDeleted: true`，含已删除 tombstone——
      清空过任务列表的存量用户不因删除行为失去资格）；
-  2. agent 会话库（默认 `~/.zcode/cli/db/db.sqlite`，按 homedir 展开、不随
-     dataBaseDir 迁移；env/配置覆盖与不可镜像跳过规则见下条；SQLite 只读查询
+  2. agent 会话库（启用迁移门禁的 Desktop writer 默认是有效 CLI 根的 `db/db.sqlite`；
+     未升级 Source Server 通过 `defaultSessionDbPath` 注入历史默认；env/配置覆盖与不可镜像跳过规则见下条；SQLite 只读查询
      `session` 表存在至少一行）；
-  3. 旧版任务快照目录（`{dataBaseDir}/.zcode/v2/sessions/`，含 `.deleted.json`）非空。
+  3. 旧版任务快照目录（`{dataBaseDir}/.uwork/v2/sessions/`，含 `.deleted.json`）非空。
 - **为什么不能只查 tasks-index**：索引是 session 同步器的衍生投影，同步器在 agent/provider
   就绪后才开始回填；而判定恰好在登录完成、主界面挂载时执行，早于回填。索引为空 ≠ 没有历史
   （2026-10 线上案例：dev 数据目录索引重建后，登录瞬间判定看到空索引，老用户被误弹引导；
@@ -132,12 +132,14 @@ v1 文件不做启动迁移：读取时视为 `decisions: []`，下一次业务�
   project 级配置按 workspace 叠加，host 均无法镜像）。可镜像来源按序：
   1. env `ZCODE_SESSION_DB_PATH` / `ZCODE_SESSION_DB`（双别名并存按 env 键序取
      后者，与 CLI env adapter 覆盖顺序一致）；
-  2. `~/.zcode/cli/config.json` 的 `storage.sessionDbPath`（CLI `createConfig`
-     默认 user config 位置在 home，**不随 App dataBaseDir 迁移**）；
-  3. 默认 `~/.zcode/cli/db/db.sqlite`（`~/` 按 homedir 展开）。
+  2. 有效 UWork CLI 根的 `config.json` 中 `storage.sessionDbPath`，通过现有公开
+     路径 API 与 Host 下发给 Agent 的用户根保持一致；
+  3. Desktop 的有效 CLI 根 `db/db.sqlite`，或未升级 Source Server 装配层注入的 `defaultSessionDbPath`。
+     仅 `UWORK_SESSION_DB_MIGRATION=1` 的配套 Desktop 启动门禁按 `specs/session-database-root-upgrade.md` 升级旧库；未升级进程保留历史默认，本证据读取器不另行迁移或切换。
      值为绝对路径（含 `~/` 展开）才作为证据位置；相对路径 → 未知 → 跳过本证据源
      （继续检查旧版快照目录），不得按 host cwd 猜测。配置读取/解析失败（非 ENOENT）
      上抛：配置读不出来时会话库位置未知，猜测默认值会漏判自定义会话库的存量用户。
+- 不扫描上游 `~/.zcode/cli/config.json` 作为配置回退；会话库按所属宿主的真实 writer 默认或显式 sessionDbPath 定位，启用旧库升级时须先通过启动门禁。目录边界见 `specs/uwork-data-root-separation.md`。
 - 会话库以只读连接查询，WAL 未 checkpoint 的行对只读连接同样可见，与回填时序
   无关；库文件不存在（stat ENOENT）视为无证据，**其他异常（EACCES/ENOTDIR 等）
   上抛**由 UI 保守判不弹（评审 CR-02：existsSync 会把权限错误吞成 false，违反

@@ -35,7 +35,9 @@ export function resolveDesktopCliDir(env: NodeJS.ProcessEnv = process.env): stri
 
 /** 应用设置文件 `<dataRoot>/v2/setting.json`。 */
 export function resolveDesktopSettingsFile(env: NodeJS.ProcessEnv = process.env): string {
-  return join(resolveDesktopDataRootDir(env), "v2", "setting.json");
+  // bootstrap 设置 owner 固定在 home；Host 注入的运行时数据根不能把设置读者带到待迁目录。
+  const home=env.ZCODE_DESKTOP_HOME_DIR?.trim()||env.HOME?.trim()||env.USERPROFILE?.trim()||homedir();
+  return join(home,UWORK_DATA_ROOT_DIR_NAME,"v2","setting.json");
 }
 
 /** UWork 自己的插件同步根 `<dataRoot>/plugins`（区别于 CLI 缓存 `<dataRoot>/cli/plugins`）。 */

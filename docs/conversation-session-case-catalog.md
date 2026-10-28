@@ -579,7 +579,7 @@ Task 生命周期动作的产品入口固定在左侧 task 列表：重命名、
 | E06 | `running`，存在已稳定 assistant 历史；当前 primary turn、foreground subagent、goal continuation 或 goal verifier 可仍在运行     | fork stable assistant message                               | runningStableAssistantForkAllowed + forkDoesNotCopyBackgroundWork | 创建 child session；child 只复制 fork 点前稳定 transcript、fork 点配置和 fork 点前 goal 状态，不复制父 queue、active/background work 或 continuation inbox，不回滚共享 workspace；父 session 继续运行                                                                                                                                                                                              | accepted |
 | E07 | 目标 fork 点为 `completed(success)` assistant；父 session 已有 goal/target，queue 任意                                          | fork stable assistant message                               | forkInheritsSessionGoal + forkDoesNotCopyQueue                    | 创建 child session；child 继承 fork 点之前的 goal target、iteration、verifier timeline；父 queue 保留；child queue 为空；若父 session 保留 held queue，创建 queue 的输入必须发生在父 active turn 明确运行中，不能依赖刚完成时的短暂 busy 窗口                                                                                                                                                      | accepted |
 | E08 | `error`，或 assistant turn 只有 failed/error partial、没有进入稳定 `completed(success)` 产品最终态                              | fork assistant partial                                      | forkRequiresStableCompletedAssistant                              | reject 或入口 disabled；不能创建 fork session；failed/error partial 不形成可 fork 的稳定历史点；stop 产生的 interrupted partial 由 E02/E03 单独覆盖                                                                                                                                                                                                                                                | accepted |
-| E09 | session 曾 edit 旧 user query 并完成重跑                                                                                        | fork 编辑后 active branch 的 assistant message              | forkUsesEditedActiveBranch                                        | edit ACK 后 replacement user row 必须在 branch cut 后可见；创建 child session 后只包含编辑后的 active branch，不带被 edit/rewind 掉的旧 user/assistant 分支；edit/fork 的定位必须绑定当前 session 的稳定 message id，不能被其他 session 的最新 DOM 状态串扰                                                                                                                                                                                              | accepted |
+| E09 | session 曾 edit 旧 user query 并完成重跑                                                                                        | fork 编辑后 active branch 的 assistant message              | forkUsesEditedActiveBranch                                        | edit ACK 后 replacement user row 必须在 branch cut 后可见；创建 child session 后只包含编辑后的 active branch，不带被 edit/rewind 掉的旧 user/assistant 分支；edit/fork 的定位必须绑定当前 session 的稳定 message id，不能被其他 session 的最新 DOM 状态串扰                                                                                                                                        | accepted |
 | E10 | assistant turn 经历工具调用后才产生最终回复；UI 将多条 raw assistant 合并为一条可见 assistant；v4 可保留多段 assistant text row | fork 最终可见 assistant message                             | forkCopiesLogicalAssistantTurnEnd                                 | 创建 child session；按持久化 turn anchor 解析固定 ordered messageIds 与 boundaryMessageId，child 必须包含同一逻辑 turn 内工具结果之后的最终 assistant 回复、对应 tool block 和该 turn 已产生的 workspace 文件事实；fork 不得使用早段 raw assistant id 截断历史；v4 多段 assistant row 只能在该 turn 最后一段完成态 assistant text row 上展示 fork action；retry 另受 latestAssistantRetryOnly 约束 | accepted |
 | E11 | `completed(success)`，当前模型的思考档位不是通用五档（代表：GLM-5.2=`max/high/nothink`）                                        | fork assistant message，打开 child 后再冷恢复并发送后续输入 | forkInheritsModelThoughtCapabilities                              | child 必须在原子 fork bundle 中写入现有扁平 `runtime/model_selection={modelId,providerId,thoughtLevel?}`，并让 live runtime、冷恢复 snapshot 与后续 provider 请求使用同一 fork-time provider/model/thought；菜单只能显示该模型实际档位，禁止回退通用五档。旧 child 若没有 entry，只允许从同一 `forkOrigin` 的 hidden fork notice 恢复 variant，不迁移或扫描无关历史                                | accepted |
 
@@ -2143,7 +2143,7 @@ artifact 为 `packages/desktop/.e2e-artifacts/desktop-e2e-20260722-144548-301/su
 | T12  | 桌面本地 draft 粘贴两张 inline 图片，当前模型明确支持图片；动态图片 provider 在旧 Electron/Host/Agent 完全退出后写入本 spec 隔离 HOME | 新进程首次读取配置，eager upload 完成后立即发送正文                         | pastedImageProviderPathProjection            | provider seed 不与旧进程后台 refresh 并发写同一配置；durable data URL artifact 位于 `cli/artifacts/<session>`，派生图片位于独立的 `cli/image-cache/<session>`；最终真实 user content 严格保持 `query -> image1 -> image2 -> path1 -> path2`，每个 path 为普通 `[Image: source: <absolute path>]` 文本，不进入 system-reminder、runtime attachment 或 MCS | accepted |
 | T13  | T12 会话已完成并持久化，派生图片文件被删除但 durable data URL artifact 仍在                                                           | 完整重启 CLI/Electron，恢复该 session 后发送普通 follow-up                  | pastedImageDerivedPathColdRebuild            | 动态 provider 仍来自进程退出窗口写入的隔离配置；发送边界从 durable artifact 重建同一确定性路径；provider-visible 历史仍含 image base64 与恰好一个对应 path 文本，UI 历史附件不因派生缓存缺失而变化                                                                                                                                                       | accepted |
 | T14  | 历史 user turn 含 inline/paste 图片，当前模型明确 `supportsImages=false`；text-only provider 与 T12 同批在无并发 writer 时写入        | 发送后续普通文本                                                            | pastedImageTextOnlyPathProjection            | provider seed 不会被旧 Host 的 registry refresh 覆盖；image block 被替换成既有 omitted 文本且请求不含 `data:image`；同一真实 user content 继续保留派生 absolute path，path 不被包进 system-reminder/MCS                                                                                                                                                  | accepted |
-| T15 | App Personal 模型缺失输入能力配置，同时存在完整的图片模型 | 冷启动加载两份配置并打开模型菜单 | incompleteImageCapabilityBlocksExecution | App Registry 不收录不完整模型为可执行选项，完整图片模型仍可选；不能把缺省 seed 的 text-only 默认值当作未知能力。旧 unknown-capability 测试名不再证明当前 Registry 支持缺失能力 | accepted |
+| T15  | App Personal 模型缺失输入能力配置，同时存在完整的图片模型                                                                             | 冷启动加载两份配置并打开模型菜单                                            | incompleteImageCapabilityBlocksExecution     | App Registry 不收录不完整模型为可执行选项，完整图片模型仍可选；不能把缺省 seed 的 text-only 默认值当作未知能力。旧 unknown-capability 测试名不再证明当前 Registry 支持缺失能力                                                                                                                                                                           | accepted |
 | T16  | 派生缓存支持该 inline 图片 MIME，但派生文件和 durable artifact 都不可读取                                                             | 发送请求进入最终 provider projection                                        | imagePathMaterializationFailsClosed          | 请求在本地以明确的附件物化错误失败；不得向 provider 发送空 path、失效 path 或缺少 path 的降级请求                                                                                                                                                                                                                                                        | accepted |
 | T17  | inline 图片 MIME 不在派生缓存支持范围，但原图片 provider 链路可继续处理                                                               | eager prime 或发送前 ensure 遇到该 MIME                                     | unsupportedImageCacheSkipsPath               | 派生缓存返回 unsupported，不写 cache、不追加 path，也不中断请求；支持图片的模型仍收到原 image/base64，text-only 模型仍收到既有 omitted 文本                                                                                                                                                                                                              | accepted |
 | AT01 | 桌面任一 V4 对话 pane，composer 无附件                                                                                                | 把一个或多个 OS 文件拖到时间线、空态或状态区                                | paneWideExternalFileDrop                     | 指针所在 pane 的 composer 仅添加一次附件，随后沿原有预传/发送门禁执行；其他 split pane 不接收                                                                                                                                                                                                                                                            | accepted |
@@ -3548,26 +3548,21 @@ grep；`rg` 只选一个代表命令证明两种开关状态一致。
 
 ## CDD. Configurable Data Directory / 可配置数据存储路径
 
-本组只把普通 conversation 作为 App 数据迁移、冷启动恢复和新路径写入的真实触发器，不改变
-conversation 协议。`dataBaseDir` 只迁移 App 数据；storage profile 已回滚，CLI session、plugins、
-agents、commands、skills、logs 与 rollout 继续使用 `<HOME>/.zcode/cli`，项目内 `.zcode/*` 也不迁移。
+本组用普通 conversation 触发数据目录计划、冷启动恢复和新路径写入，不改变 conversation 协议。
+2026-10-28 用户确认的冷迁移合同替代此前仅复制 App 的临时规则：设置只保存 pending 请求，运行中
+继续写当前根；重启时在业务进程启动前复制整个 UWork 自有 `.uwork` 根（含 App、CLI 和用户资产）。
+项目内 `.zcode/*`、会话 cwd/identity、显式外部 CLI 根保持各自原语义。细则见 `specs/session-database-root-upgrade.md`。
 
-用户于 2026-08-10 确认目标语义为：App `.zcode/v2` 与非项目 conversation workspace 一并迁移；
-只允许 idle 发起；保存后进入禁止旧路径继续写入的待重启态；非空 ZCode 目标拒绝；冷重启后原任务
-历史可见且可继续对话。首轮不改产品，因此只实现空目标、idle、保存后立即重启的 CDD01，其他已
-确认边界保留为后续产品实现/验证项。
+| ID    | 前置状态                                                                               | 用户/系统事件                                         | 规则命中             | 期望结果                                                                                                                                                           | Review   |
+| ----- | -------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| CDD01 | Desktop 本地；项目 workspace；已有 completed task；目标为空；CLI 使用受控 `.uwork/cli` | 设置页保存 pending 后继续发一轮对话，再完整重启并续聊 | pendingThenColdCopy  | 保存不切活动根、不复制；重启包含 pending 期间的新写入；App/CLI 使用新根；原历史可续聊；旧根保留且不再写；项目 cwd/文件不变                                         | accepted |
+| CDD02 | UWork 自有 workspace 和用户资产已有文件；目标为空                                      | 保存后完整冷重启                                      | copyOwnedRoot        | 整个 `.uwork` 根非覆盖复制；SQLite 使用一致性 backup；保留业务 cwd/identity；仅已知用户配置路径白名单重定位。文件边界由 service fixtures 验证，未新增独立 GUI case | accepted |
+| CDD03 | 当前 task busy/streaming，或已有 pending                                               | 保存目录计划，或继续会话                              | continueUntilRestart | 保存仅记录请求，不在运行中复制；重启前继续写当前根，实际停写和 writer 检查发生在下次启动。pending 后继续写入并入 CDD01                                             | accepted |
+| CDD04 | 目标 `.uwork` 已有非本请求数据，或保存后被外部占用                                     | 下次启动执行计划                                      | rejectForeignTarget  | 冷 gate 拒绝非空目标，不提交活动根；可取消已确认未提交的请求并继续使用原根；foreign 数据保留。文件边界由 fixtures 验证，保存后冲突/取消并入 DBROOT-02              | accepted |
 
-| ID    | 前置状态                                                                                                                 | 用户/系统事件                                                              | 规则命中                            | 期望结果                                                                                                                                                                                                             | Review        |
-| ----- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| CDD01 | Desktop 本地 `desktop-continuous`；项目 workspace；已有 completed task；目标目录存在且为空；CLI 位于 `<HOME>/.zcode/cli` | 设置页选择目标并保存；不再执行业务操作，立即完整冷重启；在原 task 继续对话 | idleEmptyTargetImmediateColdRestart | UI 显示待重启；bootstrap 指针保存目标；App `v2` canary/task index 被复制；重启后原历史可见且 follow-up completed；新 task-index 更新只发生在目标 App 根；CLI 根与项目 `.zcode/*` 保持不变，目标下不出现 `.zcode/cli` | accepted      |
-| CDD02 | 非项目 conversation workspace 已有用户文件；目标目录为空                                                                 | 保存新目录并完整冷重启                                                     | copyConversationWorkspace           | `<old>/.zcode/workspace` 非覆盖复制到目标且文件可继续使用；当前 `copyDataDirectory()` 只复制 `.zcode/v2`，实现与已确认 spec 冲突                                                                                     | bug-candidate |
-| CDD03 | 当前 task 为 busy/streaming，或保存成功后尚未重启                                                                        | 用户尝试迁移，或继续发起会写 App 数据的操作                                | idleOnlyAndPendingRestartWriteBlock | busy 时不开始复制；保存成功后进入待重启态并阻止继续写旧 App 根。CDD01 只用 idle 前置并立即重启，不把测试约束冒充产品 guard                                                                                           | planned       |
-| CDD04 | 目标目录已有 `.zcode/v2`、task index、provider/credential/session 等任一 ZCode 数据                                      | 用户尝试保存该目录                                                         | rejectNonEmptyZCodeTarget           | 迁移被拒绝，旧根和目标根均不修改；不执行逐文件 `force:false` 拼接，也不尝试合并 SQLite、凭据、provider 或 session 状态                                                                                               | planned       |
-
-剪枝：首个 WDIO 只保留 CDD01 的一个代表组合，不展开 queue、stop、reconnect、recovery、复制失败、
-Windows 安装目录、SSH/WSL/Docker、remote workspace、手机 `web-remote-replayable`、theme、locale、
-provider family 或非空目标。CDD02-CDD04 的确定性文件/校验边界应先由 service/focused tests 证明，产品
-实现完成后再决定是否增加 GUI case；其中 `CDD03` 不允许用 sleep 模拟写入屏障。
+剪枝：GUI 保留 CDD01 主路径及 DBROOT-02 冲突取消，不展开 queue、stop、remote workspace、theme、locale
+或 provider family。SQLite/WAL、路径白名单、锁、权限、故障恢复和跨平台 writer inventory 使用 focused tests；
+它们不代表 Windows/Linux Desktop 实机验收。不得用 sleep 模拟停写屏障。
 
 ## QR. Coding Plan Quota Reset / 对话 Composer 额度重置
 
@@ -4150,7 +4145,7 @@ SSH 代表完整 Electron E2E；WSL/Docker 复用同一 adapter/backend 合同�
 | RPN-14  | 项目连接状态与设备标注同源；项目编辑与设备设置分别操作                                              | accepted；状态 UT、原型深浅主题/窄屏、本地 Electron 离线详情/Escape 通过；手机真机待补                                                                                                                                                                                                            |
 | RPN-15  | 目录绑定失败不生成幽灵项目                                                                          | accepted；目录失败组件 UT 通过；真实远端权限/路径错误待补                                                                                                                                                                                                                                         |
 | RPN-16  | 外部删除一个远程项目目录后重连：失败项目保留、其他项目恢复，目录恢复后可重试                        | accepted；真实磁盘 + Host/Registry、真实 File RPC、Renderer 组恢复回归通过；真实 SSH / 手机 E2E 待验证（当前环境缺 SSH 凭据）                                                                                                                                                                     |
-| RPN-17  | 桌面端远程项目菜单进入「远程设备设置」并定位所属设备卡；本地项目与 Web 端不显示                     | pending；组件 UT + 本地 Electron 离线项目 E2E（`conversation-session-rpn-project-navigation.test.ts`），2026-10-16 macOS 2/2 通过（run `desktop-e2e-20261016051334510-p86123-0b51278142f23118`、`desktop-e2e-20261016051551421-p89435-dd716c1c99ce78e4`）；在线 SSH、Windows/Linux 未执行                                                                                                                                                                                            |
+| RPN-17  | 桌面端远程项目菜单进入「远程设备设置」并定位所属设备卡；本地项目与 Web 端不显示                     | pending；组件 UT + 本地 Electron 离线项目 E2E（`conversation-session-rpn-project-navigation.test.ts`），2026-10-16 macOS 2/2 通过（run `desktop-e2e-20261016051334510-p86123-0b51278142f23118`、`desktop-e2e-20261016051551421-p89435-dd716c1c99ce78e4`）；在线 SSH、Windows/Linux 未执行         |
 
 RPN-16 回归（2026-09-16）：`remoteWorkspacePreparation.test.ts` 覆盖真实目录删除后的手动/自动恢复、恢复目录后重试与取消；`serverRemoteConnection.test.ts` 覆盖真实 File RPC 的 ENOENT 与共享连接存活；`remoteWorkspaceDirectoryRecovery.test.ts` 覆盖失败发起项目与两个 sibling 的隔离。185 条相关测试通过。本地项目导航 E2E 重跑 1/1 通过，run `desktop-e2e-20260916150456883-p88284-c3ee928bcbf4fc2e`；它只证明导航/离线条目保留，不能替代真实 SSH 三项目删除场景或手机 E2E。
 
@@ -4283,12 +4278,12 @@ R3A-UI-04 / RDUX-11-04 回归（2026-10-12 macOS 真实 SSH 1/1 PASS，仍 pendi
 
 ### RDUX-13 设置设备卡与更新（accepted）
 
-| 用例       | 设置、动作与断言                                                                                                                      | 证据入口                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 用例       | 设置、动作与断言                                                                                                                                                                    | 证据入口                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | RDUX-13-01 | 真实 SSH 成功后设备卡显示连接、项目；在线缺少草稿缓存、断线后残留其他项目缓存时，点击最近项目直接打开原项目并校正草稿范围，项目 ID 与入口数不变，不出现创建弹窗；更多菜单含设备信息 | `manual-review/pending/conversation-session-remote-device-cards.test.ts`                                        |
-| RDUX-13-02 | 未占用端口连接失败 → 设置页无新增设备卡 → 默认折叠未完成区域 → 展开、删除/清理                                                        | 同上                                                                                                            |
-| RDUX-13-03 | 浅色/深色 × 1440/900/480px，设备卡与未完成列表截图                                                                                    | 同上；480px 是桌面窄屏，手机不开放设备管理                                                                      |
-| RDUX-13-04 | 同设备跨连接/重连/重启去重；稍后仅本次运行；可选更新不弹 toast；强制更新任务清单                                                      | `sourceServerUpdateNotifications`、`sourceServerUpdatePreferences`、`sourceServerManagementPanel` 组件/单元回归 |
+| RDUX-13-02 | 未占用端口连接失败 → 设置页无新增设备卡 → 默认折叠未完成区域 → 展开、删除/清理                                                                                                      | 同上                                                                                                            |
+| RDUX-13-03 | 浅色/深色 × 1440/900/480px，设备卡与未完成列表截图                                                                                                                                  | 同上；480px 是桌面窄屏，手机不开放设备管理                                                                      |
+| RDUX-13-04 | 同设备跨连接/重连/重启去重；稍后仅本次运行；可选更新不弹 toast；强制更新任务清单                                                                                                    | `sourceServerUpdateNotifications`、`sourceServerUpdatePreferences`、`sourceServerManagementPanel` 组件/单元回归 |
 
 新增 E2E 保持 pending，不自动人工转正。远控 management 门禁、任务 continuous/replayable 合同不变。
 
@@ -4698,14 +4693,14 @@ SHARE34 重构收尾：旧 scope/stage/view、正文勾选、遮罩和 reopen ta
 
 ## 右侧面板切换的渲染隔离（SPT，accepted/pending）
 
-| Case  | 前置与操作                                                                 | 预期                                                                                                                                           |
-| ----- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| SPT01 | Dev 空草稿、多个项目；深浅主题各展开/收起右侧面板两轮                      | 面板状态切换；项目数据与导航语义未变时，ProjectNodeContent 渲染次数为零。记录 RAF 耗时，不用机器相关时间阈值判定。无模型请求。                 |
-| SPT02 | 430/1250px、中英、深浅主题；工具栏完整布局、缩窄、恢复、改变模型文案       | 完整布局放得下时不克隆；溢出时沿用折叠顺序；恢复后清除压缩态；打开的菜单、焦点和触发按钮实例保持。                                             |
-| SPT03 | 44 个项目，桌面/手机布局、深浅主题；父级更新、真实新建按钮、等价刷新、改名 | 前三项项目内容重渲染为零；新建进入草稿；改名后显示新名称。使用实际新建/远端导航 hook 与 RPC 方法代理，手机走 replayable 分支。                 |
-| SPT04 | 多项目真实 Dev App，深浅主题；已有会话按 Cmd/Ctrl+N，回选会话后再次新建    | 收到原生菜单事件；保持项目归属并显示草稿；项目内容零重渲染；回选仍命中当前任务。使用真实 Root/App/WorkspaceShell/tab store，记录首帧和 trace。 |
-| SPT05 | 批量收起工具；桌面/手机、深浅主题、中英文；默认展开、嵌套和 forceMount | accepted：挂载/重挂载不测量完全隐藏详情；首次展开、收起和快速反向切换保留动画，鼠标/键盘可用，展开记忆不丢；默认展开和 forceMount 高度有效。记录真实 DOM 测量、动画事件和耗时；时间线滚动沿用 SRM10。 |
-| SPT06 | 44 个项目，桌面/手机、深浅主题；一个任务持续更新活动时间，再完成、改名和操作项目 | 活动更新只渲染所属项目；其他项目内容零渲染；侧栏与消息区 loading 保持旋转但不逐帧重算样式；完成后 loading 消失，标题、未读与项目操作继续使用最新数据。 |
+| Case  | 前置与操作                                                                       | 预期                                                                                                                                                                                                  |
+| ----- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SPT01 | Dev 空草稿、多个项目；深浅主题各展开/收起右侧面板两轮                            | 面板状态切换；项目数据与导航语义未变时，ProjectNodeContent 渲染次数为零。记录 RAF 耗时，不用机器相关时间阈值判定。无模型请求。                                                                        |
+| SPT02 | 430/1250px、中英、深浅主题；工具栏完整布局、缩窄、恢复、改变模型文案             | 完整布局放得下时不克隆；溢出时沿用折叠顺序；恢复后清除压缩态；打开的菜单、焦点和触发按钮实例保持。                                                                                                    |
+| SPT03 | 44 个项目，桌面/手机布局、深浅主题；父级更新、真实新建按钮、等价刷新、改名       | 前三项项目内容重渲染为零；新建进入草稿；改名后显示新名称。使用实际新建/远端导航 hook 与 RPC 方法代理，手机走 replayable 分支。                                                                        |
+| SPT04 | 多项目真实 Dev App，深浅主题；已有会话按 Cmd/Ctrl+N，回选会话后再次新建          | 收到原生菜单事件；保持项目归属并显示草稿；项目内容零重渲染；回选仍命中当前任务。使用真实 Root/App/WorkspaceShell/tab store，记录首帧和 trace。                                                        |
+| SPT05 | 批量收起工具；桌面/手机、深浅主题、中英文；默认展开、嵌套和 forceMount           | accepted：挂载/重挂载不测量完全隐藏详情；首次展开、收起和快速反向切换保留动画，鼠标/键盘可用，展开记忆不丢；默认展开和 forceMount 高度有效。记录真实 DOM 测量、动画事件和耗时；时间线滚动沿用 SRM10。 |
+| SPT06 | 44 个项目，桌面/手机、深浅主题；一个任务持续更新活动时间，再完成、改名和操作项目 | 活动更新只渲染所属项目；其他项目内容零渲染；侧栏与消息区 loading 保持旋转但不逐帧重算样式；完成后 loading 消失，标题、未读与项目操作继续使用最新数据。                                                |
 
 规格见 [Side Pane tabs](ui/side-pane-tabs.md)。SPT01/04 使用真实 Dev App 的多项目现场，SPT02/03/05/06 使用真实 hook/组件的独立浏览器夹具。SPT03 的 Host 与手机 bridge 响应使用 fixture；不覆盖远端传输、业务数据迁移或模型请求。SPT04 不发送 prompt，保留既有草稿预热；原生菜单链路只适用于桌面，手机共享边界由 SPT03 验证。
 
@@ -4729,7 +4724,7 @@ TD01–TD08 均 accepted，详见 [规则与用例](ui/composer-text-draft-persi
 | ID    | Setup / Action                                                                                                   | Assertion                                                                                                                                             |
 | ----- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SPR01 | 生产 renderer、8 个固定已完成历史会话；真实点击切换 136 次；8/40/72/136 次及停止切换后，等待 35 秒并强制 GC 两次 | 非当前会话 snapshot 与已关闭 store 为零，当前 store 恰好一个；历史正文每次可见；保存各检查点 heap snapshot，不用 RSS 或切换耗时阈值代替对象释放断言。 |
-| SPR02 | lease owner 切换、草稿晋升后返回草稿、layer 换代、Suspense 中止 render                                              | 新 owner 的首帧不能读取旧 lease；同 lease 的草稿晋升不重挂 Composer；中止 render 不替换已提交 owner。                                                           |
+| SPR02 | lease owner 切换、草稿晋升后返回草稿、layer 换代、Suspense 中止 render                                           | 新 owner 的首帧不能读取旧 lease；同 lease 的草稿晋升不重挂 Composer；中止 render 不替换已提交 owner。                                                 |
 
 SPR01 是连接隔离 Electron 的独立 `node:test` / CDP E2E，保持 pending，不进入 WDIO 或 Docker preset；无模型请求。SPR02 沿用 SessionPane 组件回归与 lease owner 单测。共享 UI 引用边界适用于 desktop continuous / mobile replayable；本项不改变 Host、协议或身份路由，真实手机传输验证单独记录。
 
@@ -4738,7 +4733,7 @@ SPR01 是连接隔离 Electron 的独立 `node:test` / CDP E2E，保持 pending�
 | ID    | 场景与断言                                                                | 验证                                                                                                                      |
 | ----- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | PCD01 | 侧栏/草稿菜单新建成功，当前草稿左上角选中新项目，正文及附件保留；深浅主题 | `packages/ui/test/browser/manual-review/pending/project-created-draft.test.mjs`（pending）                                |
-| PCD02 | 已有会话、保存/刷新期间草稿换代、取消/失败不导航                          | `packages/ui/test/projectCreation.test.ts`、`composerDraftWorkspaceTransfer.test.ts`；PCD01 浏览器补已有会话                                                        |
+| PCD02 | 已有会话、保存/刷新期间草稿换代、取消/失败不导航                          | `packages/ui/test/projectCreation.test.ts`、`composerDraftWorkspaceTransfer.test.ts`；PCD01 浏览器补已有会话              |
 | PCD03 | 远端登记入口成功后选择，手机 Root 重建后保留正文、附件及分组意图          | `packages/ui/test/projectCreation.test.ts`；`conversation-session-virtual-project-mobile.test.ts`（pending，shared-host） |
 
 ## 左侧边栏 Tooltip 延迟（SBT）
@@ -4753,3 +4748,13 @@ SPR01 是连接隔离 Electron 的独立 `node:test` / CDP E2E，保持 pending�
 ## R3A-BLD-07：用户服务探测被跳过（2026-10-19）
 
 沿用 `conversation-session-r3-daemon-detached.test.ts` 的 accepted / pending 场景：独立 Linux SSH 目标首次以 detached 模式连接；桌面断开不杀 daemon。终止 daemon 后，在该目标的非交互 shell 设置 `SYSTEMD_OFFLINE=1`，确认真实 `systemctl --user show --property=Version` 退出 0 但没有属性响应，再通过桌面设备重连。必须进入 ready、`serviceRegistered=false`，Supervisor/Core 均换代，原任务可续发；最后恢复 shell 配置。禁止以替换 systemctl 或直接设置 ZCode 跳过注册开关代替该场景。
+
+## DBROOT-01 默认会话库路径升级（2026-10-28）
+
+Accepted / pending：在隔离 profile 中用真实 CLI 生成历史后构造旧默认路径布局，重启新版通过启动门禁自动迁移；验证完整 assistant 历史、带旧上下文的真实续聊、新任务写入新库，以及再次重启不重导入。源库行保持不变。实现合同见 `specs/session-database-root-upgrade.md`；用例保留 manual-review/pending，不自动晋级发布或跨平台实机验收。
+
+2026-10-28 验证：DBROOT-01/02 与调用轨迹同轮 2/2 PASS；CDD01 冷重启与可见界面续聊 1/1 PASS。报告见 [验收记录](testing/session-database-root-upgrade-2026-10-28.md)，新候选仍保留 pending。
+
+CDD01（2026-10-28 用户确认更新）：保存数据目录只登记pending请求、活动根与磁盘目标不变；冷启动在所有SQLite/Agent之前完成整根快照迁移并提交bootstrap设置；App与CLI新默认库均切新根，历史session cwd不变；新根续聊只推进新App/CLI库，原根保留。取代旧“保存即复制、CLI库不移动”的临时合同。
+
+DBROOT-02（2026-10-28，accepted/pending）：保存冷迁移计划后目标被外部占用 → 重启错误gate无业务编辑器 → 取消未提交计划 → 原活动根与历史可用，外部目标文件不被删除。与DBROOT-01同pending spec，未自动晋级。

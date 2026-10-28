@@ -62,6 +62,23 @@ jobs:
           packages/ui/test/v4ConversationDraftEmptyStateLogo.test.ts
       - name: Validate complete desktop Agent and shared runtime build
         run: node scripts/build-desktop-agent-cli.mjs
+      - name: Validate CLI session database upgrade safety
+        run: >-
+          pnpm exec vitest run
+          --config "$PWD/apps/zcode-cli/vitest.config.ts"
+          --root "$PWD/apps/zcode-cli"
+          packages/bootstrap/src/session-storage-migration
+          packages/bootstrap/tests/storage-startup.test.ts
+          packages/adapters/tests/config.test.ts
+      - name: Validate cold data directory and writer gates
+        run: >-
+          pnpm exec vitest run
+          packages/desktop/src/main/data-directory-startup
+          packages/desktop/src/host/database-startup/contract.test.ts
+          packages/desktop/test/legacySessionWriterGate.test.ts
+          packages/services/src/project-storage/cold-startup
+          packages/services/test/dataDirectoryPendingSettings.test.ts
+          packages/desktop/test/sessionDatabaseUpgradeFixture.test.ts
       - name: Validate tool schemas and image dependency compatibility
         run: >-
           pnpm exec vitest run
@@ -161,6 +178,22 @@ jobs:
         run: pnpm --dir packages/desktop exec node scripts/bundle.mjs --os ${{ matrix.platform }} --arch ${{ matrix.arch }} --skip-prepare
       - name: Verify bundled public WeCom configuration
         run: pnpm exec tsx scripts/desktop-enterprise-identity.ts verify ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Verify packaged legacy-session automatic upgrade
+        if: matrix.platform != 'linux'
+        timeout-minutes: 10
+        run: pnpm --dir packages/desktop exec tsx test/sessionDatabaseUpgradePackaged.e2e.mjs ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Verify packaged Linux legacy-session automatic upgrade
+        if: matrix.platform == 'linux'
+        timeout-minutes: 10
+        run: xvfb-run -a pnpm --dir packages/desktop exec tsx test/sessionDatabaseUpgradePackaged.e2e.mjs ${{ matrix.platform }} ${{ matrix.arch }}
+      - name: Preserve packaged upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: packaged-upgrade-${{ matrix.platform }}-${{ matrix.arch }}
+          path: packages/desktop/.e2e-artifacts/packaged-upgrade-*
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify fresh desktop can open WeCom scanning
         if: matrix.platform != 'linux'
         timeout-minutes: 10

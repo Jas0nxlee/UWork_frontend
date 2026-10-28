@@ -845,6 +845,33 @@ describe("createMcpAdapter", () => {
     expect(clientCallToolMock).toHaveBeenCalledTimes(1);
   });
 
+  it("removes the Host session migration marker from explicit MCP env without dropping directed CUA values", async () => {
+    const adapter = createMcpAdapter({ env: { PATH: dirname(process.execPath) } });
+    try {
+      await adapter.connectServer("demo", {
+        command: "node",
+        type: "stdio",
+        env: {
+          UWORK_SESSION_DB_MIGRATION: "1",
+          uwork_session_db_migration: "1",
+          KEEP_EXPLICIT: "yes",
+          ZCODE_CUA_PERMISSION_BROKER_SOCKET: "/tmp/targeted-cua.sock",
+          ZCODE_CUA_PLUGIN_AUTHORITY: "targeted-authority",
+        },
+      });
+      const options = capturedStdioOptions[0] as { env?: Record<string, string> };
+      expect(options.env?.UWORK_SESSION_DB_MIGRATION).toBeUndefined();
+      expect(options.env?.uwork_session_db_migration).toBeUndefined();
+      expect(options.env).toMatchObject({
+        KEEP_EXPLICIT: "yes",
+        ZCODE_CUA_PERMISSION_BROKER_SOCKET: "/tmp/targeted-cua.sock",
+        ZCODE_CUA_PLUGIN_AUTHORITY: "targeted-authority",
+      });
+    } finally {
+      await adapter.disconnectServer("demo");
+    }
+  });
+
   it("injects unified network env into stdio MCP transports", async () => {
     const adapter = createMcpAdapter({
       env: {

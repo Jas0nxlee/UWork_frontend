@@ -2,12 +2,20 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  buildMcpStdioEnv,
-  prependRunningNodeDirectory,
-} from "../src/mcp/network.js";
+import { buildMcpStdioEnv, prependRunningNodeDirectory } from "../src/mcp/network.js";
 
 describe("MCP stdio environment", () => {
+  it("does not give MCP children the Host session migration marker", () => {
+    const env = buildMcpStdioEnv({
+      env: {
+        PATH: "/bin",
+        UWORK_SESSION_DB_MIGRATION: "1",
+        ZCODE_TOOL_ENV_PASSTHROUGH_JSON: JSON.stringify({ UWORK_SESSION_DB_MIGRATION: "1" }),
+      },
+    });
+    expect(env.UWORK_SESSION_DB_MIGRATION).toBeUndefined();
+  });
+
   it("prepends the running Node directory so portable node commands work remotely", () => {
     const originalPath = ["/definitely/missing/bin", "/also/missing/bin"].join(delimiter);
 

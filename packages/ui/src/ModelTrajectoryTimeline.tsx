@@ -72,7 +72,8 @@ export function ModelTrajectoryTimeline({
     }
     let secondFrame = 0;
     const firstFrame = window.requestAnimationFrame(() => {
-      virtualizer.measure();
+      // 全量 measure 会清空已知高度：预滚动后的 offset 仍是旧值，目标随即被虚拟卸载，
+      // 出现“1/1 命中却定位不到”。由 measureElement/ResizeObserver 保持尺寸事实再精确定位。
       secondFrame = window.requestAnimationFrame(() => {
         const activeRange = applyTrajectorySearchHighlights({
           root,

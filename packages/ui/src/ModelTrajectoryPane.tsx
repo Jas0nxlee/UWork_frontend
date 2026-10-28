@@ -174,7 +174,7 @@ export function ModelTrajectoryPane({
   }, [intl, platform, sourceDirectory, sourceFiles, taskId]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="@container/trajectory-pane flex h-full min-h-0 flex-col bg-background">
       <header className="flex shrink-0 flex-col px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1" title={taskId}>

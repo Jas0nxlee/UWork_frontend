@@ -11,5 +11,6 @@ export const hostDatabaseStartupModule = {
     "tasksStorageWorker.ts",
     "hostDatabaseStartup.ts",
     "storagePreparationProcesses.ts",
+    "../databaseStartupCoordinator.ts",
   ],
 } as const;

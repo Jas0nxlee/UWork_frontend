@@ -8,9 +8,9 @@
   ],
   "fileFixtures": [
     {
-      "path": ".zcode/cli/debug/model-io-<runtime-task-id>.jsonl",
+      "path": ".uwork/cli/<runtime-mode>/model-io-<runtime-task-id>.jsonl",
       "source": "created-by-spec",
-      "description": "spec 按真实 task id 写入 80 条确定性 model-io 记录，覆盖投影、错误、虚拟列表、搜索与窄布局。"
+      "description": "等待真实 assistant 回复并核验 CLI 原始 model-io 后，spec 在其实际 debug/rollout 文件中按真实 task id 追加 80 条确定性记录，覆盖投影、错误、虚拟列表、搜索与窄布局。"
     }
   ],
   "requests": [
