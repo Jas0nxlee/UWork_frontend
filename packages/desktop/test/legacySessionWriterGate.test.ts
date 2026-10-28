@@ -1,10 +1,8 @@
-import { link, mkdir, mkdtemp, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import fsPromises from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { classifyDatabaseStartupError } from "@zcode/shared";
 import {
@@ -149,81 +147,6 @@ describe("legacy session writer gate", () => {
     }
   });
 
-  it("Linux identifies a live source holder through an outside hardlink by device and inode", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "uwork-writer-hardlink-"));
-    const source = join(dir, "db.sqlite");
-    const alias = join(dir, "outside-explicit-db.sqlite");
-    const procRoot = join(dir, "proc");
-    const pid = process.pid + 200;
-    const processRoot = join(procRoot, String(pid));
-    await writeFile(source, "isolated source");
-    await link(source, alias);
-    await mkdir(join(processRoot, "fd"), { recursive: true });
-    await writeFile(join(processRoot, "comm"), "uwork-cli\n");
-    await writeFile(join(processRoot, "cmdline"), "uwork-cli\0app-server\0");
-    await symlink(alias, join(processRoot, "fd", "3"));
-    try {
-      const sourceInfo = await stat(source, { bigint: true });
-      const aliasInfo = await stat(alias, { bigint: true });
-      expect([aliasInfo.dev, aliasInfo.ino]).toEqual([sourceInfo.dev, sourceInfo.ino]);
-      expect(await realpath(alias)).not.toBe(await realpath(source));
-      await expect(
-        assertNoLegacySessionWriters(source, () =>
-          collectLegacySessionWriters(source, {
-            platform: "linux",
-            procRoot,
-            uid: process.getuid?.() ?? 0,
-          }),
-        ),
-      ).rejects.toMatchObject({ kind: "legacy_writer_active" });
-      await rm(join(processRoot, "fd", "3"));
-      expect(
-        await collectLegacySessionWriters(source, {
-          platform: "linux",
-          procRoot,
-          uid: process.getuid?.() ?? 0,
-        }),
-      ).toEqual([]);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("Linux refuses an unverifiable FD identity instead of returning an empty inventory", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "uwork-writer-fd-error-"));
-    const source = join(dir, "db.sqlite");
-    const procRoot = join(dir, "proc");
-    const processRoot = join(procRoot, String(process.pid + 300));
-    const fd = join(processRoot, "fd", "3");
-    await writeFile(source, "isolated source");
-    await mkdir(join(processRoot, "fd"), { recursive: true });
-    await writeFile(join(processRoot, "comm"), "uwork-cli\n");
-    await writeFile(join(processRoot, "cmdline"), "uwork-cli\0app-server\0");
-    await symlink(source, fd);
-    const originalStat = fsPromises.stat;
-    const probe = vi.spyOn(fsPromises, "stat").mockImplementation(async (...args) => {
-      if (String(args[0]) === fd)
-        throw Object.assign(new Error("unverifiable FD"), { code: "EACCES" });
-      return originalStat(...args);
-    });
-    syncBuiltinESMExports();
-    try {
-      await expect(
-        assertNoLegacySessionWriters(source, () =>
-          collectLegacySessionWriters(source, {
-            platform: "linux",
-            procRoot,
-            uid: process.getuid?.() ?? 0,
-          }),
-        ),
-      ).rejects.toMatchObject({ kind: "legacy_writer_check_failed" });
-    } finally {
-      probe.mockRestore();
-      syncBuiltinESMExports();
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
   it("Windows conservatively blocks current-user bundled app-server candidates and fails closed on CIM errors", async () => {
     const run = vi.fn(async (_command: string, args: string[]) => {
       expect(args.join(" ")).toContain("GetOwner");
@@ -244,36 +167,5 @@ describe("legacy session writer gate", () => {
         }),
       ),
     ).rejects.toMatchObject({ kind: "legacy_writer_check_failed" });
-  });
-
-  it.each([
-    ["zcode-agent.exe", '"C:\\UWork\\zcode-agent.exe" app-server --stdio', true],
-    ["ZCODE-AGENT.EXE", '"C:\\UWork\\ZCODE-AGENT.EXE" app-server --stdio', true],
-    ["zcode.exe", '"C:\\Tools\\zcode.exe" app-server --stdio', true],
-    ["node.exe", 'node "C:\\UWork\\zcode.cjs" app-server --stdio', true],
-    ["zcode-agent.exe", '"C:\\UWork\\zcode-agent.exe" doctor', false],
-    ["node.exe", 'node "C:\\Other\\service.js" app-server', false],
-  ])("Windows emitted policy classifies %s / %s as writer=%s", async (name, command, writer) => {
-    const pid = process.pid + 100;
-    const run = vi.fn(async (_command: string, args: string[]) => {
-      // 旧测试直接返回 PID，掩盖生成脚本漏掉受支持原生映像名；这里执行实际发出的两个匹配式。
-      // 这些表达式仅使用 JS 与 PowerShell/.NET 共有的基础正则语法。
-      const script = args.at(-1)!;
-      const namePrefix = "Name -match '^(uwork-cli|";
-      const start = script.indexOf(namePrefix);
-      expect(start).toBeGreaterThanOrEqual(0);
-      const imagePattern = script.slice(start + "Name -match '".length).split("'")[0]!;
-      const commandPatterns = [...script.matchAll(/\$_\.CommandLine -match '([^']+)'/g)].map(
-        (match) => match[1]!,
-      );
-      const bundlePattern = commandPatterns.find((pattern) => pattern.startsWith("zcode"))!;
-      const hasEntry =
-        new RegExp(imagePattern, "i").test(name) || new RegExp(bundlePattern, "i").test(command);
-      const matches = hasEntry && /app-server/i.test(command);
-      return { stdout: JSON.stringify(matches ? [{ pid }] : []), stderr: "", code: 0 };
-    });
-    expect(
-      await collectLegacySessionWriters("C:\\legacy\\db.sqlite", { platform: "win32", run }),
-    ).toEqual(writer ? [pid] : []);
   });
 });

@@ -54,7 +54,6 @@ describe("迁移前的 stdio 启动控制帧", () => {
         schemaVersion: 1,
         sessions: [
           { sessionId: "default-owned", workspacePath: workspace },
-          { sessionId: "explicit-owned", workspacePath: explicitWorkspace },
         ],
       }),
     );

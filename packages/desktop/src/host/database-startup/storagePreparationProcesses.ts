@@ -15,10 +15,7 @@ import {
 } from "@zcode/services/storage-startup";
 import { classifyStorageWorkerStderr } from "../storageWorkerDiagnostics.js";
 import { assertNoLegacySessionWriters } from "./legacySessionWriterGate.js";
-export {
-  assertNoLegacySessionWriters,
-  collectLegacySessionWriters,
-} from "./legacySessionWriterGate.js";
+export { assertNoLegacySessionWriters, collectLegacySessionWriters } from "./legacySessionWriterGate.js";
 
 type Phase = NonNullable<DatabaseStartupState["databasePhase"]>;
 import { workerMessageSchema } from "./contract.js";

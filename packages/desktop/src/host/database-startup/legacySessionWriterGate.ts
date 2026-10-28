@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, readdir, readlink, realpath, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 interface CommandResult {
   stdout: string;
@@ -77,7 +77,7 @@ export async function collectLegacySessionWriters(
     run?: CommandRunner;
     procRoot?: string;
     uid?: number;
-    includeAllHolders?: boolean;
+  includeAllHolders?: boolean;
   } = {},
 ): Promise<number[]> {
   const platform = options.platform ?? process.platform;
@@ -107,14 +107,7 @@ export async function collectLegacySessionWriters(
   if (platform === "linux") {
     const uid = options.uid ?? process.getuid?.();
     if (uid === undefined) throw unknownInventory();
-    const sources = new Set(
-      await Promise.all(
-        (await existingSourcePaths(sourcePath)).map(async (path) => {
-          const info = await stat(path, { bigint: true });
-          return `${info.dev}:${info.ino}`;
-        }),
-      ),
-    );
+    const sources = new Set(await existingSourcePaths(sourcePath));
     const root = options.procRoot ?? "/proc";
     const result: number[] = [];
     for (const name of await readdir(root)) {
@@ -126,23 +119,21 @@ export async function collectLegacySessionWriters(
           readFile(join(processRoot, "comm"), "utf8"),
           readFile(join(processRoot, "cmdline"), "utf8"),
         ]);
-        if (
-          !options.includeAllHolders &&
-          !isCliCandidate(`${comm.trim()} ${cmdline.split("\0").join(" ")}`)
-        )
-          continue;
+        if (!options.includeAllHolders && !isCliCandidate(`${comm.trim()} ${cmdline.split("\0").join(" ")}`)) continue;
         for (const fd of await readdir(join(processRoot, "fd"))) {
-          let identity: string;
+          let target: string;
           try {
-            // realpath 不能合并硬链接；旧写者经另一显式路径打开同库时会被漏掉。
-            // 直接跟随 proc FD 读取精确设备/inode，已 unlink 但仍打开的 FD 也保留真实身份。
-            const info = await stat(join(processRoot, "fd", fd), { bigint: true });
-            identity = `${info.dev}:${info.ino}`;
+            target = await readlink(join(processRoot, "fd", fd));
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
             throw error;
           }
-          if (sources.has(identity)) {
+          const referencedPath = target.replace(/ \(deleted\)$/, "");
+          const canonical = await realpath(referencedPath).catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return resolve(referencedPath);
+            throw error;
+          });
+          if (sources.has(canonical)) {
             result.push(Number(name));
             break;
           }
@@ -155,9 +146,7 @@ export async function collectLegacySessionWriters(
     return result;
   }
   if (platform === "win32") {
-    // Windows 的 CIM Name 是可执行映像，不随 process.title 改名；原生 fallback 仍叫 zcode-agent.exe。
-    // 遗漏该受支持入口会放过还在写旧库的原生 app-server，不能只检测 zcode.cjs。
-    const script = `$ErrorActionPreference='Stop'; $current=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $items=@(); Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(UWork|zcode|electron|node)' -or $_.CommandLine -match 'zcode\\.cjs' } | ForEach-Object { $owner=Invoke-CimMethod -InputObject $_ -MethodName GetOwner; if ($owner.ReturnValue -ne 0) { throw 'owner unavailable' }; if (($owner.Domain+'\\'+$owner.User) -eq $current) { if (!$_.CommandLine) { throw 'command unavailable' }; if ((($_.CommandLine -match 'zcode\\.cjs' -or $_.Name -match '^(uwork-cli|zcode-cli|zcode-agent|zcode)(\\.exe)?$') -and $_.CommandLine -match 'app-server') -or (${options.includeAllHolders ? "$true" : "$false"} -and (($_.Name -match '^(UWork|zcode)' -and $_.CommandLine -match 'node\\.mojom\\.NodeService') -or $_.CommandLine -match '(uwork|zcode).*([\\/]host[\\/]|[\\/]scheduler[\\/]|source-server)'))) { $items += [pscustomobject]@{pid=$_.ProcessId} } } }; ConvertTo-Json -InputObject @($items) -Compress`;
+    const script = `$ErrorActionPreference='Stop'; $current=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $items=@(); Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(UWork|zcode|electron|node)' -or $_.CommandLine -match 'zcode\\.cjs' } | ForEach-Object { $owner=Invoke-CimMethod -InputObject $_ -MethodName GetOwner; if ($owner.ReturnValue -ne 0) { throw 'owner unavailable' }; if (($owner.Domain+'\\'+$owner.User) -eq $current) { if (!$_.CommandLine) { throw 'command unavailable' }; if ((($_.CommandLine -match 'zcode\\.cjs' -or $_.Name -match '^(uwork-cli|zcode-cli|zcode)(\\.exe)?$') -and $_.CommandLine -match 'app-server') -or (${options.includeAllHolders ? '$true' : '$false'} -and (($_.Name -match '^(UWork|zcode)' -and $_.CommandLine -match 'node\\.mojom\\.NodeService') -or $_.CommandLine -match '(uwork|zcode).*([\\/]host[\\/]|[\\/]scheduler[\\/]|source-server)'))) { $items += [pscustomobject]@{pid=$_.ProcessId} } } }; ConvertTo-Json -InputObject @($items) -Compress`;
     const output = await run("powershell.exe", [
       "-NoLogo",
       "-NoProfile",

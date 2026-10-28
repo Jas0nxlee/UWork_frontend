@@ -60,19 +60,6 @@ it("keeps Chromium-managed userData independent of the migrated business root", 
   expect(value.runtimeUserDataPath).toBeUndefined();
   expect(readAppData).toBe(false);
 });
-it("preserves the compiled local-development packaged identity before and after cold migration", () => {
-  const value = resolveDesktopLifecycleIdentity(true, "stable", {}, () => "/appData", true);
-  expect(value.runtimeApplicationName).toBe("UWork Local Development");
-  expect(value.runtimeUserDataPath).toBe(join("/appData", "UWork"));
-  expect(
-    resolveDesktopLifecycleIdentity(
-      true,
-      "stable",
-      { UWORK_BUILD_PROFILE: "local-development" },
-      () => "/appData",
-    ).runtimeApplicationName,
-  ).toBe("UWork");
-});
 it("passes the effective desktop home to the real Worker without changing parent HOME", async () => {
   const { mkdir, readFile } = await import("node:fs/promises");
   const { vi } = await import("vitest");

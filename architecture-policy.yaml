@@ -799,47 +799,6 @@ modules:
     layers:
       adapters: .
     owner: messaging
-  # cua-runtime：由 architecture:adopt 登记
-  - id: cua-runtime
-    roots:
-      - packages/zcode-cua
-    managed: true
-    requires: [shared]
-    publicEntrypoints:
-      - packages/zcode-cua/index.js
-      - packages/zcode-cua/broker.js
-      - packages/zcode-cua/broker-server.js
-      - packages/zcode-cua/broker-ports.js
-      - packages/zcode-cua/broker-helper-health.js
-      - packages/zcode-cua/broker-helper-constants.js
-      - packages/zcode-cua/broker-socket-path.js
-      - packages/zcode-cua/frame-contract.js
-      - packages/zcode-cua/host-display-contract.js
-      - packages/zcode-cua/pip-session.js
-      - packages/zcode-cua/pip-session-node.js
-      - packages/zcode-cua/request-access-contract.js
-      - packages/zcode-cua/lazy-broker.js
-      - packages/zcode-cua/contract.ts
-    layers:
-      adapters: .
-    owner: desktop
-  # tool-json-schema：由 architecture:adopt 登记
-  - id: tool-json-schema
-    roots:
-      - apps/zcode-cli/packages/contracts/src/tools/tool-json-schema
-      - apps/zcode-cli/packages/contracts/src/tools/json-schema.ts
-      - apps/zcode-cli/packages/contracts/src/tools/deferred-tool-call.ts
-      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
-    managed: true
-    requires: [zcode-cli]
-    publicEntrypoints:
-      - apps/zcode-cli/packages/contracts/src/tools/tool-json-schema/contract.ts
-      - apps/zcode-cli/packages/contracts/src/tools/json-schema.ts
-      - apps/zcode-cli/packages/contracts/src/tools/deferred-tool-call.ts
-      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
-    layers:
-      domain: .
-    owner: agent-contracts
   # cli-session-storage-migration：由 architecture:adopt 登记
   - id: cli-session-storage-migration
     roots:
@@ -916,7 +875,7 @@ global:
 exceptions:
   - id: subagent-runtime-existing-inheritance-contract-edit
     rule: unmanaged-new-file
-    paths: [packages/shared/src/subagent-runtime-config.ts]
+    paths: [ packages/shared/src/subagent-runtime-config.ts ]
     reason: 已存在的共享 runtime schema 仅为插件模型覆盖增加 null 显式继承，Host/CLI 仍消费同一公开契约，不新增状态所有者或依赖。修改后的文件不冒充原样上游；例外仅接纳此既有路径，schema 往返、设置持久化、CLI 加载及 E2E 证据见 specs/official-plugin-subagent-model-defaults.md。
   - id: uwork-source-server-existing-brand-compat-edit
     rule: unmanaged-new-file

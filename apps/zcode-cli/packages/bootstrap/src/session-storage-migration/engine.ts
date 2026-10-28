@@ -174,6 +174,7 @@ function parseManifest(value: unknown): LegacySessionOwnershipManifest {
     sessions: [...manifest.sessions].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
   };
 }
+
 async function routeManifest(
   manifest: LegacySessionOwnershipManifest,
   paths: Paths,

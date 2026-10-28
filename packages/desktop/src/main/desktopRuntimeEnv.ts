@@ -71,7 +71,6 @@ export const {
   ZCODE_PRODUCT_FLAVOR,
   process.env,
   () => getElectronAppPath("appData"),
-  isLocalDevelopmentDesktopBuild,
 );
 // Chromedriver 会注入临时 --user-data-dir，并在该目录等待 DevToolsActivePort。
 // e2e 如果再用 app.setPath 覆盖 userData/sessionData，端口文件会被写到另一个目录，
