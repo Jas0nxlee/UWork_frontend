@@ -5,7 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
-export const releaseTargets = ["mac-arm64", "mac-x64", "win-x64", "linux-x64", "linux-arm64"];
+export const releaseTargets = ["mac-arm64", "win-x64", "linux-x64", "linux-arm64"];
 const formats = {
   mac: [".dmg", ".zip"],
   win: [".exe", ".zip"],
@@ -124,7 +124,7 @@ export function buildReleaseNotes({ version, sha, changes, files }) {
     "",
     "安装后无需手工复制企业微信配置。管理员仍可使用本机文件覆盖默认参数；安装包不包含企业微信 Secret、用户会话或 UCAS API Key。",
     "",
-    "包含 macOS Apple Silicon / Intel、Windows x64、Linux x64 / ARM64 安装包。",
+    "包含 macOS Apple Silicon、Windows x64、Linux x64 / ARM64 安装包。",
     "",
     "macOS 使用 ad-hoc 签名，未经过 Apple 公证；Windows 包未配置发布者证书。Linux AppImage 下载后需添加执行权限。",
     "",
