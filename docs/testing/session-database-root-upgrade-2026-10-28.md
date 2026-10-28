@@ -1,6 +1,6 @@
 # 会话库路径升级与冷迁移验收（2026-10-28）
 
-本报告记录初次源码及隔离 macOS 桌面验收阶段；当时尚未提交、发布或安装 Release。后续主线整合、发布审查与正式配置包验收见 [0.1.3 审查记录](session-database-release-0.1.3-review.md)。产品合同及状态所有者、事件顺序见 [spec](../../specs/session-database-root-upgrade.md)。本轮没有迁移开发者真实会话库。
+源码及隔离 macOS 桌面验收完成，尚未提交、发布或安装 Release。产品合同及状态所有者、事件顺序见 [spec](../../specs/session-database-root-upgrade.md)。本轮没有迁移开发者真实会话库。
 
 ## 最终行为
 

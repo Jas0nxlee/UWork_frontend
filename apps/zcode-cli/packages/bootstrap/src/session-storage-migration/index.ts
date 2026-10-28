@@ -6,5 +6,4 @@ export type {
   SessionDatabaseMigrationResult,
   LegacySessionOwnershipManifest,
   OwnedLegacySession,
-  SessionDatabaseRouteResolver,
 } from "./contract.js";
