@@ -160,6 +160,71 @@ describe("hasAnyAgentSessionRow", () => {
 });
 
 describe("resolveAgentSessionDbPath（评审三轮 CR-01：不复制解析规则，无法确定按未知跳过）", () => {
+  async function onWindows<T>(run: () => Promise<T>): Promise<T> {
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { ...original, value: "win32" });
+    try {
+      return await run();
+    } finally {
+      Object.defineProperty(process, "platform", original);
+    }
+  }
+
+  it.each(["env", "config"] as const)(
+    "Windows %s 的 ~/ 显式库使用 USERPROFILE，不借 managed HOME 改写",
+    async (source) => {
+      const base = makeTempDir();
+      const storageHome = join(base, "managed-home");
+      const platformHome = join(base, "profile-home");
+      const readConfigFile = vi.fn(async () =>
+        JSON.stringify({ storage: { sessionDbPath: "~/history.sqlite" } }),
+      );
+      const env = {
+        HOME: storageHome,
+        USERPROFILE: platformHome,
+        ...(source === "env" ? { ZCODE_SESSION_DB_PATH: "~/history.sqlite" } : {}),
+      };
+      await onWindows(async () => {
+        await expect(resolveAgentSessionDbPath({ env, readConfigFile })).resolves.toBe(
+          join(platformHome, "history.sqlite"),
+        );
+      });
+      if (source === "env") expect(readConfigFile).not.toHaveBeenCalled();
+      else
+        expect(readConfigFile).toHaveBeenCalledWith(
+          join(storageHome, ".uwork", "cli", "config.json"),
+        );
+    },
+  );
+
+  it("Windows 的 managed 默认根、Source Server 注入默认与显式 homedir 注入保持各自边界", async () => {
+    const base = makeTempDir();
+    const storageHome = join(base, "managed-home");
+    const platformHome = join(base, "profile-home");
+    const injectedHome = join(base, "injected-home");
+    const legacyDefault = join(platformHome, ".zcode", "cli", "db", "db.sqlite");
+    const env = { HOME: storageHome, USERPROFILE: platformHome };
+    const readConfigFile = vi.fn(async () => "{}");
+    await onWindows(async () => {
+      await expect(resolveAgentSessionDbPath({ env, readConfigFile })).resolves.toBe(
+        join(storageHome, ".uwork", "cli", "db", "db.sqlite"),
+      );
+      await expect(
+        resolveAgentSessionDbPath({ env, readConfigFile, defaultSessionDbPath: legacyDefault }),
+      ).resolves.toBe(legacyDefault);
+      await expect(
+        resolveAgentSessionDbPath({
+          env,
+          homedirPath: injectedHome,
+          readConfigFile: async (path) => {
+            expect(path).toBe(join(injectedHome, ".uwork", "cli", "config.json"));
+            return JSON.stringify({ storage: { sessionDbPath: "~/history.sqlite" } });
+          },
+        }),
+      ).resolves.toBe(join(injectedHome, "history.sqlite"));
+    });
+  });
+
   it("未升级宿主可注入旧默认库，但显式env和配置继续优先", async () => {
     const { HOME, USER_CONFIG } = freshHome();
     const legacyDefault = join(HOME, ".zcode", "cli", "db", "db.sqlite");

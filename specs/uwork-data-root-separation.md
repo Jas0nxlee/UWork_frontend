@@ -7,7 +7,7 @@ UWork 使用自己的用户级数据根，**不迁移**上游 ZCode 的任何既
 - 数据根：`{dataBaseDir}/.uwork`（`getUWorkDataRootDir()`）。app 配置目录为 `{dataBaseDir}/.uwork/v2`，包含 setting.json、credentials.json、provider_config.json、sessions、tasks-index、logs、crash、certs、enterprise-identity.json、ucas-gateway.json、checkpoints、feedback 等。
 - 覆盖变量：`UWORK_DATA_BASE_DIR` 优先；`ZCODE_DATA_BASE_DIR` 仅作旧脚本兼容回退。
 - 设置启动目录：`{用户主目录}/.uwork/v2/setting.json`（`settingService.getSettingsDir()` 与数据根同名）。设置在数据根覆盖生效前读取，因此必须落在同一命名空间。
-- Electron 运行时身份：应用名与 userData 目录统一为 `UWork` / `UWork Dev` / `UWork Preview`；不再复用 `ZCode*` 目录，浏览器 profile 与单实例锁与上游分离。
+- Electron 运行时身份：应用名与 userData 目录统一为 `UWork` / `UWork Dev` / `UWork Local Development` / `UWork Preview`；不再复用 `ZCode*` 目录，浏览器 profile 与单实例锁与上游分离。
 - Agent/CLI 用户级存储：Host 下发 `ZCODE_STORAGE_DIR={dataBaseDir}/.uwork`（用户显式设置时不覆盖）。**所有用户级路径都必须经 `@zcode/shared` 的 `resolveUserStorageRoot()` / `resolveUserCliRoot()` / `resolveUserCliConfigPath()` 解析**（2026-10-08 补），包括 CLI 用户配置 `config.json`（插件启用、MCP、技能开关）、`db`、`log`、`debug`/`rollout`、`workflows`、用户技能根与桌面侧插件同步根；未下发 storage root 时回落上游 `~/.zcode`。
 - 用户内容的归属规则：两个产品共享的约定（`~/.agents/skills`、`~/.agents/mcp.json` 等）留在原处；UWork 自己读写的用户级内容（原生技能根、用户命令、全局 workflow、插件镜像、MCP 用户配置）落 `{dataRoot}` 下，不再读写 `~/.zcode` 对应目录。
 - **桌面主进程**（启动早于设置服务，不能 import 服务侧 helper）：统一走新增的 `packages/desktop/src/main/desktopHomePath.ts`（`resolveDesktopHomePath` / `resolveDesktopDataRootDir` / `resolveDesktopCliDir` / `resolveDesktopSettingsFile` / `resolveDesktopPluginsDir`，基准优先级 `UWORK_DATA_BASE_DIR` > `ZCODE_DATA_BASE_DIR` > `ZCODE_DESKTOP_HOME_DIR` > `HOME`）。已改用的点：**MCP 用户目录**（`mcpUserDirectory`，`<dataRoot>/cli/config.json` —— 这是真正持久化 MCP 服务的路径）、硬件加速与数据根 bootstrap 读的 setting.json、`index.ts` 的窗口设置文件、诊断导出（`exportLogs` 的 CLI 目录与日志包内标签、Computer Use run 目录）。
@@ -45,7 +45,7 @@ sequenceDiagram
 主进程测试通过受控环境变量为 `resolveDesktopHomePath` 提供临时基准目录；服务测试同时使用 `setDataBaseDir`，清理时恢复全部覆盖。bootstrap 不再接受废弃的 home 参数。用户级 fixture 与断言均使用 `.uwork`，项目级 `.zcode` 保留。手动导出归档标签使用 `.uwork`，反馈归档既有 `.zcode/cli`、`.zcode/computer-use/run` 标签暂保留兼容；两者均从 UWork 源目录提供数据。手动导出的 3 天 CLI 日志窗口同时识别当前与历史归档前缀，继续验证脱敏、凭据排除和时间窗口，不能通过跳过验证或恢复上游目录使测试变绿。
 
 - 自动化验收入口为 `scripts/test/uworkBranding.test.ts`，由桌面发布 CI 的行为测试步骤执行。Desktop Main 的 `desktopRuntimeEnv` 唯一负责 Electron 应用名、userData 与 sessionData；服务路径 API 唯一负责用户级数据根；测试不增加目录写入或迁移逻辑。
-- Node 测试执行源码中的运行时身份与路径初始化声明，以 Electron appData 为受控边界：正式、开发、预览模式分别返回 `UWork`、`UWork Dev`、`UWork Preview`，默认 sessionData 为对应 userData 下的 `session`，均不落入 `ZCode*` 目录。
+- Node 测试执行源码中的运行时身份与路径初始化声明，以 Electron appData 为受控边界：正式、开发、本地开发包、预览模式分别返回 `UWork`、`UWork Dev`、`UWork Local Development`、`UWork Preview`，默认 sessionData 为对应 userData 下的 `session`，均不落入 `ZCode*` 目录。
 - 保留既有显式覆盖接口：`ZCODE_DESKTOP_APPLICATION_NAME`、`ZCODE_DESKTOP_USER_DATA_DIR`、`ZCODE_DESKTOP_SESSION_DATA_DIR` 优先于默认值；启用 `ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA` 时不覆盖 Electron 默认目录，显式 userData 仍优先。
 - 每个独立子进程通过服务公开路径 API 验证默认根、`UWORK_DATA_BASE_DIR` 优先级、空值回退与 `ZCODE_DATA_BASE_DIR` 兼容回退，配置目录必须为所选数据根下的 `.uwork/v2`。辅助程序安装文件名和工作区内 `.zcode/AGENTS.md` 的兼容性断言继续保留。
 - 全新环境启动 UWork 后只创建 `~/.uwork`（或 `UWORK_DATA_BASE_DIR` 指向的目录）与 `~/Library/Application Support/UWork*`；`~/.zcode`、`~/Library/Application Support/ZCode*` 的 mtime 不因 UWork 运行而变化。

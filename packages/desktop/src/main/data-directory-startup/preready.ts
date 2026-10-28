@@ -6,6 +6,7 @@ import { registerLocalMediaPreviewScheme } from "../localMediaPreviewProtocol.js
 import { PLUGIN_SANDBOX_PRIVILEGED_SCHEME } from "../pluginSandbox/index.js";
 import { ZCODE_PRODUCT_FLAVOR } from "@zcode/shared";
 import { resolveDesktopLifecycleIdentity } from "./identity.js";
+import { isLocalDevelopmentDesktopBuild } from "../desktopElectronApp.js";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 const initialDefaultBaseDir = resolve(
@@ -30,8 +31,12 @@ export function configureDesktopPrereadyRuntime(): void {
     runtimeUserDataPath,
     runtimeSessionDataPath,
     shouldUseElectronDefaultUserDataPath,
-  } = resolveDesktopLifecycleIdentity(app.isPackaged, ZCODE_PRODUCT_FLAVOR, process.env, () =>
-    app.getPath("appData"),
+  } = resolveDesktopLifecycleIdentity(
+    app.isPackaged,
+    ZCODE_PRODUCT_FLAVOR,
+    process.env,
+    () => app.getPath("appData"),
+    isLocalDevelopmentDesktopBuild,
   );
   // Electron 后一次 privileged 注册会覆盖前一次；最终集合须保留 SDK 顶层注册的权限。
   registerLocalMediaPreviewScheme(protocol, [

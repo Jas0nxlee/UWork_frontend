@@ -6,6 +6,8 @@
 
 新版应用首次启动，在创建或打开新的默认会话库之前完成检查。默认库从用户 home 的 `.zcode/cli/db/db.sqlite` 升级到有效 UWork CLI 根的 `db/db.sqlite`。仅开启 `UWORK_SESSION_DB_MIGRATION=1` 的受控本地 Host 链路切换默认值；默认值在配置最低优先级生成，不能覆盖用户、项目、环境变量或 CLI 显式 `storage.sessionDbPath`。独立 CLI 和尚未接入启动迁移门禁的 Source Server 保留旧默认，不扫描其他产品的历史；桌面 Release 不替远端持库服务迁移数据。
 
+历史源 home 与显式 `~/` 仍遵循 v0.1.2 writer 的 Node `os.homedir()` 平台合同：Windows 使用 `USERPROFILE`，POSIX 使用 `HOME`；所选变量缺席时由调用方的 `homedir()` 补齐，不借另一平台变量或 Electron 的 `ZCODE_DESKTOP_HOME_DIR` 改写历史来源。Windows 的 `HOME` 与 `USERPROFILE` 可以不同，不能因此查错旧源或把原有显式 tilde 配置打开为另一空库。该纯规则统一由 shared storage/env helper 提供，CLI 与证据读取器镜像复用；新业务 dataBaseDir、storage root 的现有优先级保持原合同。
+
 旧库保留且不升级其 schema。通过 SQLite backup 获取包含 WAL 已提交内容的一致性副本，在副本上复用当前 CLI schema migration。不直接复制正在使用的 SQLite 主文件，不删除旧 WAL。迁移本身离线完成。
 
 Host 提供本地 UWork 任务归属清单（包括已归档、软删除任务；排除远端及其他 runtime 的任务），不读写 CLI 会话事实。CLI 验证 sessionId 与已知工作目录/identity 后迁移这些会话及其子会话、消息、输入队列、用量、目标、工作流等关联数据。另一产品的会话不进入目标库；归属无法确认时明确失败，不能猜测后建立空库。原有 cwd、workspace identity、时间、标题来源、软删除、权限和业务字段保留，不泛化替换 JSON 内的路径字符串。外部文件引用保持原指向并测试续聊所需引用。
@@ -112,3 +114,5 @@ sequenceDiagram
 5. 真实 prepare-storage 子进程握手与大清单文件；重复启动不重复迁移。
 6. 隔离桌面升级：旧路径历史 → 新版首次启动 → 查看完整历史/续聊 → 新任务写新库 → 重启；运行现有调用轨迹 E2E，保留发布包验收与源码验证的边界。
 7. Main 引用 Host 启动协调器时，Host 的 TypeScript 声明缓存独立于打包 `out/host`，只生成声明。桌面构建清理 bundle 后再次执行 `pnpm typecheck` 仍应通过，类型检查不能覆盖运行产物。
+8. 发布的五个平台包在原生构建后执行无 Node Inspector 的 Chromium CDP 升级门禁。夹具的物理 schema 冻结自 `v0.1.2`，以正式包自身的 CLI/Host 初始化后核对冻结 schema，再写入合成的默认库 owned/archived/foreign 历史及单独显式库会话。测试进程和子进程 cwd/HOME/USERPROFILE/所有数据根均在临时目录，清除继承的会话库与迁移开关覆盖，不能误用 monorepo CLI；由生产 Host 默认授予升级开关。验收默认归属历史迁入、foreign 与显式库不导入、旧库及其 WAL 不变、可见 UI 正文，以及完全退出后目标新增会话与账本保持。门禁使用未改写的打包目录可执行文件，不等同于各安装器覆盖安装或真实用户数据验收。
+9. Windows 正式包夹具刻意将 HOME 指向另一自有临时目录、USERPROFILE 指向真实旧库夹具目录，数据根/Desktop home 仍显式指向旧库夹具目录。源库经真实维护 CLI 按旧版 Node home 语义创建；项目显式配置使用 `~/explicit-project/explicit-history.sqlite`，只有 seed 子进程使用绝对 DB 覆盖。升级后必须真实点击默认及显式项目会话，分别看到原正文，不能仅凭显式文件未变断言路由正确。其他平台保持既有 HOME 场景，所有源哈希、隔离和重启断言保留。

@@ -31,6 +31,7 @@ import {
   closeSessionStore,
   getSessionDbPath,
   resolveLegacySessionDatabaseMigration,
+  createSessionDatabaseRouteResolver,
 } from "./app/session-store.js";
 import { sessionDatabaseMigration } from "./session-storage-migration/index.js";
 import { startProcessProviderRegistryRuntime } from "./app/process-provider-registry-runtime.js";
@@ -92,12 +93,18 @@ export async function runZCodeProtocolAgent(
   if (options.prepareStorageOnly) {
     // 存储 Worker 不会 chdir，配置必须与业务 Agent 使用同一个显式工作目录。
     const config = createConfig({ env: options.env, workingDirectory: options.cwd });
+    const legacyMigration = resolveLegacySessionDatabaseMigration(config, {
+      env: options.env,
+      workingDirectory: options.cwd,
+    });
     await prepareProtocolStartupStorage({
       dbPath: getSessionDbPath(config, options.cwd, options.env),
-      legacyMigration: resolveLegacySessionDatabaseMigration(config, {
-        env: options.env,
-        workingDirectory: options.cwd,
-      }),
+      legacyMigration: legacyMigration
+        ? {
+            ...legacyMigration,
+            resolveSessionDatabase: createSessionDatabaseRouteResolver(options.env),
+          }
+        : undefined,
       input: options.input ?? process.stdin,
       output: options.output ?? process.stdout,
     });

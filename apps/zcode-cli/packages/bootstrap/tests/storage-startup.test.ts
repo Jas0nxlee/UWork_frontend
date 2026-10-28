@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createConfig } from "@zcode/adapters/config";
 import {
@@ -20,6 +20,80 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 describe("迁移前的 stdio 启动控制帧", () => {
+  it("默认库和项目显式库并存时仅迁移默认源库归属，显式库原样保留", async () => {
+    const root = await mkdtemp(join(tmpdir(), "uwork-storage-mixed-route-"));
+    dirs.push(root);
+    const workspace = join(root, "default-project");
+    const explicitWorkspace = join(root, "custom-project");
+    await mkdir(workspace);
+    await mkdir(join(explicitWorkspace, ".zcode"), { recursive: true });
+    const sourcePath = join(root, ".zcode", "cli", "db", "db.sqlite");
+    const explicitPath = join(explicitWorkspace, "project-history.sqlite");
+    await writeFile(
+      join(explicitWorkspace, ".zcode", "config.json"),
+      JSON.stringify({ storage: { sessionDbPath: "./project-history.sqlite" } }),
+    );
+    for (const [path, id, cwd] of [
+      [sourcePath, "default-owned", workspace],
+      [explicitPath, "explicit-owned", explicitWorkspace],
+    ] as const) {
+      const store = await SqliteSessionStore.openStartup({ dbPath: path });
+      store.close();
+      const db = new DatabaseSync(path);
+      db.prepare(`INSERT INTO session
+        (id, project_id, slug, directory, title, version, time_created, time_updated)
+        VALUES (?, 'workspace', ?, ?, ?, '1', 1, 2)`).run(id, id, cwd, id);
+      db.close();
+    }
+    const explicitBefore = await readFile(explicitPath);
+    const sourceBefore = await readFile(sourcePath);
+    const ownershipManifestPath = join(root, "host-ownership.json");
+    await writeFile(
+      ownershipManifestPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        sessions: [
+          { sessionId: "default-owned", workspacePath: workspace },
+        ],
+      }),
+    );
+    const input = new PassThrough();
+    const output = new Writable({
+      write(chunk, _encoding, callback) {
+        const frame = JSON.parse(String(chunk));
+        if (frame.method === "startup/storagePath")
+          input.write(
+            `${JSON.stringify({ method: "startup/storagePathReady", ownershipManifestPath })}\n`,
+          );
+        callback();
+      },
+    });
+    await runZCodeProtocolAgent({
+      prepareStorageOnly: true,
+      cwd: workspace,
+      input,
+      output,
+      env: {
+        HOME: root,
+        USERPROFILE: root,
+        ZCODE_STORAGE_DIR: join(root, ".uwork"),
+        UWORK_SESSION_DB_MIGRATION: "1",
+      },
+    });
+    const target = new DatabaseSync(join(root, ".uwork", "cli", "db", "db.sqlite"), {
+      readOnly: true,
+    });
+    try {
+      expect(target.prepare("SELECT id FROM session ORDER BY id").all()).toEqual([
+        { id: "default-owned" },
+      ]);
+    } finally {
+      target.close();
+    }
+    expect(await readFile(explicitPath)).toEqual(explicitBefore);
+    expect(await readFile(sourcePath)).toEqual(sourceBefore);
+  });
+
   it("prepare-storage在线程不chdir时按传入cwd读取项目显式数据库配置", async () => {
     const root = await mkdtemp(join(tmpdir(), "uwork-storage-project-cwd-"));
     dirs.push(root);
@@ -48,7 +122,12 @@ describe("迁移前的 stdio 启动控制帧", () => {
       cwd: workspace,
       input,
       output,
-      env: { HOME: root, ZCODE_STORAGE_DIR: join(root, ".uwork"), UWORK_SESSION_DB_MIGRATION: "1" },
+      env: {
+        HOME: root,
+        USERPROFILE: root,
+        ZCODE_STORAGE_DIR: join(root, ".uwork"),
+        UWORK_SESSION_DB_MIGRATION: "1",
+      },
     });
     expect(paths).toEqual([join(workspace, "project-history.sqlite")]);
     await expect(access(paths[0]!)).resolves.toBeUndefined();
@@ -225,7 +304,12 @@ describe("默认会话库路径升级的配置门禁", () => {
   it("仅Host标志和默认来源共同允许从legacy库升级", () => {
     const home = join(tmpdir(), "isolated-home");
     const storageRoot = join(tmpdir(), "isolated-storage");
-    const env = { HOME: home, ZCODE_STORAGE_DIR: storageRoot, UWORK_SESSION_DB_MIGRATION: "1" };
+    const env = {
+      HOME: home,
+      USERPROFILE: home,
+      ZCODE_STORAGE_DIR: storageRoot,
+      UWORK_SESSION_DB_MIGRATION: "1",
+    };
     const config = createConfig({ skipUserConfig: true, env });
     expect(resolveLegacySessionDatabaseMigration(config, { env })).toEqual({
       sourcePath: join(home, ".zcode", "cli", "db", "db.sqlite"),
@@ -251,10 +335,10 @@ describe("默认会话库路径升级的配置门禁", () => {
     expect(resolveLegacySessionDatabaseMigration(standalone, { env })).toBeUndefined();
   });
 
-  it("路径与legacy候选复用同一注入HOME/cwd，显式相对库保持优先", () => {
+  it("路径与legacy候选复用同一注入平台home/cwd，显式相对库保持优先", () => {
     const home = join(tmpdir(), "isolated-home");
     const workingDirectory = join(tmpdir(), "migration-workspace");
-    const env = { HOME: home, UWORK_SESSION_DB_MIGRATION: "1" };
+    const env = { HOME: home, USERPROFILE: home, UWORK_SESSION_DB_MIGRATION: "1" };
     const config = createConfig({
       skipUserConfig: true,
       env,

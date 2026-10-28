@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { access, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 export const ids = Object.freeze({
@@ -13,9 +14,42 @@ export const ids = Object.freeze({
   afterUpgrade: "session_packaged_upgrade_new",
 });
 export const historyText = "PACKAGED_UPGRADE_012_PRESERVED_ASSISTANT_HISTORY";
+export const explicitHistoryText = "PACKAGED_UPGRADE_EXPLICIT_HISTORY";
 export const historyTitle = "PACKAGED_UPGRADE_012_HISTORY";
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const exec = promisify(execFile);
+
+export function createPackagedUpgradeEnvironment(baseEnv, data, platform) {
+  const env = {
+    ...baseEnv,
+    // Windows 旧 Node home 由 USERPROFILE 决定；不同 HOME 必须由真实发布包门禁覆盖。
+    HOME: platform === "win" ? join(data, "alternate-home") : data,
+    USERPROFILE: data,
+    UWORK_DATA_BASE_DIR: data,
+    ZCODE_DATA_BASE_DIR: data,
+    UWORK_STORAGE_DIR: join(data, ".uwork"),
+    ZCODE_STORAGE_DIR: join(data, ".uwork"),
+    ZCODE_LOG_DIR: join(data, ".uwork", "cli", "log"),
+    ZCODE_DESKTOP_HOME_DIR: data,
+    ZCODE_DESKTOP_USER_DATA_DIR: join(data, "userData"),
+    ZCODE_DESKTOP_SESSION_DATA_DIR: join(data, "sessionData"),
+  };
+  for (const key of [
+    "ELECTRON_RUN_AS_NODE",
+    "NODE_OPTIONS",
+    "UWORK_SESSION_DB_MIGRATION",
+    "ZCODE_SESSION_DB_PATH",
+    "ZCODE_SESSION_DB",
+    "ZCODE_AGENT_SERVER_COMMAND",
+    "ZCODE_AGENT_SERVER_ARGS_JSON",
+    "ZCODE_AGENT_SERVER_CWD",
+    "GLM_BINARY_PATH",
+    "ZCODE_AGENT_WORKDIR",
+    "ZCODE_HOME",
+  ])
+    delete env[key];
+  return env;
+}
 
 export async function initializeExplicitDatabase(cli, path, { cwd, env, nodeArgs = [] }) {
   // storage-migrate 是全局维护命令，不传 workspace 给 createConfig；只有夹具 seed 单独指定库。
@@ -156,8 +190,8 @@ export function seedMembership(path, workspace, explicitWorkspace) {
     ).run(explicitWorkspace);
     const put = db.prepare(`INSERT INTO tasks (
       workspace_key,workspace_path,task_id,title,task_status,provider,mode,model,
-      created_at,updated_at,archived,meta_json,host_id,project_id,cli_created_at,cli_updated_at,cli_title,cli_title_source,cli_last_outcome
-    )VALUES(?,?,?,?,'completed','glm','default','fixture-model',?,?,?,?,'local',?,?,?,?,'custom','completed')`);
+      created_at,updated_at,archived,meta_json,host_id,root_path,project_id,handoff_pending,cli_created_at,cli_updated_at,cli_title,cli_title_source,cli_last_outcome
+    )VALUES(?,?,?,?,'completed','glm','default','fixture-model',?,?,?,?,'local',?,?,8,?,?,?,'custom','completed')`);
     for (const [id, path, archived, project] of [
       [ids.owned, workspace, 0, null],
       [ids.archived, workspace, 1, null],
@@ -179,6 +213,8 @@ export function seedMembership(path, workspace, explicitWorkspace) {
           status: "completed",
           title,
         }),
+        // v0.1.2 已完成归属的行由 root_path 固化 cwd；缺席会被项目投影读成字符串 "null"。
+        path,
         project,
         now,
         now + 100,

@@ -678,7 +678,7 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
       expect(env.ZCODE_CUA_HELPER_INSTALL_VARIANT).toBe("local-development");
       expect(env.ZCODE_STORAGE_DIR).toBe(join("/mock/db", ".uwork"));
       expect(runtime.runtimeApplicationName).toBe("UWork Local Development");
-      expect(runtime.runtimeUserDataPath).toBe(join("/mock/appData", "UWork"));
+      expect(runtime.runtimeUserDataPath).toBe(join("/mock/appData", "UWork Local Development"));
     },
   );
 
