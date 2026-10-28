@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConfig } from "@zcode/adapters/config";
-import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "@zcode/shared";
+import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS, UWORK_AIHUB_SKILLHUB_BASE_URL } from "@zcode/shared";
 import { ZCODE_PLUGIN_HOST_COMMAND } from "@zcode/contracts";
 import type { Logger } from "@zcode/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -595,7 +595,7 @@ describe("ZCode plugins", () => {
     }
   });
 
-  it("includes the merged ZCode official marketplace and Claude marketplace for empty storage", async () => {
+  it("includes the merged ZCode, company AIHub and Claude default marketplaces for empty storage", async () => {
     const root = await mkdtemp(join(tmpdir(), "zcode-bootstrap-default-marketplace-"));
 
     try {
@@ -607,30 +607,39 @@ describe("ZCode plugins", () => {
         workingDirectory: root,
       });
 
-      expect(overview.marketplaces).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: "zcode-plugins-official",
-            isOfficial: true,
-            name: "zcode-plugins-official",
-            pluginCount: 14,
-            source: {
-              source: "url",
-              url: "https://cdn-zcode.z.ai/zcode/official-plugin/marketplace.json",
-            },
-          }),
-          expect.objectContaining({
-            id: "claude-plugins-official",
-            isOfficial: true,
-            name: "claude-plugins-official",
-            pluginCount: 0,
-            source: {
-              repo: "anthropics/claude-plugins-official",
-              source: "github",
-            },
-          }),
-        ]),
-      );
+      // 同步当前默认市场合同：公司 AIHub 随包 seed，不能沿用只列两个公开市场的夹具。
+      expect(overview.marketplaces).toEqual([
+        expect.objectContaining({
+          id: "zcode-plugins-official",
+          isOfficial: true,
+          name: "zcode-plugins-official",
+          pluginCount: 14,
+          source: {
+            source: "url",
+            url: "https://cdn-zcode.z.ai/zcode/official-plugin/marketplace.json",
+          },
+        }),
+        expect.objectContaining({
+          id: "ucas-aihub",
+          name: "ucas-aihub",
+          pluginCount: 0,
+          source: {
+            baseUrl: UWORK_AIHUB_SKILLHUB_BASE_URL,
+            name: "ucas-aihub",
+            source: "skillhub",
+          },
+        }),
+        expect.objectContaining({
+          id: "claude-plugins-official",
+          isOfficial: true,
+          name: "claude-plugins-official",
+          pluginCount: 0,
+          source: {
+            repo: "anthropics/claude-plugins-official",
+            source: "github",
+          },
+        }),
+      ]);
       expect(
         JSON.parse(await readFile(join(pluginStorageRoot, "known_marketplaces.json"), "utf8")),
       ).toMatchObject({
@@ -641,9 +650,9 @@ describe("ZCode plugins", () => {
           expect.objectContaining({
             id: "ucas-aihub",
             source: {
-              source: "skillhub",
+              baseUrl: UWORK_AIHUB_SKILLHUB_BASE_URL,
               name: "ucas-aihub",
-              baseUrl: "https://aihub.ucas.com.cn/skillhub",
+              source: "skillhub",
             },
           }),
           expect.objectContaining({
