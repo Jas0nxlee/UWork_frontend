@@ -163,7 +163,7 @@ test("desktop userData and sessionData use isolated UWork namespaces and respect
         localDevelopment: true,
         name: "UWork Local Development",
         env: {},
-        data: "UWork",
+        data: "UWork Local Development",
       },
       { packaged: false, flavor: "production", name: "UWork Dev", env: {}, data: "UWork Dev" },
       { packaged: true, flavor: "preview", name: "UWork Preview", env: {}, data: "UWork Preview" },

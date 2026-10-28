@@ -5,13 +5,20 @@ export function resolveDesktopLifecycleIdentity(
   flavor: string,
   env: Record<string, string | undefined>,
   getAppDataPath: () => string,
+  localDevelopment = false,
 ) {
   const read = (key: string) => env[key]?.trim() || undefined;
   const development = !packaged;
   const preview = packaged && flavor === "preview";
   const runtimeApplicationName =
     read("ZCODE_DESKTOP_APPLICATION_NAME") ??
-    (development ? "UWork Dev" : preview ? "UWork Preview" : "UWork");
+    (localDevelopment
+      ? "UWork Local Development"
+      : development
+        ? "UWork Dev"
+        : preview
+          ? "UWork Preview"
+          : "UWork");
   const shouldUseElectronDefaultUserDataPath = ["1", "true", "yes", "on"].includes(
     read("ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA")?.toLowerCase() ?? "",
   );
