@@ -1,8 +1,8 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setDataBaseDir } from "../src/paths.js";
 import { readModelTrajectory } from "../src/zcode-agent/modelTrajectory.js";
 
@@ -14,8 +14,14 @@ function makeTempDir(prefix: string): string {
   return dir;
 }
 
+beforeEach(() => {
+  vi.stubEnv("HOME", makeTempDir("uwork-model-trajectory-home-"));
+  vi.stubEnv("ZCODE_STORAGE_DIR", undefined);
+});
+
 afterEach(() => {
   setDataBaseDir(null);
+  vi.unstubAllEnvs();
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
@@ -25,9 +31,68 @@ afterEach(() => {
 });
 
 describe("readModelTrajectory", () => {
+  async function seedRecord(cliRoot: string, mode: string, requestId: string) {
+    const dir = join(cliRoot, mode);
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, "model-io-sess_storage_isolation.jsonl");
+    await writeFile(
+      path,
+      `${JSON.stringify({
+        type: "model_io",
+        sessionId: "sess_storage_isolation",
+        requestId,
+        request: { messages: [{ role: "user", content: requestId }] },
+      })}\n`,
+    );
+    return path;
+  }
+
+  it.each(["debug", "rollout"])("读取产品 %s 轨迹，隔离同 session 的上游记录", async (mode) => {
+    const base = makeTempDir("uwork-model-trajectory-storage-");
+    setDataBaseDir(base);
+    const expected = await seedRecord(join(base, ".uwork", "cli"), mode, "product");
+    await seedRecord(join(base, ".zcode", "cli"), mode, "upstream-base");
+    await seedRecord(join(process.env.HOME!, ".zcode", "cli"), mode, "upstream-home");
+
+    const result = await readModelTrajectory("sess_storage_isolation");
+    expect(result.records.map((record) => record.requestId)).toEqual(["product"]);
+    expect(result.sourceFiles).toEqual([expected]);
+  });
+
+  it.each(["storage-root", "cli-root"])("尊重显式 %s，不读默认产品目录", async (kind) => {
+    const base = makeTempDir("uwork-model-trajectory-override-");
+    setDataBaseDir(base);
+    const storageRoot = join(base, "external");
+    const cliRoot = join(storageRoot, "cli");
+    vi.stubEnv("ZCODE_STORAGE_DIR", kind === "cli-root" ? cliRoot : storageRoot);
+    const expected = await seedRecord(cliRoot, "rollout", "explicit");
+    await seedRecord(join(base, ".uwork", "cli"), "rollout", "default");
+    await seedRecord(join(base, ".zcode", "cli"), "rollout", "upstream");
+
+    const result = await readModelTrajectory("sess_storage_isolation");
+    expect(result.records.map((record) => record.requestId)).toEqual(["explicit"]);
+    expect(result.sourceFiles).toEqual([expected]);
+  });
+
+  it("切换运行时数据根后读取新根；产品记录缺失时不回退上游", async () => {
+    const first = makeTempDir("uwork-model-trajectory-first-");
+    const second = makeTempDir("uwork-model-trajectory-second-");
+    await seedRecord(join(first, ".uwork", "cli"), "debug", "first");
+    await seedRecord(join(second, ".zcode", "cli"), "debug", "upstream");
+    setDataBaseDir(first);
+    expect((await readModelTrajectory("sess_storage_isolation")).records).toHaveLength(1);
+
+    setDataBaseDir(second);
+    const missing = await readModelTrajectory("sess_storage_isolation");
+    expect(missing.records).toEqual([]);
+    expect(missing.sourceFiles).toEqual([]);
+    const expected = await seedRecord(join(second, ".uwork", "cli"), "debug", "second");
+    expect((await readModelTrajectory("sess_storage_isolation")).sourceFiles).toEqual([expected]);
+  });
+
   it("保留字符串 TOOL 消息顶层的 toolCallId 和 toolName", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-tool-result-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -67,7 +132,7 @@ describe("readModelTrajectory", () => {
 
   it("保留字符串 TOOL 消息顶层的错误状态", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-tool-error-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -111,7 +176,7 @@ describe("readModelTrajectory", () => {
 
   it("还原同一 session 文件里的 model-io delta 请求消息", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -169,7 +234,7 @@ describe("readModelTrajectory", () => {
 
   it("从 tail baseline 继续还原后续 model-io delta 请求消息", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-tail-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "rollout");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "rollout");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -230,7 +295,7 @@ describe("readModelTrajectory", () => {
 
   it("异步读取超过旧体积阈值的长 session model-io 文件", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-large-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -269,7 +334,7 @@ describe("readModelTrajectory", () => {
 
   it("只扫描超大文件尾部并丢弃起点处的残行", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-bounded-tail-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 
@@ -297,7 +362,7 @@ describe("readModelTrajectory", () => {
 
   it("从 querySource 和旧标题 prompt 标记调用来源", async () => {
     const dataBaseDir = makeTempDir("zcode-model-trajectory-source-");
-    const debugDir = join(dataBaseDir, ".zcode", "cli", "debug");
+    const debugDir = join(dataBaseDir, ".uwork", "cli", "debug");
     mkdirSync(debugDir, { recursive: true });
     setDataBaseDir(dataBaseDir);
 

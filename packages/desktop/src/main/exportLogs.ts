@@ -23,10 +23,11 @@ import {
   getExportLogDir as getDefaultExportLogDir,
   getExportLogStageDir as getDefaultExportLogStageDir,
   getFeedbackLogArchiveDir as getDefaultFeedbackLogArchiveDir,
+  getUworkUserCliRootDir,
+  getZCodeDataRootDir,
 } from "@zcode/services/node";
 import { createAboutSnapshot, formatAboutDetail, readBuildMetadata } from "./about.js";
 import { logger } from "./logger.js";
-import { resolveDesktopCliDir, resolveDesktopDataRootDir } from "./desktopHomePath.js";
 
 function getZCodeDataDir() {
   return getAppConfigDir();
@@ -34,7 +35,8 @@ function getZCodeDataDir() {
 
 function getZCodeCliDir() {
   // UWork 的 Agent CLI 运行目录跟随产品数据根（<dataRoot>/cli），与 Agent 的 ZCODE_STORAGE_DIR 同根。
-  return resolveDesktopCliDir();
+  // 运行根可能由冷迁移后的 bootstrap 设置选择，不能再按 pre-ready 的 HOME/env 重新猜测。
+  return getUworkUserCliRootDir();
 }
 
 function getZCodeCliLogDir() {
@@ -47,7 +49,7 @@ function getZCodeCliLogDir() {
  * helperExitLogPathFor）。同目录下还有 `.tokens` broker 凭据，收集时必须按文件名白名单。
  */
 function getCuaHelperRunDir() {
-  return join(resolveDesktopDataRootDir(), "computer-use", "run");
+  return join(getZCodeDataRootDir(), "computer-use", "run");
 }
 
 function isCuaHelperDiagnosticFileName(fileName: string): boolean {

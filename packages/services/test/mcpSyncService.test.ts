@@ -2,41 +2,30 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMcpSyncService } from "../src/mcp-sync/mcpSyncService.js";
+import { setDataBaseDir } from "../src/paths.js";
 
 function makeHome() {
   return mkdtempSync(join(tmpdir(), "zcode-mcp-sync-home-"));
 }
 
-async function writeZcodeUserMcp(
-  home: string,
-  servers: Record<string, Record<string, unknown>>,
-) {
-  const configPath = join(home, ".zcode", "cli", "config.json");
-  await mkdir(join(home, ".zcode", "cli"), { recursive: true });
-  await writeFile(
-    configPath,
-    `${JSON.stringify({ mcp: { servers } }, null, 2)}\n`,
-  );
+async function writeZcodeUserMcp(home: string, servers: Record<string, Record<string, unknown>>) {
+  const configPath = join(home, ".uwork", "cli", "config.json");
+  await mkdir(join(home, ".uwork", "cli"), { recursive: true });
+  await writeFile(configPath, `${JSON.stringify({ mcp: { servers } }, null, 2)}\n`);
   return configPath;
 }
 
-async function writeAgentsUserMcp(
-  home: string,
-  servers: Record<string, Record<string, unknown>>,
-) {
+async function writeAgentsUserMcp(home: string, servers: Record<string, Record<string, unknown>>) {
   const configPath = join(home, ".agents", "mcp.json");
   await mkdir(join(home, ".agents"), { recursive: true });
-  await writeFile(
-    configPath,
-    `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`,
-  );
+  await writeFile(configPath, `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`);
   return configPath;
 }
 
 async function readRemoteZcodeServers(home: string) {
-  const raw = await readFile(join(home, ".zcode", "cli", "config.json"), "utf-8");
+  const raw = await readFile(join(home, ".uwork", "cli", "config.json"), "utf-8");
   const parsed = JSON.parse(raw) as {
     mcp?: { servers?: Record<string, Record<string, unknown>> };
   };
@@ -48,15 +37,93 @@ describe("mcp sync service", () => {
 
   beforeEach(() => {
     originalHome = process.env.HOME;
+    vi.stubEnv("ZCODE_STORAGE_DIR", "");
   });
 
   afterEach(() => {
     process.env.HOME = originalHome;
+    setDataBaseDir(null);
+    vi.unstubAllEnvs();
+  });
+
+  it.each(["data-base", "storage-root", "cli-root"])(
+    "用户 MCP 读写跟随 %s，保持上游配置隔离",
+    async (rootKind) => {
+      const home = makeHome();
+      const dataBaseDir = makeHome();
+      process.env.HOME = home;
+      setDataBaseDir(dataBaseDir);
+      const cliRoot =
+        rootKind === "data-base"
+          ? join(dataBaseDir, ".uwork", "cli")
+          : join(dataBaseDir, "custom", "cli");
+      vi.stubEnv(
+        "ZCODE_STORAGE_DIR",
+        rootKind === "data-base"
+          ? ""
+          : rootKind === "cli-root"
+            ? cliRoot
+            : join(dataBaseDir, "custom"),
+      );
+      const upstreamDir = join(home, ".zcode", "cli");
+      await mkdir(upstreamDir, { recursive: true });
+      const upstreamPath = join(upstreamDir, "config.json");
+      await writeFile(
+        upstreamPath,
+        JSON.stringify({
+          mcp: { servers: { upstreamOnly: { command: "upstream", enable: false } } },
+        }),
+      );
+      const upstreamBefore = await readFile(upstreamPath, "utf8");
+      await mkdir(cliRoot, { recursive: true });
+      const configPath = join(cliRoot, "config.json");
+      await writeFile(
+        configPath,
+        JSON.stringify({ mcp: { servers: { productOnly: { command: "product" } } } }),
+      );
+      const service = createMcpSyncService();
+
+      const candidates = await service.listLocalUserMcpCandidates();
+      expect(candidates.candidates.map((candidate) => candidate.name)).toEqual(["productOnly"]);
+      expect(candidates.candidates[0]?.path).toBe(configPath);
+      const servers = await service.loadMcpFromUserDirectory();
+      expect(servers.servers.map((server) => server.name)).toEqual(["productOnly"]);
+      expect((await service.checkRemoteUserMcpWriteAccess()).path).toBe(cliRoot);
+
+      await service.saveMcpToUserDirectory({
+        action: "upsert",
+        source: "zcodeagentmcp",
+        name: "saved",
+        config: { command: "saved-command" },
+      });
+      const product = JSON.parse(await readFile(configPath, "utf8"));
+      expect(product.mcp.servers.saved).toEqual({ command: "saved-command" });
+      expect(await readFile(upstreamPath, "utf8")).toBe(upstreamBefore);
+    },
+  );
+
+  it("产品 MCP 缺失时不回退读取或迁移上游用户配置", async () => {
+    const home = makeHome();
+    process.env.HOME = home;
+    setDataBaseDir(home);
+    const upstreamDir = join(home, ".zcode", "cli");
+    await mkdir(upstreamDir, { recursive: true });
+    const upstreamPath = join(upstreamDir, "config.json");
+    const upstreamContent = JSON.stringify({
+      mcp: { servers: { upstreamOnly: { command: "upstream", enable: false } } },
+    });
+    await writeFile(upstreamPath, upstreamContent);
+    const service = createMcpSyncService();
+
+    expect((await service.listLocalUserMcpCandidates()).candidates).toEqual([]);
+    expect((await service.loadMcpFromUserDirectory()).servers).toEqual([]);
+    expect(await readFile(upstreamPath, "utf8")).toBe(upstreamContent);
   });
 
   it("lists user zcode MCP servers as local candidates", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     await writeZcodeUserMcp(home, {
       context7: {
         type: "stdio",
@@ -74,7 +141,7 @@ describe("mcp sync service", () => {
         name: "context7",
         enabled: true,
         source: "zcode",
-        path: join(home, ".zcode", "cli", "config.json"),
+        path: join(home, ".uwork", "cli", "config.json"),
         config: {
           command: "npx",
           args: ["-y", "@upstash/context7-mcp"],
@@ -86,6 +153,7 @@ describe("mcp sync service", () => {
   it("marks a candidate disabled when only enabled:false is present", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     // 外部工具/手工编辑写的是 enabled:false；同步侧不能把它当成启用状态。
     await writeZcodeUserMcp(home, {
       context7: {
@@ -105,6 +173,7 @@ describe("mcp sync service", () => {
   it("clears a stale enabled flag when toggling a server", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     // 线上配置里 enable 与 enabled 并存，切换开关后不能再留下自相矛盾的字段。
     await writeZcodeUserMcp(home, {
       context7: {
@@ -144,6 +213,7 @@ describe("mcp sync service", () => {
   it("migrates a legacy enable flag to enabled when listing candidates", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     // 存量配置只有桌面端历史写入的 enable；同步侧读取时应就地迁移成契约字段 enabled。
     await writeZcodeUserMcp(home, {
       context7: {
@@ -167,6 +237,7 @@ describe("mcp sync service", () => {
   it("keeps a candidate disabled when legacy enable:false collides with enabled:true", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     // 线上事故配置：停用写了 enable:false，但外部导入残留 enabled:true。迁移必须保住停用语义。
     await writeZcodeUserMcp(home, {
       context7: {
@@ -191,10 +262,11 @@ describe("mcp sync service", () => {
   it("leaves the config file untouched when no legacy enable flag exists", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     // 迁移必须幂等：没有残留字段时不能重写文件，否则每次列举候选都会动用户的配置。
     // 故意用非规范化的紧凑 JSON 落盘，任何重写都会改变字节内容。
-    const configPath = join(home, ".zcode", "cli", "config.json");
-    await mkdir(join(home, ".zcode", "cli"), { recursive: true });
+    const configPath = join(home, ".uwork", "cli", "config.json");
+    await mkdir(join(home, ".uwork", "cli"), { recursive: true });
     const raw = JSON.stringify({
       mcp: {
         servers: {
@@ -217,33 +289,36 @@ describe("mcp sync service", () => {
   it("checks remote MCP config directory write access before sync", async () => {
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
+    setDataBaseDir(remoteHome);
     const service = createMcpSyncService();
 
     const result = await service.checkRemoteUserMcpWriteAccess();
 
     expect(result).toMatchObject({
       ok: true,
-      path: join(remoteHome, ".zcode", "cli"),
+      path: join(remoteHome, ".uwork", "cli"),
     });
   });
 
   it("reports remote MCP write preflight failure when cli path is not a directory", async () => {
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
-    await mkdir(join(remoteHome, ".zcode"), { recursive: true });
-    await writeFile(join(remoteHome, ".zcode", "cli"), "not a directory");
+    setDataBaseDir(remoteHome);
+    await mkdir(join(remoteHome, ".uwork"), { recursive: true });
+    await writeFile(join(remoteHome, ".uwork", "cli"), "not a directory");
     const service = createMcpSyncService();
 
     const result = await service.checkRemoteUserMcpWriteAccess();
 
     expect(result.ok).toBe(false);
-    expect(result.path).toBe(join(remoteHome, ".zcode", "cli"));
+    expect(result.path).toBe(join(remoteHome, ".uwork", "cli"));
     expect(result.error).toBeTruthy();
   });
 
   it("falls back to user agents MCP servers when zcode user MCP is empty", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     await writeAgentsUserMcp(home, {
       docs: {
         type: "http",
@@ -266,6 +341,7 @@ describe("mcp sync service", () => {
   it("imports stdio and HTTP MCP servers while preserving secrets", async () => {
     const localHome = makeHome();
     process.env.HOME = localHome;
+    setDataBaseDir(localHome);
     await writeZcodeUserMcp(localHome, {
       context7: {
         type: "stdio",
@@ -287,6 +363,7 @@ describe("mcp sync service", () => {
 
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
+    setDataBaseDir(remoteHome);
     const remoteService = createMcpSyncService();
     const result = await remoteService.importMcpServers({
       servers: exported.servers,
@@ -320,6 +397,7 @@ describe("mcp sync service", () => {
     try {
       const remoteHome = makeHome();
       process.env.HOME = remoteHome;
+      setDataBaseDir(remoteHome);
       const remoteService = createMcpSyncService();
 
       await remoteService.importMcpServers({
@@ -341,8 +419,7 @@ describe("mcp sync service", () => {
         overwrite: false,
       });
 
-      const configMode = (await stat(join(remoteHome, ".zcode", "cli", "config.json")))
-        .mode;
+      const configMode = (await stat(join(remoteHome, ".uwork", "cli", "config.json"))).mode;
       expect(configMode & 0o777).toBe(0o600);
     } finally {
       process.umask(previousUmask);
@@ -352,6 +429,7 @@ describe("mcp sync service", () => {
   it("fails remote import without overwriting an invalid zcode config file", async () => {
     const localHome = makeHome();
     process.env.HOME = localHome;
+    setDataBaseDir(localHome);
     await writeZcodeUserMcp(localHome, {
       context7: {
         type: "stdio",
@@ -367,8 +445,9 @@ describe("mcp sync service", () => {
 
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
-    const invalidConfigPath = join(remoteHome, ".zcode", "cli", "config.json");
-    await mkdir(join(remoteHome, ".zcode", "cli"), { recursive: true });
+    setDataBaseDir(remoteHome);
+    const invalidConfigPath = join(remoteHome, ".uwork", "cli", "config.json");
+    await mkdir(join(remoteHome, ".uwork", "cli"), { recursive: true });
     await writeFile(invalidConfigPath, '{"mcp":');
     const remoteService = createMcpSyncService();
 
@@ -386,6 +465,7 @@ describe("mcp sync service", () => {
   it("loads and saves user MCP through the service on the current host", async () => {
     const home = makeHome();
     process.env.HOME = home;
+    setDataBaseDir(home);
     const service = createMcpSyncService();
 
     await service.saveMcpToUserDirectory({
@@ -411,15 +491,14 @@ describe("mcp sync service", () => {
         },
       },
     ]);
-    expect(result.servers[0]?.file?.filePath).toBe(
-      join(home, ".zcode", "cli", "config.json"),
-    );
+    expect(result.servers[0]?.file?.filePath).toBe(join(home, ".uwork", "cli", "config.json"));
   });
 
   it("loads workspace MCP before user MCP using the same directory precedence", async () => {
     const home = makeHome();
     const workspace = join(home, "workspace");
     process.env.HOME = home;
+    setDataBaseDir(home);
     await writeZcodeUserMcp(home, {
       userOnly: { type: "http", url: "https://user.example.test/mcp" },
     });
@@ -455,6 +534,7 @@ describe("mcp sync service", () => {
     const localHome = makeHome();
     const localWorkspacePath = join(localHome, "workspace", "z-code");
     process.env.HOME = localHome;
+    setDataBaseDir(localHome);
     await writeZcodeUserMcp(localHome, {
       filesystem: {
         type: "stdio",
@@ -475,6 +555,7 @@ describe("mcp sync service", () => {
 
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
+    setDataBaseDir(remoteHome);
     const remoteService = createMcpSyncService();
     await remoteService.importMcpServers({
       servers: exported.servers,
@@ -496,6 +577,7 @@ describe("mcp sync service", () => {
   it("skips same-name remote MCP servers without overwriting", async () => {
     const localHome = makeHome();
     process.env.HOME = localHome;
+    setDataBaseDir(localHome);
     await writeZcodeUserMcp(localHome, {
       context7: {
         type: "stdio",
@@ -511,6 +593,7 @@ describe("mcp sync service", () => {
 
     const remoteHome = makeHome();
     process.env.HOME = remoteHome;
+    setDataBaseDir(remoteHome);
     await writeZcodeUserMcp(remoteHome, {
       context7: {
         type: "stdio",
@@ -530,7 +613,7 @@ describe("mcp sync service", () => {
       {
         name: "context7",
         status: "skipped",
-        path: join(remoteHome, ".zcode", "cli", "config.json"),
+        path: join(remoteHome, ".uwork", "cli", "config.json"),
       },
     ]);
     const remoteServers = await readRemoteZcodeServers(remoteHome);

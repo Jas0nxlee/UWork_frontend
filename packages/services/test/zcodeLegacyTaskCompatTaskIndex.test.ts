@@ -63,6 +63,7 @@ const BACKGROUND_AGENT_FAILED_SUMMARY = `Agent general-purpose task "Review" fai
 
 afterEach(async () => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   setNetworkTelemetrySink(null);
   while (disposables.length > 0) {
     disposables.pop()?.disposeAll();
@@ -656,6 +657,44 @@ async function seedLegacyAcpSessionId(
 }
 
 describe("ZCode legacy task compat task index", () => {
+  it.each([false, true])(
+    "原生会话日志跟随 UWork CLI 数据根（覆盖存储根：%s）",
+    async (overrideStorageRoot) => {
+      vi.stubEnv("ZCODE_LOG_DIR", undefined);
+      vi.stubEnv("ZCODE_STORAGE_DIR", undefined);
+      const { service } = createService();
+      const dataRoot = dirname(dirname(getTasksIndexDatabasePath()));
+      const storageRoot = overrideStorageRoot ? join(dataRoot, "custom-storage") : dataRoot;
+      if (overrideStorageRoot) vi.stubEnv("ZCODE_STORAGE_DIR", storageRoot);
+      const now = new Date();
+      const date = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+        .map((value, index) => (index === 0 ? String(value) : String(value).padStart(2, "0")))
+        .join("-");
+      const path = join(storageRoot, "cli", "log", `zcode-${date}.jsonl`);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, "{}\n");
+
+      await expect(
+        service.getTaskNativeSessionLogFile({ taskId: "native-log", workspacePath: "/repo" }),
+      ).resolves.toEqual({ provider: "glm", path, exists: true });
+    },
+  );
+
+  it("原生会话日志保留显式 ZCODE_LOG_DIR 的最高优先级", async () => {
+    const { service } = createService();
+    const dataRoot = dirname(dirname(getTasksIndexDatabasePath()));
+    const logDir = join(dataRoot, "explicit-log");
+    vi.stubEnv("ZCODE_STORAGE_DIR", join(dataRoot, "different-storage"));
+    vi.stubEnv("ZCODE_LOG_DIR", logDir);
+
+    const result = await service.getTaskNativeSessionLogFile({
+      taskId: "native-log",
+      workspacePath: "/repo",
+    });
+    expect(dirname(result.path!)).toBe(logDir);
+    expect(result.exists).toBe(false);
+  });
+
   it("各夹具的迟到写入保持在自己的数据库中", async () => {
     const first = createService();
     await first.taskIndexRepo.ensureReady();
