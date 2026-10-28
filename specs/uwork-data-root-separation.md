@@ -17,7 +17,7 @@ UWork 使用自己的用户级数据根，**不迁移**上游 ZCode 的任何既
 - 不做任何复制或迁移：`~/.zcode` 与 `~/.uwork` 互不影响；升级 UWork 不读取旧根，也不删除旧根。
 - 仓库内的工作区级 `.zcode/` 约定（`AGENTS.md`、`config.json`、`agents/`、`workflow-runs/` 等）属于项目内容，不是用户级数据根，保持不变。
 - 已知未覆盖：远端 SSH 主机上的 `~/.zcode/tmp/prompt-attachments` 等路径仍保持上游默认，待远端 Agent env 一并下发后切换。
-- ~~CLI 用户配置文件不跟随数据根~~ **已于 2026-10-08 修复**：此前 `plugins.enabledPlugins`（插件启用）与 `mcp.servers`（MCP 服务）写在 `~/.zcode/cli/config.json`，而插件缓存/市场状态在 `~/.uwork/cli/plugins/`。现在两侧统一走 storage root：CLI 侧 `file-config.adapter.getDefaultConfigPath()`、会话 DB、日志目录、debug/rollout、用户技能根（`adapters/src/skills/roots.ts`）、全局 workflow（`saved-workflows`、`script-workflow-*`）、debug server 的默认源；桌面侧 `skillsService`、`pluginSyncService`、`settingsSyncService`、`commandsService`、`subagentsService`/`subagentStorage`、`node.ts#hasGlobalCliZCodeCuaServer` 全部改用 `services/src/paths.ts` 的 `getUworkUserCliConfigPath()` / `getUworkUserPluginsRoot()` / `getUWorkDataRootDir()`。存量已迁移（UWork 拥有的两个键搬入 `~/.uwork/cli/config.json`，ZCode 自己的条目原样留在原文件，原文件留 `.bak-*` 备份）。
+- ~~CLI 用户配置文件不跟随数据根~~ **已于 2026-10-08 修复**：此前 `plugins.enabledPlugins`（插件启用）与 `mcp.servers`（MCP 服务）写在 `~/.zcode/cli/config.json`，而插件缓存/市场状态在 `~/.uwork/cli/plugins/`。现在两侧统一走 storage root：CLI 侧 `file-config.adapter.getDefaultConfigPath()`、日志目录、debug/rollout、用户技能根（`adapters/src/skills/roots.ts`）、全局 workflow（`saved-workflows`、`script-workflow-*`）、debug server 的默认源；桌面侧 `skillsService`、`pluginSyncService`、`settingsSyncService`、`commandsService`、`subagentsService`/`subagentStorage`、`node.ts#hasGlobalCliZCodeCuaServer` 全部改用 `services/src/paths.ts` 的 `getUworkUserCliConfigPath()` / `getUworkUserPluginsRoot()` / `getUWorkDataRootDir()`。会话 DB 的早期固定默认遗漏在 2026-10-28 的独立路径升级中修正；自动升级及显式路径边界见 `specs/session-database-root-upgrade.md`。存量已迁移（UWork 拥有的两个键搬入 `~/.uwork/cli/config.json`，ZCode 自己的条目原样留在原文件，原文件留 `.bak-*` 备份）。
 
 ## 验收
 
@@ -67,11 +67,11 @@ sequenceDiagram
 
 运行时数据根由 services 的 bootstrap 初始化持有；Desktop MCP 在初始化后通过公开路径 API 读取该根。启动 setting.json 仍固定在 bootstrap home，不使用运行时根反推。CLI storage root 独立于 v2：显式 ZCODE_STORAGE_DIR 优先，否则为有效 dataBaseDir/.uwork；cli 兼容形式保留。服务技能、命令、子代理、插件同步、MCP 与 Agent 使用相同 storage root。
 
-更换 dataBaseDir 复制整个 UWork 自有根（v2、cli 配置/启停状态/缓存、skills、commands、agents、plugins、workflows、workspace 等），不读取 .zcode 或共享 .agents。仅排除 v2/setting.json 及其原子写入临时文件、符号链接；迁移 JSON 中指向旧 UWork 根的绝对路径重定位到新根。显式外部 CLI storage root 不移动。
+更换 dataBaseDir 复制整个 UWork 自有根（v2、cli 配置/启停状态/缓存、skills、commands、agents、plugins、workflows、workspace 等），不读取 .zcode 或共享 .agents。仅排除 v2/setting.json 及当前生成器格式的原子临时普通文件；普通共享符号链接仍不复制，已知数据库/默认库目录链接明确失败。JSON 只按相对文件和字段白名单重定位用户存储配置、用户资产启停键及已知插件缓存元数据；业务 JSON、旧会话 cwd/identity 和正文逐字节保留，不能递归替换所有旧根字符串。显式外部 CLI storage root 不移动。
 
 旧根 → 临时目标 → 校验文件内容 → 重定位元数据 → 原子激活目标 → 保存 bootstrap 设置 → 重启读者。旧根始终保留；复制/校验失败不切换设置。非空目标拒绝并提示选空目录，不默默丢弃目标或旧数据。源/目标嵌套拒绝。验收覆盖目标冲突、复制失败、MCP 增改删与重启、所有路径优先级。
 
-路径键迁移仅适用于 cli/config.json 的 skills（规范化 SKILL.md 绝对路径 → enable）和 command（命令文件绝对路径 → enable）两个受控映射。普通对象键、工作区路径和共享 .agents 路径保持原样；UWork 根内键重定位后原禁用状态必须保持。技能配置读写在调用时解析有效 CLI 根，避免 bootstrap 前导入缓存旧路径。
+路径键迁移仅适用于 cli/config.json 的 skills（规范化 SKILL.md 绝对路径 → enable）和 command（命令文件绝对路径 → enable）两个受控映射。普通对象键、工作区路径和共享 .agents 路径保持原样；仅 UWork 根内用户 skills/commands/agents 与明确插件缓存资产的键可重定位并保留禁用状态；旧 Root/workspace 下项目级键保持原样，因为会话 cwd 未变。技能配置读写在调用时解析有效 CLI 根，避免 bootstrap 前导入缓存旧路径。
 
 ## Subagent 显式用户目录隔离（2026-10-18）
 
@@ -114,6 +114,37 @@ sequenceDiagram
     Migration-->>Settings: 成功；失败抛错且旧根保留
     Settings->>Disk: 成功后保存 bootstrap dataBaseDir
 ```
+
+## 诊断与用户级读者的目录一致性（2026-10-28）
+
+用户级 model-io、原生会话日志、MCP 配置与引导使用的用户配置须复用公开路径解析器，与 Host 下发给 Agent 的根保持一致。路径解析器唯一拥有这些根目录选择；配置与诊断读者不得扫描另一产品的数据作为回退。会话数据库按 `specs/session-database-root-upgrade.md` 分阶段升级：仅 `UWORK_SESSION_DB_MIGRATION=1` 且已接入 Host 启动门禁的进程采用新默认并迁移归属数据；未接入的 Source Server / standalone CLI 保留历史 `~/.zcode/cli/db/db.sqlite` 默认，不能靠读者静默切换或先建空库。
+
+- 调用轨迹只读取有效 CLI 根的 `debug` / `rollout`，保留按 sessionId 匹配、最近条数限制和 32 MiB 有界异步尾读。切换数据根后，下次读取使用新根，无额外路径缓存。
+- 原生会话日志默认使用有效 CLI 根的 `log/zcode-YYYY-MM-DD.jsonl`；显式 `ZCODE_LOG_DIR` 继续优先。
+- MCP 用户配置与引导的用户配置读取使用有效 CLI 根；项目级 `.zcode`、外部导入来源及调用方显式传入的路径保留原语义。引导的 `env` / `homedirPath` 注入必须隔离于进程全局根。Desktop 引导默认会话库与启用迁移的 writer 一致，位于有效 CLI 根的 `db/db.sqlite`。未升级 Source Server 装配层通过 `defaultSessionDbPath` 注入旧默认；环境变量和配置中显式 sessionDbPath 始终优先，相对配置无法镜像时继续返回未知。
+- Source Server alias 默认库使用有效 CLI 根；装配层解析出的数据库路径继续优先，不能按默认覆盖；未启用迁移的 Source Server 必须显式传入其真实 writer 的解析路径，不能仅使用 repo 的新默认。备份归产品数据根。旧库升级由启动门禁独占，alias 的迁移规则、事务和 identity 所有者不变。
+- 诊断读取器不搬迁或补造历史记录，不修改轨迹保留策略，不改变任务/session 的业务状态和 RPC 合同；旧库只能由独立升级 spec 的启动门禁处理。
+- 调用轨迹侧栏缩窄时，调用来源/结束原因与 token、耗时、时间元数据允许按内容换行，不得互相覆盖或超出卡片；宽侧栏保持紧凑同行布局。
+- 搜索先按虚拟项定位，再按已挂载文本范围精确定位。挂载集合改变不能清空 virtualizer 已测量的尺寸缓存；尺寸由 measureElement / ResizeObserver 维护，不改变展开状态的唯一所有者或强制用户停留在当前命中。
+
+下图仅表示诊断与用户配置链路；会话数据库另遵循独立升级 spec 与显式覆盖。
+
+```mermaid
+sequenceDiagram
+    participant UI as 调用方 / UI
+    participant Reader as Host 用户级读者
+    participant Paths as 公开路径解析器
+    participant CLI as Agent 写入者
+    participant Disk as 有效产品根
+    CLI->>Disk: 按下发 storage root 写入
+    UI->>Reader: 请求轨迹 / 日志路径 / 用户配置
+    Reader->>Paths: 解析当前有效 CLI 根
+    Paths-->>Reader: 显式 storage root 或 dataBaseDir/.uwork/cli
+    Reader->>Disk: 读取同一根内的文件
+    Reader-->>UI: 返回既有结构化结果
+```
+
+验收：诊断和用户配置的默认产品根、运行时 `setDataBaseDir`、显式 `ZCODE_STORAGE_DIR`（包括以 `cli` 结尾的形式）均与写入者一致；两种轨迹模式可读，目录切换不读旧根；同时布置同 ID 的上游记录仍只返回产品记录，产品记录缺失时不回退上游；日志目录显式覆盖保留；MCP 与引导配置测试同时构造产品/上游配置并验证隔离；启用升级的 Desktop 引导和 alias 默认数据库与 writer 的有效 CLI 根一致，未升级 Source Server / standalone 的旧默认与显式配置仍保持；授权的旧库升级、显式路径隔离和启动失败关闭由独立升级 spec 验收。现有轨迹桌面 E2E 继续验证真实 CLI 写入到侧栏读取的链路。
 
 ## 技能面板的插件缓存读取（2026-10-21）
 
