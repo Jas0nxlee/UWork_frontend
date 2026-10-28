@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
+import { promisify } from "node:util";
 import { expect, it } from "vitest";
 import {
   addHistory,
@@ -16,6 +18,8 @@ import {
   seedMembership,
   verifyFrozenSchema,
 } from "./fixtures/session-database-upgrade/fixture.mjs";
+
+const run = promisify(execFile);
 
 it("keeps Windows USERPROFILE as the old source home while testing a different owned HOME", () => {
   const root = join(tmpdir(), "packaged-windows-home-contract");
@@ -102,6 +106,53 @@ it("builds old-release owned/foreign/archived/explicit membership with committed
   } finally {
     if (index.isOpen) index.close();
     cli.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("keeps the frozen v0.1.2 schema bytes through a Windows-style Git checkout", async () => {
+  const root = process.cwd();
+  const fixture = "packages/desktop/test/fixtures/session-database-upgrade";
+  const directory = await mkdtemp(join(tmpdir(), "session-schema-checkout-"));
+  const repository = join(directory, "repository");
+  const output = join(directory, "checkout");
+  const origin = JSON.parse(await readFile(join(root, fixture, "origin.json"), "utf8")) as {
+    schemas: Record<string, { file: string; sha256: string }>;
+  };
+  const files = new Map(
+    Object.values(origin.schemas).map((entry) => [`${fixture}/${entry.file}`, entry.sha256]),
+  );
+  try {
+    await mkdir(repository);
+    for (const file of [".gitattributes", ...files.keys()]) {
+      await mkdir(dirname(join(repository, file)), { recursive: true });
+      await copyFile(join(root, file), join(repository, file));
+    }
+    await run("git", ["init", "--quiet"], { cwd: repository });
+    await run(
+      "git",
+      ["-c", "core.autocrlf=false", "add", "--", ".gitattributes", ...files.keys()],
+      { cwd: repository },
+    );
+    // 冻结 schema 按清单 SHA256 逐字节比较；Windows autocrlf 检出不能改写换行。
+    await run(
+      "git",
+      [
+        "-c",
+        "core.autocrlf=true",
+        "-c",
+        "core.eol=crlf",
+        "checkout-index",
+        "--all",
+        `--prefix=${output}${sep}`,
+      ],
+      { cwd: repository },
+    );
+    for (const [file, expected] of files) {
+      const bytes = await readFile(join(output, file));
+      expect(createHash("sha256").update(bytes).digest("hex"), file).toBe(expected);
+    }
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });

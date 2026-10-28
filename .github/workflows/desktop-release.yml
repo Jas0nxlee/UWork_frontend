@@ -192,6 +192,8 @@ jobs:
         with:
           name: packaged-upgrade-${{ matrix.platform }}-${{ matrix.arch }}
           path: packages/desktop/.e2e-artifacts/packaged-upgrade-*
+          # `.e2e-artifacts` 是隐藏目录，默认会被跳过成“无文件可上传”，失败证据随之丢失。
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
       - name: Verify fresh desktop can open WeCom scanning

@@ -16,6 +16,19 @@ import {
 
 const version = "3.14.4";
 const sha = "a".repeat(40);
+test("packaged upgrade evidence survives the hidden artifact directory", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/desktop-release.yml", import.meta.url),
+    "utf8",
+  );
+  // `.e2e-artifacts` 以点开头；upload-artifact 默认跳过隐藏路径，失败证据会被静默丢弃。
+  const upload = workflow.match(
+    /- name: Preserve packaged upgrade evidence[\s\S]*?retention-days: 7/,
+  );
+  assert.ok(upload, "packaged upgrade evidence upload step is missing");
+  assert.match(upload[0], /path: packages\/desktop\/\.e2e-artifacts\/packaged-upgrade-\*/);
+  assert.match(upload[0], /include-hidden-files: true/);
+});
 test("release notes use current version changes and retain identity and installer details", () => {
   const changes = "## 本次更新\n\n- 企业网关与独立数据目录。\n- 历史 MCP 凭据需重新授权。";
   const name = "UWork-3.15.0-win-x64.exe";
