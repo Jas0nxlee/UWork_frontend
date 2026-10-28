@@ -9,12 +9,10 @@ import {
   type ZCodeStorageStartupState,
 } from "@zcode/shared";
 import { sessionDatabaseMigration } from "../session-storage-migration/index.js";
-import type { SessionDatabaseRouteResolver } from "../session-storage-migration/index.js";
 
 interface LegacyMigrationPlan {
   sourcePath: string;
   targetPath: string;
-  resolveSessionDatabase?: SessionDatabaseRouteResolver;
 }
 
 export async function openProtocolStartupStorage(options: {

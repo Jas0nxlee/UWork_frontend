@@ -10,17 +10,10 @@ export interface LegacySessionOwnershipManifest {
   sessions: OwnedLegacySession[];
 }
 
-/** 数据库路径只由 CLI 配置 owner 解析，Host 不能镜像项目配置或猜测会话库。 */
-export type SessionDatabaseRouteResolver = (session: OwnedLegacySession) => {
-  path: string;
-  explicitlyConfigured: boolean;
-};
-
 export interface SessionDatabaseMigrationOptions {
   sourcePath: string;
   targetPath: string;
   ownershipManifestPath: string;
-  resolveSessionDatabase?: SessionDatabaseRouteResolver;
   onProgress?: (phase: "copying" | "verifying" | "activating") => Promise<void>;
 }
 

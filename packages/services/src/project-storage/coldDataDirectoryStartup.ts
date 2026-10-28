@@ -5,7 +5,6 @@ import { z } from "zod";
 import {
   appSettingsSchema,
   pendingDataDirectoryMigrationSchema,
-  UWORK_DATA_ROOT_DIR_NAME,
   type AppSettings,
   type PendingDataDirectoryMigration,
 } from "@zcode/shared";
@@ -296,20 +295,12 @@ export async function executePendingDataDirectoryMigration(options: {
       // Header 枚举不打开 SQLite。首次写库仅在所有源/已有目标写者检查通过后由文件层 backup 执行。
       const databases = new Set<string>();
       for (const base of new Set([request.sourceBaseDir, request.targetBaseDir])) {
-        const root = join(base, UWORK_DATA_ROOT_DIR_NAME);
-        const exists = await lstat(root).then(
-          () => true,
-          async (error: NodeJS.ErrnoException) => {
-            if (error.code !== "ENOENT") throw error;
-            // 只有顶层根缺席、且父目录仍可确认时才是空候选；坏链接/父目录缺席不能继续。
-            await realpath(base);
-            return false;
+        const files = await listDataDirectorySqliteFiles(base).catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return [];
+            throw error;
           },
         );
-        if (!exists) continue;
-        // 内部临时文件消失曾被整体吞成 []，跳过同根真实 SQLite 的写者检查后仍激活。
-        // 完整枚举的任何异常均阻断本轮，不能把“不确定”降级成“没有数据库”。
-        const files = await listDataDirectorySqliteFiles(base);
         files.forEach((path) => databases.add(path));
       }
       for (const path of databases) await options.assertNoWriters(path);

@@ -8,7 +8,6 @@ import type {
   SessionDatabaseMigrationContract,
   SessionDatabaseMigrationOptions,
   SessionDatabaseMigrationResult,
-  SessionDatabaseRouteResolver,
 } from "./contract.js";
 import {
   acquireMigrationLock,
@@ -174,49 +173,6 @@ function parseManifest(value: unknown): LegacySessionOwnershipManifest {
     sessions: [...manifest.sessions].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
   };
 }
-async function routeManifest(
-  manifest: LegacySessionOwnershipManifest,
-  paths: Paths,
-  resolveSessionDatabase?: SessionDatabaseRouteResolver,
-): Promise<LegacySessionOwnershipManifest> {
-  if (!resolveSessionDatabase) return manifest;
-  const identities = new Map<string, Promise<{ dev: bigint; ino: bigint } | undefined>>();
-  const identity = (path: string) => {
-    let value = identities.get(path);
-    if (!value) {
-      value = stat(path, { bigint: true })
-        .then((file) => ({ dev: file.dev, ino: file.ino }))
-        .catch((error: NodeJS.ErrnoException) => {
-          if (error.code === "ENOENT") return undefined;
-          throw error;
-        });
-      identities.set(path, value);
-    }
-    return value;
-  };
-  const samePath = async (left: string, right: string) => {
-    if (resolve(left) === resolve(right)) return true;
-    const [a, b] = await Promise.all([identity(left), identity(right)]);
-    if (a && b) return a.dev === b.dev && a.ino === b.ino;
-    return (
-      process.platform === "win32" && resolve(left).toLowerCase() === resolve(right).toLowerCase()
-    );
-  };
-  const sessions: LegacySessionOwnershipManifest["sessions"] = [];
-  for (const session of manifest.sessions) {
-    const route = resolveSessionDatabase(session);
-    if (!isAbsolute(route.path)) throw ownershipError("database route is not absolute");
-    // 路径文本不同不证明分库；显式 symlink/hardlink 仍可能指向同一旧库，须保留严格 ID 验证。
-    if (route.explicitlyConfigured) {
-      if (await samePath(route.path, paths.sourcePath)) sessions.push(session);
-      continue;
-    }
-    if (!(await samePath(route.path, paths.targetPath)))
-      throw ownershipError("default database route changed during preparation");
-    sessions.push(session);
-  }
-  return { ...manifest, sessions };
-}
 async function upgrade(path: string): Promise<void> {
   const store = await SqliteSessionStore.openStartup({ dbPath: path });
   await store.close();
@@ -326,11 +282,7 @@ export function createMigrationEngine(testHooks?: {
             return { status: journal.status, importedSessions: journal.importedSessions };
           }
         }
-        const manifest = await routeManifest(
-          parseManifest(await readJson(options.ownershipManifestPath)),
-          paths,
-          options.resolveSessionDatabase,
-        );
+        const manifest = parseManifest(await readJson(options.ownershipManifestPath));
         if ((await exists(paths.sourcePath)) && (await exists(paths.targetPath))) {
           const sourceFile = await stat(paths.sourcePath);
           const targetFile = await stat(paths.targetPath);

@@ -1,8 +1,7 @@
 import { isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
 import { SqliteSessionStore } from "@zcode/adapters/storage";
-import { createConfig, type ConfigResult } from "@zcode/adapters/config";
-import type { SessionDatabaseRouteResolver } from "../session-storage-migration/contract.js";
+import type { ConfigResult } from "@zcode/adapters/config";
 import {
   SESSION_ENTRY_MODEL_SELECTION,
   parseModelSelectionValue,
@@ -170,31 +169,6 @@ export function resolveLegacySessionDatabaseMigration(
   const sourcePath = resolve(home, ".zcode", "cli", "db", "db.sqlite");
   const targetPath = getSessionDbPath(configResult, options.workingDirectory, env);
   return sourcePath === targetPath ? undefined : { sourcePath, targetPath };
-}
-
-/** 每轮准备复用同一配置 resolver；同 workspace 的大量任务不重复读取配置。 */
-export function createSessionDatabaseRouteResolver(
-  env: Record<string, string | undefined> = process.env,
-): SessionDatabaseRouteResolver {
-  const routes = new Map<string, ReturnType<SessionDatabaseRouteResolver>>();
-  return (session) => {
-    const key = session.workspaceIdentity?.trim() || session.workspacePath;
-    let route = routes.get(key);
-    if (!route) {
-      const config = createConfig({
-        env,
-        workingDirectory: session.workspacePath,
-        workspaceIdentity: session.workspaceIdentity,
-      });
-      route = {
-        path: getSessionDbPath(config, session.workspacePath, env),
-        explicitlyConfigured:
-          config.sources.sessionDb !== undefined && config.sources.sessionDb !== "system",
-      };
-      routes.set(key, route);
-    }
-    return route;
-  };
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {

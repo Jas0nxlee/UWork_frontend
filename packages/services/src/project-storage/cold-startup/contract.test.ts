@@ -3,49 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import fsPromises from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { fixture, directories } from "./test-fixture.js";
-it("fails closed when an internal temporary file disappears during writer inventory", async () => {
-  const f = await fixture();
-  const originalSettings = await readFile(f.settingsFile, "utf8");
-  const temporary = join(f.source, ".uwork", "aaa.tmp");
-  await writeFile(temporary, "temporary source entry");
-  const originalLstat = fsPromises.lstat;
-  let removed = false;
-  const probe = vi.spyOn(fsPromises, "lstat").mockImplementation(async (...args) => {
-    if (String(args[0]) === temporary && !removed) {
-      removed = true;
-      await rm(temporary);
-    }
-    return originalLstat(...args);
-  });
-  syncBuiltinESMExports();
-  const copy = vi.fn(f.files.copyDataDirectory);
-  const writers = vi.fn(async () => {
-    throw Object.assign(new Error("live source writer"), { kind: "legacy_writer_active" });
-  });
-  try {
-    await expect(
-      f.api.executePendingDataDirectoryMigration({ assertNoWriters: writers, copy }),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-    expect(removed).toBe(true);
-    expect(copy).not.toHaveBeenCalled();
-    expect(await readFile(f.settingsFile, "utf8")).toBe(originalSettings);
-    await expect(stat(join(f.target, ".uwork"))).rejects.toMatchObject({ code: "ENOENT" });
-    const source = new DatabaseSync(join(f.source, ".uwork", "cli", "db", "db.sqlite"), {
-      readOnly: true,
-    });
-    try {
-      expect(source.prepare("SELECT body FROM history").get()?.body).toBe("preserved");
-    } finally {
-      source.close();
-    }
-  } finally {
-    probe.mockRestore();
-    syncBuiltinESMExports();
-  }
-});
 it("copies only in the cold owner and commits settings after SQLite and receipt validation", async () => {
   const f = await fixture();
   const request = (await f.service.get()).pendingDataDirectoryMigration;

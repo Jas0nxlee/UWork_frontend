@@ -5,20 +5,13 @@ export function resolveDesktopLifecycleIdentity(
   flavor: string,
   env: Record<string, string | undefined>,
   getAppDataPath: () => string,
-  localDevelopmentBuild = false,
 ) {
   const read = (key: string) => env[key]?.trim() || undefined;
   const development = !packaged;
   const preview = packaged && flavor === "preview";
   const runtimeApplicationName =
     read("ZCODE_DESKTOP_APPLICATION_NAME") ??
-    (packaged && localDevelopmentBuild
-      ? "UWork Local Development"
-      : development
-        ? "UWork Dev"
-        : preview
-          ? "UWork Preview"
-          : "UWork");
+    (development ? "UWork Dev" : preview ? "UWork Preview" : "UWork");
   const shouldUseElectronDefaultUserDataPath = ["1", "true", "yes", "on"].includes(
     read("ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA")?.toLowerCase() ?? "",
   );
@@ -26,12 +19,7 @@ export function resolveDesktopLifecycleIdentity(
     read("ZCODE_DESKTOP_USER_DATA_DIR") ??
     (shouldUseElectronDefaultUserDataPath
       ? undefined
-      : // 开发打包版只隔离名称与 Helper；Chromium 目录沿用主线规则，不能因提取 resolver 丢登录状态。
-        join(
-          getAppDataPath(),
-          read("ZCODE_DESKTOP_APPLICATION_NAME") ??
-            (development ? "UWork Dev" : preview ? "UWork Preview" : "UWork"),
-        ));
+      : join(getAppDataPath(), runtimeApplicationName));
   return {
     runtimeApplicationName,
     runtimeHomePath: read("ZCODE_DESKTOP_HOME_DIR") ?? read("HOME") ?? read("USERPROFILE"),

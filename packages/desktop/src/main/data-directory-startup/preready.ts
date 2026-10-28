@@ -8,7 +8,6 @@ import { ZCODE_PRODUCT_FLAVOR } from "@zcode/shared";
 import { resolveDesktopLifecycleIdentity } from "./identity.js";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-declare const __UWORK_LOCAL_DEVELOPMENT_BUILD__: boolean | undefined;
 const initialDefaultBaseDir = resolve(
   process.env.UWORK_DATA_BASE_DIR?.trim() ||
     process.env.ZCODE_DATA_BASE_DIR?.trim() ||
@@ -31,13 +30,8 @@ export function configureDesktopPrereadyRuntime(): void {
     runtimeUserDataPath,
     runtimeSessionDataPath,
     shouldUseElectronDefaultUserDataPath,
-  } = resolveDesktopLifecycleIdentity(
-    app.isPackaged,
-    ZCODE_PRODUCT_FLAVOR,
-    process.env,
-    () => app.getPath("appData"),
-    // 冷启动不能丢失主线已支持的开发包身份；与业务 Main 读取同一个编译期事实，绝不信任 env。
-    typeof __UWORK_LOCAL_DEVELOPMENT_BUILD__ === "boolean" && __UWORK_LOCAL_DEVELOPMENT_BUILD__,
+  } = resolveDesktopLifecycleIdentity(app.isPackaged, ZCODE_PRODUCT_FLAVOR, process.env, () =>
+    app.getPath("appData"),
   );
   // Electron 后一次 privileged 注册会覆盖前一次；最终集合须保留 SDK 顶层注册的权限。
   registerLocalMediaPreviewScheme(protocol, [
