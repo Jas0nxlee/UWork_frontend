@@ -226,15 +226,33 @@ export function seedMembership(path, workspace, explicitWorkspace) {
   }
 }
 
-export function rows(path, id) {
-  const db = new DatabaseSync(path, { readOnly: true });
-  try {
-    return {
-      messages: db.prepare("SELECT * FROM message WHERE session_id=? ORDER BY id").all(id),
-      parts: db.prepare("SELECT * FROM part WHERE session_id=? ORDER BY id").all(id),
-    };
-  } finally {
-    db.close();
+export function rows(path, id, retries = 10, delayMs = 200) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const db = new DatabaseSync(path, { readOnly: true });
+      try {
+        return {
+          messages: db.prepare("SELECT * FROM message WHERE session_id=? ORDER BY id").all(id),
+          parts: db.prepare("SELECT * FROM part WHERE session_id=? ORDER BY id").all(id),
+        };
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      const isLocked =
+        error.code === "ERR_SQLITE_ERROR" &&
+        (error.errstr === "database is locked" || error.errcode === 5);
+      if (isLocked && attempt < retries) {
+        // Windows 文件系统可能延迟释放数据库锁；短暂等待后重试。
+        const wait = delayMs * (attempt + 1);
+        const deadline = Date.now() + wait;
+        while (Date.now() < deadline) {
+          /* busy wait */
+        }
+        continue;
+      }
+      throw error;
+    }
   }
 }
 
