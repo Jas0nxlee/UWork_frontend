@@ -14,7 +14,7 @@ import {
   type ProjectId,
 } from "@zcode/contracts";
 import type { ModelSelection } from "@zcode/provider";
-import { isHighspeedProviderId } from "@zcode/shared";
+import { isHighspeedProviderId, resolvePlatformHomeDirectory } from "@zcode/shared";
 import { StartupTimer } from "../startup-logging.js";
 
 export function isClosableSessionStore(
@@ -145,7 +145,10 @@ export function getSessionDbPath(
 ): string {
   const configured = configResult.config.storage.sessionDbPath;
   if (configured.startsWith("~/")) {
-    return resolve(env.HOME?.trim() || env.USERPROFILE?.trim() || homedir(), configured.slice(2));
+    return resolve(
+      resolvePlatformHomeDirectory(env, process.platform, homedir()),
+      configured.slice(2),
+    );
   }
   // 存储 Worker 不能 chdir；显式传入业务实际 cwd，保持相对路径与普通 Agent 一致。
   if (workingDirectory && !isAbsolute(configured) && !configured.startsWith("~/"))
@@ -166,7 +169,7 @@ export function resolveLegacySessionDatabaseMigration(
   if (env.UWORK_SESSION_DB_MIGRATION !== "1" || configResult.sources.sessionDb !== "system") {
     return undefined;
   }
-  const home = env.HOME?.trim() || env.USERPROFILE?.trim() || homedir();
+  const home = resolvePlatformHomeDirectory(env, process.platform, homedir());
   const sourcePath = resolve(home, ".zcode", "cli", "db", "db.sqlite");
   const targetPath = getSessionDbPath(configResult, options.workingDirectory, env);
   return sourcePath === targetPath ? undefined : { sourcePath, targetPath };

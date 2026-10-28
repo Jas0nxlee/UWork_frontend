@@ -74,7 +74,12 @@ describe("迁移前的 stdio 启动控制帧", () => {
       cwd: workspace,
       input,
       output,
-      env: { HOME: root, ZCODE_STORAGE_DIR: join(root, ".uwork"), UWORK_SESSION_DB_MIGRATION: "1" },
+      env: {
+        HOME: root,
+        USERPROFILE: root,
+        ZCODE_STORAGE_DIR: join(root, ".uwork"),
+        UWORK_SESSION_DB_MIGRATION: "1",
+      },
     });
     const target = new DatabaseSync(join(root, ".uwork", "cli", "db", "db.sqlite"), {
       readOnly: true,
@@ -118,7 +123,12 @@ describe("迁移前的 stdio 启动控制帧", () => {
       cwd: workspace,
       input,
       output,
-      env: { HOME: root, ZCODE_STORAGE_DIR: join(root, ".uwork"), UWORK_SESSION_DB_MIGRATION: "1" },
+      env: {
+        HOME: root,
+        USERPROFILE: root,
+        ZCODE_STORAGE_DIR: join(root, ".uwork"),
+        UWORK_SESSION_DB_MIGRATION: "1",
+      },
     });
     expect(paths).toEqual([join(workspace, "project-history.sqlite")]);
     await expect(access(paths[0]!)).resolves.toBeUndefined();
@@ -295,7 +305,12 @@ describe("默认会话库路径升级的配置门禁", () => {
   it("仅Host标志和默认来源共同允许从legacy库升级", () => {
     const home = join(tmpdir(), "isolated-home");
     const storageRoot = join(tmpdir(), "isolated-storage");
-    const env = { HOME: home, ZCODE_STORAGE_DIR: storageRoot, UWORK_SESSION_DB_MIGRATION: "1" };
+    const env = {
+      HOME: home,
+      USERPROFILE: home,
+      ZCODE_STORAGE_DIR: storageRoot,
+      UWORK_SESSION_DB_MIGRATION: "1",
+    };
     const config = createConfig({ skipUserConfig: true, env });
     expect(resolveLegacySessionDatabaseMigration(config, { env })).toEqual({
       sourcePath: join(home, ".zcode", "cli", "db", "db.sqlite"),
@@ -321,10 +336,10 @@ describe("默认会话库路径升级的配置门禁", () => {
     expect(resolveLegacySessionDatabaseMigration(standalone, { env })).toBeUndefined();
   });
 
-  it("路径与legacy候选复用同一注入HOME/cwd，显式相对库保持优先", () => {
+  it("路径与legacy候选复用同一注入平台home/cwd，显式相对库保持优先", () => {
     const home = join(tmpdir(), "isolated-home");
     const workingDirectory = join(tmpdir(), "migration-workspace");
-    const env = { HOME: home, UWORK_SESSION_DB_MIGRATION: "1" };
+    const env = { HOME: home, USERPROFILE: home, UWORK_SESSION_DB_MIGRATION: "1" };
     const config = createConfig({
       skipUserConfig: true,
       env,

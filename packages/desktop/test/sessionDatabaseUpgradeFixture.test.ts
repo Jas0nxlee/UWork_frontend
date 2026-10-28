@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import {
   addHistory,
+  createPackagedUpgradeEnvironment,
   fingerprint,
   historyText,
   ids,
@@ -15,6 +16,36 @@ import {
   seedMembership,
   verifyFrozenSchema,
 } from "./fixtures/session-database-upgrade/fixture.mjs";
+
+it("keeps Windows USERPROFILE as the old source home while testing a different owned HOME", () => {
+  const root = join(tmpdir(), "packaged-windows-home-contract");
+  const env = createPackagedUpgradeEnvironment(
+    {
+      HOME: "ambient-home",
+      USERPROFILE: "ambient-profile",
+      UWORK_SESSION_DB_MIGRATION: "1",
+      ZCODE_SESSION_DB_PATH: "ambient.sqlite",
+      ZCODE_SESSION_DB: "other.sqlite",
+    },
+    root,
+    "win",
+  );
+  expect(env.HOME).toBe(join(root, "alternate-home"));
+  expect(env.USERPROFILE).toBe(root);
+  expect(env.ZCODE_DESKTOP_HOME_DIR).toBe(root);
+  expect(env.UWORK_DATA_BASE_DIR).toBe(root);
+  expect(env.ZCODE_DATA_BASE_DIR).toBe(root);
+  expect(env.UWORK_SESSION_DB_MIGRATION).toBeUndefined();
+  expect(env.ZCODE_SESSION_DB_PATH).toBeUndefined();
+  expect(env.ZCODE_SESSION_DB).toBeUndefined();
+});
+
+it.each(["mac", "linux"])("preserves the existing %s HOME fixture", (platform) => {
+  const root = join(tmpdir(), "packaged-unix-home-contract");
+  const env = createPackagedUpgradeEnvironment({}, root, platform);
+  expect(env.HOME).toBe(root);
+  expect(env.USERPROFILE).toBe(root);
+});
 
 it("builds old-release owned/foreign/archived/explicit membership with committed WAL history", async () => {
   const directory = await mkdtemp(join(tmpdir(), "packaged-upgrade-fixture-"));
@@ -55,6 +86,14 @@ it("builds old-release owned/foreign/archived/explicit membership with committed
       expect(actual.prepare("SELECT root_path FROM project_roots").all()).toEqual([
         { root_path: join(directory, "explicit") },
       ]);
+      expect(
+        actual
+          .prepare("SELECT root_path,handoff_pending FROM tasks WHERE task_id=?")
+          .get(ids.explicit),
+      ).toEqual({
+        root_path: join(directory, "explicit"),
+        handoff_pending: 8,
+      });
     } finally {
       actual.close();
     }
@@ -75,27 +114,22 @@ it("seeds an explicit database through the real CLI without granting its path to
     new URL("../../../apps/zcode-cli/packages/cli/src/main.ts", import.meta.url),
   );
   const nodeArgs = ["--import", import.meta.resolve("tsx")];
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    HOME: home,
-    USERPROFILE: home,
-    UWORK_DATA_BASE_DIR: home,
-    ZCODE_DATA_BASE_DIR: home,
-    UWORK_STORAGE_DIR: join(home, ".uwork"),
-    ZCODE_STORAGE_DIR: join(home, ".uwork"),
-  };
-  for (const key of [
-    "NODE_OPTIONS",
-    "UWORK_SESSION_DB_MIGRATION",
-    "ZCODE_SESSION_DB",
-    "ZCODE_SESSION_DB_PATH",
-  ])
-    delete env[key];
+  const env = createPackagedUpgradeEnvironment(
+    process.env,
+    home,
+    process.platform === "win32" ? "win" : "mac",
+  );
   try {
     await mkdir(join(workspace, ".zcode"), { recursive: true });
+    if (process.platform === "win32") await mkdir(env.HOME);
     await writeFile(
       join(workspace, ".zcode", "config.json"),
-      JSON.stringify({ storage: { sessionDbPath: database } }),
+      JSON.stringify({
+        storage: {
+          sessionDbPath:
+            process.platform === "win32" ? "~/project/custom-history.sqlite" : database,
+        },
+      }),
     );
     // 旧夹具在这里调用全局 storage-migrate 后，DatabaseSync 会静默创建无 session 表的空库。
     await initializeExplicitDatabase(cli, database, { cwd: workspace, env, nodeArgs });

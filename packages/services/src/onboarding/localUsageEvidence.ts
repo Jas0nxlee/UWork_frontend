@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { getUworkUserCliConfigPath } from "#src/paths.js";
 import {
   LEGACY_DATA_BASE_DIR_ENV,
+  resolvePlatformHomeDirectory,
   resolveUserCliConfigPath,
   UWORK_DATA_BASE_DIR_ENV,
   UWORK_DATA_ROOT_DIR_NAME,
@@ -71,7 +72,7 @@ function pickEnvSessionDbPath(env: NodeJS.ProcessEnv): string | undefined {
 export interface ResolveAgentSessionDbPathOptions {
   /** 默认 process.env。 */
   env?: NodeJS.ProcessEnv;
-  /** 默认 os.homedir()。 */
+  /** 显式注入时同时覆盖 ~/ 展开与 managed 默认 home；未注入时分别保留各自规则。 */
   homedirPath?: string;
   /** 默认有效产品 CLI 根下的 config.json。 */
   userConfigPath?: string;
@@ -90,11 +91,16 @@ export async function resolveAgentSessionDbPath(
   options: ResolveAgentSessionDbPathOptions = {},
 ): Promise<string | null> {
   const env = options.env ?? process.env;
-  const home = options.homedirPath ?? (env.HOME?.trim() || env.USERPROFILE?.trim() || homedir());
+  const storageHome =
+    options.homedirPath ?? (env.HOME?.trim() || env.USERPROFILE?.trim() || homedir());
+  // 显式 ~/ 遵守 CLI 原有平台 homedir 合同；Windows 不能借 managed 根的 HOME 改写用户自选库。
+  // managed config/root 仍按原业务优先级解析，与用户路径展开分开持有各自含义。
+  const tildeHome =
+    options.homedirPath ?? resolvePlatformHomeDirectory(env, process.platform, homedir());
   const readConfigFile = options.readConfigFile ?? ((path) => readFile(path, "utf-8"));
 
   const fromEnv = pickEnvSessionDbPath(env);
-  if (fromEnv) return resolveMirroredSessionDbPath(fromEnv, home);
+  if (fromEnv) return resolveMirroredSessionDbPath(fromEnv, tildeHome);
 
   // 配置与默认会话库复用同一个有效 CLI 根；本读取器不能另造迁移或回退路径。
   // 显式 env/home 是解析实例的隔离边界，不能再借进程全局根读取另一实例的配置。
@@ -108,7 +114,7 @@ export async function resolveAgentSessionDbPath(
             join(
               pathEnv[UWORK_DATA_BASE_DIR_ENV]?.trim() ||
                 pathEnv[LEGACY_DATA_BASE_DIR_ENV]?.trim() ||
-                home,
+                storageHome,
               UWORK_DATA_ROOT_DIR_NAME,
             ),
         })
@@ -129,7 +135,7 @@ export async function resolveAgentSessionDbPath(
   const parsed = JSON.parse(raw) as { storage?: { sessionDbPath?: string } };
   const configured = parsed.storage?.sessionDbPath?.trim();
   if (configured) {
-    const mirrored = resolveMirroredSessionDbPath(configured, home);
+    const mirrored = resolveMirroredSessionDbPath(configured, tildeHome);
     if (mirrored === null) return null;
     return mirrored;
   }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolvePlatformHomeDirectory } from "../src/uwork-paths.js";
 import {
   ZCODE_TOOL_ENV_PASSTHROUGH_ENV_KEY,
   ZCODE_REMOTE_HTTP_PROXY_ENV_KEY,
@@ -17,6 +18,19 @@ import {
 } from "../src/runtimeEnv.js";
 
 describe("runtimeEnv", () => {
+  it.each([
+    ["win32", { HOME: "/other-home", USERPROFILE: "/profile" }, "/profile"],
+    ["linux", { HOME: "/home", USERPROFILE: "/other-profile" }, "/home"],
+    ["darwin", { HOME: "/home", USERPROFILE: "/other-profile" }, "/home"],
+    ["win32", { HOME: "/wrong-platform" }, "/native-fallback"],
+    ["linux", { USERPROFILE: "/wrong-platform" }, "/native-fallback"],
+    ["win32", {}, "/native-fallback"],
+    ["linux", {}, "/native-fallback"],
+    ["linux", { HOME: "/home with space " }, "/home with space "],
+  ] as const)("keeps native home semantics for %s", (platform, env, expected) => {
+    expect(resolvePlatformHomeDirectory(env, platform, "/native-fallback")).toBe(expected);
+  });
+
   it("strips the Host session migration marker and refuses tool passthrough restoration", () => {
     const source = {
       PATH: "/bin",

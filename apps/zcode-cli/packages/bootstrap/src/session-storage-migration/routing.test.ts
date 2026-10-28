@@ -24,6 +24,7 @@ async function fixture() {
   const ownershipManifestPath = join(root, "ownership.json");
   const env = {
     HOME: root,
+    USERPROFILE: root,
     ZCODE_STORAGE_DIR: join(root, ".uwork"),
     UWORK_SESSION_DB_MIGRATION: "1",
   };

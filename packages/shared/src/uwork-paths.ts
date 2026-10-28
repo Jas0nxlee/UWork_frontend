@@ -24,6 +24,17 @@ const CLI_CONFIG_FILE_NAME = "config.json";
 
 export type StorageRootEnv = Record<string, string | undefined>;
 
+/** 历史 Node home/显式 ~/ 的纯平台规则；不能混用 Windows USERPROFILE 与 POSIX HOME。 */
+export function resolvePlatformHomeDirectory(
+  env: StorageRootEnv,
+  platform: string,
+  fallbackHome: string,
+): string {
+  // 旧 writer 由 os.homedir() 展开 ~/：Windows 的 HOME 可是另一目录，优先它会打开空库。
+  // 缺席时让 Node 自己补齐；不以另一个平台变量或 Desktop home 替换历史 owner。
+  return (platform === "win32" ? env.USERPROFILE : env.HOME) ?? fallbackHome;
+}
+
 /**
  * 用户级存储根的唯一解析口：Host 通过 `ZCODE_STORAGE_DIR` 下发产品数据根
  * （UWork 下是 `{dataBaseDir}/.uwork`），未设置时保持上游默认 `~/.zcode`。

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -11,6 +11,8 @@ import { resolvePackagedDesktopExecutable } from "../scripts/packaged-desktop-ex
 import { launchPackagedDesktopCdp } from "../scripts/packaged-desktop-cdp.mjs";
 import {
   addHistory,
+  createPackagedUpgradeEnvironment,
+  explicitHistoryText,
   fingerprint,
   historyText,
   ids,
@@ -48,32 +50,7 @@ const taskIndex = join(data, ".uwork", "v2", "tasks-index.sqlite");
 const settingsPath = join(data, ".uwork", "v2", "setting.json");
 const ledgerPath = `${target}.uwork-migration.json`;
 const stage = (name) => console.log(`[packaged-upgrade] ${platform}/${arch}: ${name}`);
-const env = {
-  ...process.env,
-  HOME: data,
-  USERPROFILE: data,
-  UWORK_DATA_BASE_DIR: data,
-  ZCODE_DATA_BASE_DIR: data,
-  UWORK_STORAGE_DIR: join(data, ".uwork"),
-  ZCODE_STORAGE_DIR: join(data, ".uwork"),
-  ZCODE_DESKTOP_HOME_DIR: data,
-  ZCODE_DESKTOP_USER_DATA_DIR: join(data, "userData"),
-  ZCODE_DESKTOP_SESSION_DATA_DIR: join(data, "sessionData"),
-};
-for (const key of [
-  "ELECTRON_RUN_AS_NODE",
-  "NODE_OPTIONS",
-  "UWORK_SESSION_DB_MIGRATION",
-  "ZCODE_SESSION_DB_PATH",
-  "ZCODE_SESSION_DB",
-  "ZCODE_AGENT_SERVER_COMMAND",
-  "ZCODE_AGENT_SERVER_ARGS_JSON",
-  "ZCODE_AGENT_SERVER_CWD",
-  "GLM_BINARY_PATH",
-  "ZCODE_AGENT_WORKDIR",
-  "ZCODE_HOME",
-])
-  delete env[key];
+const env = createPackagedUpgradeEnvironment(process.env, data, platform);
 const exec = promisify(execFile);
 let app;
 let sourceKeeper;
@@ -138,11 +115,58 @@ async function readVisibleHistory() {
   return page;
 }
 
+async function readVisibleExplicitHistory(page) {
+  const project = page.locator('[data-project-id="packaged-explicit"]');
+  const toggle = project.getByTestId("virtual-project-toggle");
+  await toggle.waitFor();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  // 文件原样保留仍可能误开另一空库；只有真实订阅后显示显式正文才证明路由有效。
+  await project.getByTestId(`task-item-${ids.explicit}`).click();
+  await waitFor(async () => {
+    if (
+      await page
+        .getByTestId("v4-timeline")
+        .getByText(explicitHistoryText, { exact: true })
+        .isVisible()
+    )
+      return true;
+    if (await page.getByText("fault.subscribe.sessionNotFound", { exact: true }).isVisible())
+      throw new Error("Packaged explicit conversation returned fault.subscribe.sessionNotFound");
+    return false;
+  }, "Packaged explicit history did not become visible");
+  assert.equal(await page.getByTestId("enterprise-login-page").count(), 0);
+  await page.screenshot({ path: join(artifacts, `explicit-history-${historyReadCount}.png`) });
+}
+
+async function saveOwnedFailureLogs() {
+  for (const [kind, directory] of [
+    ["main", join(data, ".uwork", "v2", "logs")],
+    ["cli", env.ZCODE_LOG_DIR],
+  ]) {
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    const files = entries
+      .filter((entry) => entry.isFile() && /\.(?:log|jsonl)$/.test(entry.name))
+      .slice(-8);
+    for (const entry of files) {
+      const file = await open(join(directory, entry.name), "r");
+      try {
+        const { size } = await file.stat();
+        const bytes = Buffer.alloc(Math.min(size, 512 * 1024));
+        await file.read(bytes, 0, bytes.length, size - bytes.length);
+        await writeFile(join(artifacts, `${kind}-${entry.name}`), bytes);
+      } finally {
+        await file.close();
+      }
+    }
+  }
+}
+
 try {
   await mkdir(artifacts, { recursive: true });
   await Promise.all([
     mkdir(workspace),
     mkdir(join(explicitWorkspace, ".zcode"), { recursive: true }),
+    ...(platform === "win" ? [mkdir(env.HOME)] : []),
   ]);
   // Resolver 会优先向上查找 monorepo CLI；正式包验收必须从仓库外启动，防止测到源码运行时。
   process.chdir(data);
@@ -172,14 +196,19 @@ try {
 
   await writeFile(
     join(explicitWorkspace, ".zcode", "config.json"),
-    JSON.stringify({ storage: { sessionDbPath: explicitDb } }),
+    JSON.stringify({
+      storage: {
+        sessionDbPath:
+          platform === "win" ? "~/explicit-project/explicit-history.sqlite" : explicitDb,
+      },
+    }),
   );
   await initializeExplicitDatabase(cli, explicitDb, {
     cwd: explicitWorkspace,
     env,
   });
   const explicit = new DatabaseSync(explicitDb);
-  addHistory(explicit, ids.explicit, explicitWorkspace, "PACKAGED_UPGRADE_EXPLICIT_HISTORY");
+  addHistory(explicit, ids.explicit, explicitWorkspace, explicitHistoryText);
   explicit.close();
   const explicitBefore = rows(explicitDb, ids.explicit);
   seedMembership(taskIndex, workspace, explicitWorkspace);
@@ -214,7 +243,7 @@ try {
   assert.deepEqual(rows(target, ids.explicit), { messages: [], parts: [] });
   assert.deepEqual(rows(explicitDb, ids.explicit), explicitBefore);
   assert.deepEqual(await fingerprint(source), sourceBefore);
-  await readVisibleHistory();
+  await readVisibleExplicitHistory(await readVisibleHistory());
   await close();
 
   const active = new DatabaseSync(target);
@@ -224,7 +253,7 @@ try {
   const ledgerBeforeRestart = await readFile(ledgerPath, "utf8");
   stage("restarting to verify completion-ledger idempotency");
   await launch();
-  await readVisibleHistory();
+  await readVisibleExplicitHistory(await readVisibleHistory());
   assert.deepEqual(rows(target, ids.owned), ownedBefore);
   assert.deepEqual(rows(target, ids.afterUpgrade), afterUpgrade);
   assert.equal(await readFile(ledgerPath, "utf8"), ledgerBeforeRestart);
@@ -235,6 +264,7 @@ try {
   );
   stage(`screenshots: ${artifacts}`);
 } catch (error) {
+  await saveOwnedFailureLogs().catch(() => {});
   const page = app?.browser
     .contexts()
     .flatMap((context) => context.pages())
