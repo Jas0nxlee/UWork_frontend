@@ -362,6 +362,8 @@ const zhCN: Record<string, string> = {
   "startup.global.waiting": "正在等待数据库准备",
   "startup.global.saving": "正在保存更新",
   "startup.global.finishing": "正在完成启动",
+  "startup.global.dataDirectoryMigration": "正在迁移应用数据",
+  "startup.global.cancelDataDirectoryMigration": "取消此次迁移，使用原目录",
   "startup.global.servicesFailed":
     "本地数据准备已完成，但应用服务启动失败。请复制诊断信息，退出并重新打开 UWork。",
   "startup.global.starting": "正在准备本地数据",
@@ -391,6 +393,16 @@ const zhCN: Record<string, string> = {
     "无法打开数据库。请检查数据目录是否存在且可访问，处理后点击重试。",
   "startup.global.error.lock_timeout":
     "等待数据库写锁超时。请检查其他 UWork 或 CLI 进程是否仍在更新数据，待其完成后点击重试。",
+  "startup.global.error.legacy_writer_active":
+    "检测到旧数据文件仍被进程占用。请关闭旧版 UWork 及使用该目录的相关进程后点击重试；应用不会终止其他进程。",
+  "startup.global.error.legacy_writer_check_failed":
+    "无法确认旧数据文件已停止写入。请检查进程查询工具和访问权限，关闭旧版 UWork 及相关进程后重试。",
+  "startup.global.error.session_ownership_unknown":
+    "无法确认部分历史会话属于当前 UWork，已保留原库并停止升级。请保留诊断信息并联系支持人员核对会话归属，不要删除原库。",
+  "startup.global.error.session_source_changed":
+    "旧会话库在准备期间发生变化，已保留原库并停止切换。请关闭旧版 UWork 及使用该库的相关进程后重试；若仍失败，请保留诊断信息联系支持人员。",
+  "startup.global.error.data_directory_target_conflict":
+    "目标目录包含其他数据或内容已变化，未覆盖目标，原目录也已保留。可取消本次迁移，或选择其他空目录后重试。",
   "startup.global.error.sql_failed":
     "准备过程未完成。请复制诊断信息查看日志，排除问题后手动重试。应用不会自动重试。",
   "startup.global.error.startup_status_timeout":
@@ -3100,15 +3112,18 @@ const zhCN: Record<string, string> = {
   "settings.taskAutoArchiveDays.option.30": "30 天后归档",
   "settings.dataBaseDir": "数据存储路径",
   "settings.dataBaseDirDescription":
-    "应用数据的根目录（默认为用户主目录），修改后会将现有数据复制到新位置。路径后缀 .uwork/v2 不可更改。",
+    "保存待迁移目录，重启应用后再移动数据；当前目录继续使用，旧目录会保留。",
   "settings.dataBaseDirPlaceholder": "默认：用户主目录",
   "settings.dataBaseDirBrowse": "选择文件夹",
   "settings.dataBaseDirSave": "保存",
-  "settings.dataBaseDirCopying": "正在复制数据，请勿关闭应用…",
-  "settings.dataBaseDirCopyFailed": "数据复制失败，路径未更改。",
+  "settings.dataBaseDirCopying": "正在保存迁移请求…",
+  "settings.dataBaseDirCopyFailed": "迁移请求未保存，当前目录未更改。",
   "settings.dataBaseDirForbiddenInstallDir":
     "不能选择 UWork 安装目录作为数据存储路径。请选择安装目录之外的文件夹。",
-  "settings.dataBaseDirRestartRequired": "数据已保存，重启应用后生效。",
+  "settings.dataBaseDirRestartRequired": "已记录待迁移目录，请重启应用完成迁移。",
+  "settings.dataBaseDirPendingTarget": "当前使用：{active}；重启后迁移到：{target}",
+  "settings.dataBaseDirMigrationCancelled": "已取消待执行迁移，当前目录未更改。",
+  "settings.dataBaseDirInfoUnavailable": "无法读取默认数据目录，暂时不能恢复默认。仍可选择明确的新目录，由服务校验。",
   "settings.locale.system": "系统默认",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",

@@ -55,6 +55,10 @@ const remoteServices = {
     getEnterprisePricing: vi.fn(async () => ({ productList: [] })),
   },
   settingService: {
+    getDataDirectoryInfo: vi.fn(async () => ({
+      activeBaseDir: "/Users/remote",
+      defaultBaseDir: "/Users/remote",
+    })),
     get: vi.fn(async () => ({})),
     update: vi.fn(async () => {}),
     updateDataBaseDir: vi.fn(async () => {}),
@@ -68,6 +72,10 @@ const remoteServices = {
 const localServices = {
   // 回归：不能让本机与 Source 共用一个替身，否则写错机器也会通过。
   settingService: {
+    getDataDirectoryInfo: vi.fn(async () => ({
+      activeBaseDir: "/desktop/data",
+      defaultBaseDir: "/Users/local",
+    })),
     get: vi.fn(async () => ({})),
     update: vi.fn(async () => {}),
     updateDataBaseDir: vi.fn(async () => {}),
@@ -339,6 +347,12 @@ describe("SettingsPage integrated terminal shell", () => {
     stateUpdates.length = 0;
     localServices.settingService.get.mockReset().mockResolvedValue({});
     remoteServices.settingService.get.mockReset().mockResolvedValue({});
+    localServices.settingService.getDataDirectoryInfo
+      .mockReset()
+      .mockResolvedValue({ activeBaseDir: "/desktop/data", defaultBaseDir: "/Users/local" });
+    remoteServices.settingService.getDataDirectoryInfo
+      .mockReset()
+      .mockResolvedValue({ activeBaseDir: "/Users/remote", defaultBaseDir: "/Users/remote" });
     generalSectionCapture.props = undefined;
     settingsPageConfigCalls.length = 0;
     sharedSettingsState.value = undefined;
@@ -617,5 +631,29 @@ describe("SettingsPage integrated terminal shell", () => {
     await flushPromises();
     expect(stateUpdates).not.toContain("/stale/desktop");
     expect(stateUpdates).not.toContain("stale Source font");
+  });
+  it("reads the trusted initial default separately from native home", async () => {
+    localServices.settingService.getDataDirectoryInfo.mockResolvedValueOnce({
+      activeBaseDir: "/active",
+      defaultBaseDir: "/trusted-default",
+    });
+    const { SettingsPage } = await import("../src/SettingsPage.js");
+    renderToStaticMarkup(createElement(SettingsPage, { isDesktop: true }));
+    flushPendingEffects();
+    await flushPromises();
+    expect(stateUpdates).toContain("/trusted-default");
+    expect(stateUpdates).not.toContain("/Users/local");
+    expect(remoteServices.settingService.getDataDirectoryInfo).not.toHaveBeenCalled();
+  });
+  it("does not guess native home if readonly directory metadata fails", async () => {
+    localServices.settingService.getDataDirectoryInfo.mockRejectedValueOnce(
+      new Error("metadata unavailable"),
+    );
+    const { SettingsPage } = await import("../src/SettingsPage.js");
+    renderToStaticMarkup(createElement(SettingsPage, { isDesktop: true }));
+    flushPendingEffects();
+    await flushPromises();
+    expect(stateUpdates).not.toContain("/Users/local");
+    expect(stateUpdates).not.toContain("/desktop/data");
   });
 });

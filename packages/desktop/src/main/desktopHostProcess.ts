@@ -74,6 +74,7 @@ export interface WindowBootstrapOptions {
 }
 
 export interface HostInitMessage {
+  defaultDataBaseDir?:string;
   type: typeof HostMessageTypes.InitLocal;
   hostId?: string;
   databaseStartupId?: string;

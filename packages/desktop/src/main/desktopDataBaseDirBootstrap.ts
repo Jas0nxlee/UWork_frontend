@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { setDataBaseDir } from "@zcode/services/node";
+import { setDataBaseDir } from "@zcode/services/paths";
 import { resolveDesktopSettingsFile } from "./desktopHomePath.js";
 
 export function resolveBootstrapSettingsFile(): string {

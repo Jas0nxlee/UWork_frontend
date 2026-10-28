@@ -14,8 +14,9 @@ type Report = (
   databasePhase?: DatabaseStartupState["databasePhase"],
   details?: { databaseId: string; migration?: DatabaseMigrationFacts; finalDatabase?: boolean },
 ) => void;
+type StartupAction = "prepare" | "cancel-data-directory-migration";
 
-/** 每窗口一个启动所有者。失败只由显式 retry 推进，刷新和重复请求不重新执行 SQL。 */
+/** 每窗口一个启动所有者。失败只由显式恢复动作推进，刷新和重复请求不重新执行 SQL。 */
 export class DatabaseStartupCoordinator {
   private readonly baselines = new Map<string, string | null | undefined>();
   private readonly migrations = new Map<string, DatabaseMigrationFacts>();
@@ -25,13 +26,15 @@ export class DatabaseStartupCoordinator {
   constructor(
     private readonly options: {
       startupId?: string;
-      prepare: (report: Report) => Promise<void>;
+      operation?: DatabaseStartupState["operation"];
+      prepare: (report: Report, action: StartupAction) => Promise<void>;
       publish: (state: DatabaseStartupState) => void;
     },
   ) {
     const now = Date.now();
     this.state = {
       schemaVersion: 1,
+      ...(options.operation ? { operation: options.operation } : {}),
       startupId: options.startupId ?? randomUUID(),
       attemptId: randomUUID(),
       sequence: 0,
@@ -63,6 +66,22 @@ export class DatabaseStartupCoordinator {
   async retry(attemptId: string): Promise<void> {
     if (this.running || !canRetryDatabaseStartup(this.state) || attemptId !== this.state.attemptId)
       return;
+    await this.restartAttempt("prepare");
+  }
+  async cancelDataDirectoryMigration(attemptId: string): Promise<void> {
+    if (
+      this.running ||
+      this.state.phase !== "failed" ||
+      this.state.operation !== "data-directory-migration" ||
+      this.state.failedPhase === "starting_services" ||
+      this.state.canCancelDataDirectoryMigration !== true ||
+      attemptId !== this.state.attemptId
+    )
+      return;
+    // 取消不重新执行失败的迁移：由已退出 Worker 确认 owner 后独立接纳，不能借 retry 放宽错误门禁。
+    await this.restartAttempt("cancel-data-directory-migration");
+  }
+  private async restartAttempt(action: StartupAction): Promise<void> {
     this.migrations.clear();
     this.baselines.clear();
     this.state = {
@@ -79,12 +98,13 @@ export class DatabaseStartupCoordinator {
       systemCode: undefined,
       migrationId: undefined,
       failedPhase: undefined,
+      canCancelDataDirectoryMigration: undefined,
       databasePhase: undefined,
       disk: [],
     };
-    await this.run();
+    await this.run(action);
   }
-  private async run(): Promise<void> {
+  private async run(action: StartupAction = "prepare"): Promise<void> {
     this.running = true;
     const report: Report = (phase, databasePhase, details) => {
       if (details) {
@@ -142,7 +162,7 @@ export class DatabaseStartupCoordinator {
     };
     report("starting");
     try {
-      await this.options.prepare(report);
+      await this.options.prepare(report, action);
       report("ready");
     } catch (error) {
       this.state = {
@@ -150,6 +170,13 @@ export class DatabaseStartupCoordinator {
         failedPhase: this.state.phase,
         errorCode: classifyDatabaseStartupError(error),
         ...databaseStartupErrorDetails(error),
+        ...(this.options.operation === "data-directory-migration"
+          ? {
+              canCancelDataDirectoryMigration:
+                (error as { canCancelDataDirectoryMigration?: unknown } | null)
+                  ?.canCancelDataDirectoryMigration === true,
+            }
+          : {}),
       };
       const update = (
         error as { migrationUpdate?: { databaseId?: unknown; migration?: unknown } } | null

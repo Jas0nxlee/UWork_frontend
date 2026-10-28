@@ -6,5 +6,13 @@ export const projectStorageModule = {
   id: "project-storage",
   requires: ["shared", "sqlite-migrations", "services", "session"],
   provides: ["project-storage"],
-  publicEntrypoints: ["index.ts", "contract.ts", "startup.ts", "startup-entry.ts"],
+  publicEntrypoints: [
+    "index.ts",
+    "contract.ts",
+    "startup.ts",
+    "startup-entry.ts",
+    "cold-startup-entry.ts",
+    "data-directory-settings-entry.ts",
+    "../dataDirectoryMigration.ts",
+  ],
 } as const;

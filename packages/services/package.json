@@ -6,6 +6,8 @@
     "#src/*": "./src/*"
   },
   "exports": {
+    "./paths":"./src/paths.ts",
+    "./data-directory-startup": "./src/project-storage/cold-startup-entry.ts",
     "./storage-startup": "./src/project-storage/startup-entry.ts",
     ".": "./src/index.ts",
     "./cua-permission-broker": "./src/cua-permission-broker/index.ts",

@@ -4,7 +4,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { getWorkspaceHash } from "#src/paths.js";
+import { getWorkspaceHash, setDataBaseDir } from "#src/paths.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { SourceServerWorkspaceAliasRepo } from "#src/session/sourceServerWorkspaceAliasRepo.js";
 
@@ -34,6 +34,49 @@ function createSessionDb(path: string): DatabaseSync {
 }
 
 describe("Source Server workspace canonical alias", () => {
+  it("默认迁移使用有效 CLI 会话库并在产品根内备份", async () => {
+    const root = await mkdtemp(join(tmpdir(), "uwork-alias-storage-root-"));
+    const taskDbPath = join(root, ".uwork", "v2", "tasks-index.sqlite");
+    const productDbPath = join(root, "external-storage", "cli", "db", "db.sqlite");
+    const upstreamDbPath = join(root, ".zcode", "cli", "db", "db.sqlite");
+    const firstKey = "remote:ssh:first:22:user:/repo";
+    const secondKey = "remote:ssh:second:22:user:/repo";
+    setDataBaseDir(root);
+    vi.stubEnv("ZCODE_STORAGE_DIR", join(root, "external-storage"));
+    try {
+      await mkdir(join(taskDbPath, ".."), { recursive: true });
+      await mkdir(join(productDbPath, ".."), { recursive: true });
+      await mkdir(join(upstreamDbPath, ".."), { recursive: true });
+      (await createTaskDb(taskDbPath)).close();
+      for (const path of [productDbPath, upstreamDbPath]) {
+        const db = createSessionDb(path);
+        db.prepare("INSERT INTO session VALUES ('first', ?, '/repo', '/repo', 1)").run(firstKey);
+        db.prepare("INSERT INTO session VALUES ('second', ?, '/repo', '/repo', 2)").run(secondKey);
+        db.close();
+      }
+      const upstreamBefore = await readFile(upstreamDbPath);
+      const repo = new SourceServerWorkspaceAliasRepo();
+      const result = await repo.resolveCanonicalWorkspaceKey({ workspacePath: "/repo" });
+      const existingDb = new DatabaseSync(productDbPath, { readOnly: true });
+      try {
+        expect(existingDb.prepare("SELECT DISTINCT workspace_id FROM session").all()).toEqual([
+          { workspace_id: result.canonicalKey },
+        ]);
+      } finally {
+        existingDb.close();
+      }
+      const reports = await repo.listMigrationReports();
+      expect(reports.rows[0]?.sessionBackupPath).toContain(
+        join(root, ".uwork", "server", "migration-backups"),
+      );
+      expect(await readFile(upstreamDbPath)).toEqual(upstreamBefore);
+    } finally {
+      vi.unstubAllEnvs();
+      setDataBaseDir(null);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ["task-merge", "full"],
     ["session-merge", "full"],

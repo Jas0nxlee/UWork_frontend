@@ -1,7 +1,14 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { getUworkUserCliConfigPath } from "#src/paths.js";
+import {
+  LEGACY_DATA_BASE_DIR_ENV,
+  resolveUserCliConfigPath,
+  UWORK_DATA_BASE_DIR_ENV,
+  UWORK_DATA_ROOT_DIR_NAME,
+} from "@zcode/shared";
 
 /**
  * 引导资格的"本机使用证据"判定（docs/onboarding-record-spec.md §4）。
@@ -17,9 +24,9 @@ import { DatabaseSync } from "node:sqlite";
  *    解析规则，无法确定按"未知"跳过）：
  *    - env ZCODE_SESSION_DB_PATH / ZCODE_SESSION_DB（双别名并存时按 env 键序取
  *      后者，与 CLI env adapter 的赋值顺序一致）；
- *    - ~/.zcode/cli/config.json 的 storage.sessionDbPath（CLI createConfig 默认
- *      位置在 home，不随 App dataBaseDir 迁移）；
- *    - 默认 ~/.zcode/cli/db/db.sqlite（homedir 展开）。
+ *    - 有效产品 CLI 根中 config.json 的 storage.sessionDbPath；
+ *    - 默认有效产品 CLI 根下的 db/db.sqlite，与新版 writer 一致；
+ *      旧库升级由 Host 启动门禁负责，本证据读取器不执行迁移。
  *    值为相对路径时按未知跳过本证据源（CLI 按各工作区 cwd 解析，host 无法镜像）；
  *    project 级配置覆盖同样视为未知（已知限制，spec §4）。
  *    只读查询 session 表至少一行。
@@ -29,8 +36,6 @@ import { DatabaseSync } from "node:sqlite";
  * 刚建库不代表有会话）、cli/sessions 目录（是工作流文件输出）。"读不了"（非 ENOENT）
  * 一律上抛由 UI 保守判不弹——读不了 ≠ 没有。
  */
-
-const DEFAULT_SESSION_DB_PATH = "~/.zcode/cli/db/db.sqlite";
 
 /** 目录非空。仅 ENOENT 视为"无证据"；其他异常上抛，由 UI 侧保守判不弹。 */
 async function hasDirEntry(dir: string): Promise<boolean> {
@@ -68,8 +73,10 @@ export interface ResolveAgentSessionDbPathOptions {
   env?: NodeJS.ProcessEnv;
   /** 默认 os.homedir()。 */
   homedirPath?: string;
-  /** 默认 ~/.zcode/cli/config.json（CLI createConfig 的默认 user config 位置）。 */
+  /** 默认有效产品 CLI 根下的 config.json。 */
   userConfigPath?: string;
+  /** 未接入升级的宿主可注入已解析的旧默认库；显式 env/config 的数据库选择仍优先。 */
+  defaultSessionDbPath?: string;
   readConfigFile?: (path: string) => Promise<string>;
 }
 
@@ -83,21 +90,39 @@ export async function resolveAgentSessionDbPath(
   options: ResolveAgentSessionDbPathOptions = {},
 ): Promise<string | null> {
   const env = options.env ?? process.env;
-  const home = options.homedirPath ?? homedir();
+  const home = options.homedirPath ?? (env.HOME?.trim() || env.USERPROFILE?.trim() || homedir());
   const readConfigFile = options.readConfigFile ?? ((path) => readFile(path, "utf-8"));
 
   const fromEnv = pickEnvSessionDbPath(env);
   if (fromEnv) return resolveMirroredSessionDbPath(fromEnv, home);
 
-  // CLI createConfig 的默认 user config 位置在 home（~/.zcode/cli/config.json），
-  // 与 App dataBaseDir 无关（评审三轮 CR-01 第 1 条，zcode-protocol-entrypoint 实证）。
-  const userConfigPath = options.userConfigPath ?? join(home, ".zcode", "cli", "config.json");
+  // 配置与默认会话库复用同一个有效 CLI 根；本读取器不能另造迁移或回退路径。
+  // 显式 env/home 是解析实例的隔离边界，不能再借进程全局根读取另一实例的配置。
+  const pathEnv = options.env ?? {};
+  const injectedConfigPath =
+    options.env !== undefined || options.homedirPath !== undefined
+      ? resolveUserCliConfigPath({
+          ...pathEnv,
+          ZCODE_STORAGE_DIR:
+            pathEnv.ZCODE_STORAGE_DIR?.trim() ||
+            join(
+              pathEnv[UWORK_DATA_BASE_DIR_ENV]?.trim() ||
+                pathEnv[LEGACY_DATA_BASE_DIR_ENV]?.trim() ||
+                home,
+              UWORK_DATA_ROOT_DIR_NAME,
+            ),
+        })
+      : undefined;
+  const defaultConfigPath = injectedConfigPath ?? getUworkUserCliConfigPath();
+  const userConfigPath = options.userConfigPath ?? defaultConfigPath;
+  const defaultSessionDbPath =
+    options.defaultSessionDbPath ?? join(dirname(defaultConfigPath), "db", "db.sqlite");
   let raw: string;
   try {
     raw = await readConfigFile(userConfigPath);
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code === "ENOENT") {
-      return resolveMirroredSessionDbPath(DEFAULT_SESSION_DB_PATH, home);
+      return defaultSessionDbPath;
     }
     throw cause;
   }
@@ -108,7 +133,7 @@ export async function resolveAgentSessionDbPath(
     if (mirrored === null) return null;
     return mirrored;
   }
-  return resolveMirroredSessionDbPath(DEFAULT_SESSION_DB_PATH, home);
+  return defaultSessionDbPath;
 }
 
 /**
@@ -146,7 +171,7 @@ export interface CreateHasExistingLocalTaskOptions {
   listIndexTasks: () => Promise<unknown[]>;
   /** agent 会话库行查询（组合 resolveAgentSessionDbPath + hasAnyAgentSessionRow）；惰性调用。 */
   hasAgentSessionRow: () => Promise<boolean>;
-  /** 旧版任务快照目录（{dataBaseDir}/.zcode/v2/sessions，含 .deleted.json）；惰性解析。 */
+  /** 旧版任务快照目录（{dataBaseDir}/.uwork/v2/sessions，含 .deleted.json）；惰性解析。 */
   resolveLegacyTaskSessionsDir: () => string;
 }
 

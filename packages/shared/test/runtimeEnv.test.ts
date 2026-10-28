@@ -17,6 +17,21 @@ import {
 } from "../src/runtimeEnv.js";
 
 describe("runtimeEnv", () => {
+  it("strips the Host session migration marker and refuses tool passthrough restoration", () => {
+    const source = {
+      PATH: "/bin",
+      UWORK_SESSION_DB_MIGRATION: "1",
+      uwork_session_db_migration: "1",
+    };
+    expect(sanitizeZCodeRuntimeEnv(source)).toEqual({ PATH: "/bin" });
+    expect(readZCodeToolEnvPassthroughEnv(buildZCodeToolEnvPassthroughEnv(source))).toEqual({});
+    expect(
+      readZCodeToolEnvPassthroughEnv({
+        [ZCODE_TOOL_ENV_PASSTHROUGH_ENV_KEY]: JSON.stringify(source),
+      }),
+    ).toEqual({});
+  });
+
   it("enables internal CUA by default while honoring explicit false values", () => {
     expect(isZCodeCuaInternalFeatureEnabled({})).toBe(true);
     expect(isZCodeCuaInternalFeatureEnabled({ ZCODE_CUA_PRODUCT_HELPER: "0" })).toBe(false);

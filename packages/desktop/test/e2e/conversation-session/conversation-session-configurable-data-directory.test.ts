@@ -26,12 +26,15 @@ import {
   sendV4Prompt,
   waitForV4Pane,
   waitForV4TimelineContaining,
+  waitForV4AssistantMessageContaining,
 } from "../helpers/v4-conversation.js";
 import { ensureProjectExpanded } from "../helpers/project-sidebar.js";
 
 const CASE_TIMEOUT_MS = 240_000;
 const BEFORE_MARKER = "E2E_CDD01_BEFORE_MIGRATION";
 const BEFORE_REPLY = "CDD01_BEFORE_MIGRATION_DONE";
+const PENDING_MARKER = "E2E_CDD01_PENDING_WRITE";
+const PENDING_REPLY = "CDD01_PENDING_WRITE_DONE";
 const AFTER_MARKER = "E2E_CDD01_AFTER_MIGRATION";
 const AFTER_REPLY = "CDD01_AFTER_MIGRATION_DONE";
 const APP_CANARY_NAME = "e2e-cdd01-app-canary.txt";
@@ -39,12 +42,12 @@ const APP_CANARY_CONTENT = "CDD01_APP_DATA_CANARY\n";
 const PROJECT_CANARY_CONTENT = "CDD01_PROJECT_DATA_CANARY\n";
 const paths = getE2EAppDataPaths();
 const customDataBaseDir = join(paths.homeDir, "cdd01-custom-data-root");
-const customAppDataDir = join(customDataBaseDir, ".zcode", "v2");
+const customAppDataDir = join(customDataBaseDir, ".uwork", "v2");
 const oldTasksIndex = join(paths.appDataDir, "tasks-index.sqlite");
 const customTasksIndex = join(customAppDataDir, "tasks-index.sqlite");
 const bootstrapSettingsFile = join(paths.appDataDir, "setting.json");
-const cliDatabase = join(paths.homeDir, ".zcode", "cli", "db", "db.sqlite");
-const customCliRoot = join(customDataBaseDir, ".zcode", "cli");
+const cliDatabase = join(paths.storageRoot, "cli", "db", "db.sqlite");
+const customCliRoot = join(customDataBaseDir, ".uwork", "cli");
 const projectCanary = join(paths.workspace, ".zcode", "e2e-cdd01-project-canary.txt");
 
 describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
@@ -53,16 +56,18 @@ describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
   after(async () => {
     await browser.electron.restoreAllMocks();
     await clearAppData();
-    await rm(customDataBaseDir, { force: true, recursive: true });
-    await rm(projectCanary, { force: true });
+    if (process.env.ZCODE_E2E_DEFER_APP_DATA_CLEANUP !== "1") {
+      await rm(customDataBaseDir, { force: true, recursive: true });
+      await rm(projectCanary, { force: true });
+    }
   });
 
-  it("idle + 空目标保存后立即冷重启，App 使用新根且 CLI/项目路径不变", async function () {
+  it("保存只登记请求；冷重启后 App/CLI 使用新根且原任务 cwd 不变", async function () {
     this.timeout(CASE_TIMEOUT_MS);
 
     await prepareV4ConversationE2E({ resetDraftBeforeProvider: true });
     await sendV4Prompt(BEFORE_MARKER);
-    await waitForV4TimelineContaining(BEFORE_REPLY, 60_000);
+    await waitForV4AssistantMessageContaining(BEFORE_REPLY, 60_000);
     const sessionId = await waitForCompletedSession();
 
     await rm(customDataBaseDir, { force: true, recursive: true });
@@ -79,6 +84,7 @@ describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
       filePaths: [customDataBaseDir],
     });
 
+    const originalBootstrapRoot = await readBootstrapDataBaseDir();
     await openGeneralSettings();
     expect(await readDataBaseDirInput()).toBe(paths.homeDir);
     await clickTestIdByDom(TID_SETTINGS_DATA_BASE_DIR_BROWSE, {
@@ -95,22 +101,42 @@ describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
     });
     await waitForDataBaseDirSaved();
 
+    expect(await readBootstrapDataBaseDir()).toBe(originalBootstrapRoot);
+    const pendingSettings = JSON.parse(await readFile(bootstrapSettingsFile, "utf8"));
+    expect(pendingSettings.pendingDataDirectoryMigration).toMatchObject({
+      sourceBaseDir: paths.homeDir,
+      targetBaseDir: customDataBaseDir,
+    });
+    // 业务进程仍在运行时不复制数据库，也不先切换活动根。
+    expect(await pathExists(customAppDataDir)).toBe(false);
+    expect(await pathExists(customCliRoot)).toBe(false);
+    expect(await readFile(projectCanary, "utf8")).toBe(PROJECT_CANARY_CONTENT);
+
+    // 保存请求后仍可在旧活动根继续工作；冷启动必须带走这些晚于请求的新消息。
+    await closeSettings(sessionId);
+    await sendV4Prompt(PENDING_MARKER);
+    await waitForV4AssistantMessageContaining(PENDING_REPLY, 60_000);
+    await waitForCompletedSession();
+    expect(await pathExists(customAppDataDir)).toBe(false);
+
+    await restartIntoWorkspacePreservingProfile();
+    // 登录弹层下的任务 DOM 仍可能已挂载；重启后须走真实跳过入口，再验收可操作界面。
+    await prepareV4ConversationE2E({ skipProvider: true });
+    expect(await $('[data-testid="enterprise-login-page"]').isExisting()).toBe(false);
     expect(await readBootstrapDataBaseDir()).toBe(customDataBaseDir);
+    const committedSettings = JSON.parse(await readFile(bootstrapSettingsFile, "utf8"));
+    expect(committedSettings.pendingDataDirectoryMigration ?? null).toBeNull();
     expect(await readFile(join(customAppDataDir, APP_CANARY_NAME), "utf8")).toBe(
       APP_CANARY_CONTENT,
     );
     expect(await pathExists(customTasksIndex)).toBe(true);
     expect(await pathExists(join(customAppDataDir, "setting.json"))).toBe(false);
-    expect(await pathExists(customCliRoot)).toBe(false);
-    expect(await readFile(projectCanary, "utf8")).toBe(PROJECT_CANARY_CONTENT);
-
-    // CDD01 的临时产品边界是保存后不再发起任何写操作并立即完整重启；
-    // 这条测试约束不能冒充 busy guard 或 pending-restart write block 已实现。
-    await restartIntoWorkspacePreservingProfile();
+    expect(await pathExists(join(customCliRoot, "db", "db.sqlite"))).toBe(true);
     await ensureProjectExpanded(DEFAULT_WORKSPACE);
     await selectV4TaskById(sessionId);
     await waitForV4TimelineContaining(BEFORE_MARKER, 60_000);
-    await waitForV4TimelineContaining(BEFORE_REPLY, 60_000);
+    await waitForV4AssistantMessageContaining(BEFORE_REPLY, 60_000);
+    await waitForV4AssistantMessageContaining(PENDING_REPLY, 60_000);
     await waitForV4Pane(
       (snapshot) => snapshot.sessionId === sessionId && !snapshot.canStop,
       "CDD01 冷重启后原任务没有恢复到 idle",
@@ -121,13 +147,14 @@ describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
     expect(await readDataBaseDirInput()).toBe(customDataBaseDir);
     await closeSettings(sessionId);
 
+    const oldMessagesBeforeFollowup = readSessionMessages(cliDatabase, sessionId);
     const oldUpdatedAtBeforeFollowup = readTaskUpdatedAt(oldTasksIndex, sessionId);
     const customUpdatedAtBeforeFollowup = readTaskUpdatedAt(customTasksIndex, sessionId);
     expect(oldUpdatedAtBeforeFollowup).not.toBeNull();
     expect(customUpdatedAtBeforeFollowup).not.toBeNull();
 
     await sendV4Prompt(AFTER_MARKER);
-    await waitForV4TimelineContaining(AFTER_REPLY, 60_000);
+    await waitForV4AssistantMessageContaining(AFTER_REPLY, 60_000);
     await waitForV4Pane(
       (snapshot) => snapshot.sessionId === sessionId && !snapshot.canStop,
       "CDD01 新路径下的同任务 follow-up 没有完成",
@@ -141,8 +168,18 @@ describe("CDD01：修改数据存储路径后原任务仍可继续", () => {
 
     expect(readTaskUpdatedAt(oldTasksIndex, sessionId)).toBe(oldUpdatedAtBeforeFollowup);
     expect(await pathExists(cliDatabase)).toBe(true);
-    expect(await pathExists(customCliRoot)).toBe(false);
+    expect(await pathExists(customCliRoot)).toBe(true);
+    expect(readSessionMessages(cliDatabase, sessionId)).toEqual(oldMessagesBeforeFollowup);
+    expect(
+      readSessionMessages(join(customCliRoot, "db", "db.sqlite"), sessionId).length,
+    ).toBeGreaterThan(oldMessagesBeforeFollowup.length);
     expect(await readFile(projectCanary, "utf8")).toBe(PROJECT_CANARY_CONTENT);
+    expect(await $('[data-testid="enterprise-login-page"]').isExisting()).toBe(false);
+    expect(await $('[data-testid="onboarding-page"]').isExisting()).toBe(false);
+    if (process.env.ZCODE_E2E_ARTIFACT_DIR)
+      await browser.saveScreenshot(
+        join(process.env.ZCODE_E2E_ARTIFACT_DIR, "data-directory-cold-move-resumed.png"),
+      );
   });
 });
 
@@ -210,7 +247,7 @@ async function waitForDataBaseDirSaved(): Promise<void> {
       }, TID_SETTINGS_DATA_BASE_DIR_STATUS),
     {
       timeout: 60_000,
-      timeoutMsg: "CDD01 数据复制没有进入待重启状态",
+      timeoutMsg: "CDD01 迁移请求没有保存为待重启状态",
     },
   );
 }
@@ -259,5 +296,14 @@ async function pathExists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+function readSessionMessages(path: string, sessionId: string) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    return db.prepare("SELECT id,data FROM message WHERE session_id=? ORDER BY id").all(sessionId);
+  } finally {
+    db.close();
   }
 }

@@ -855,51 +855,75 @@ setInterval(() => {}, 1000);
       nodeEnv: "development",
       runtimeEnv: undefined,
       expectedRuntimeEnv: "production",
+      migrationEnabled: true,
+      expectedMigrationFlag: "1",
     },
     {
       name: "显式 ZCODE_RUNTIME_ENV=development 时保留 agent 子进程开发态",
       nodeEnv: undefined,
       runtimeEnv: "development",
       expectedRuntimeEnv: "development",
+      migrationEnabled: true,
+      expectedMigrationFlag: "1",
     },
-  ])("$name", async ({ nodeEnv, runtimeEnv, expectedRuntimeEnv }, { signal }) => {
-    const workspacePath = mkdtempSync(join(tmpdir(), "zcode-agent-node-env-"));
-    createdDirs.push(workspacePath);
-    restoreEnv("NODE_ENV", nodeEnv);
-    restoreEnv(ZCODE_RUNTIME_ENV_KEY, runtimeEnv);
-    const manager = new ZCodeAgentProcessManager({
-      commandResolver: () => ({
-        command: process.execPath,
-        args: [
-          "-e",
-          `
+    {
+      name: "Source Server 未启用本地迁移门禁时不注入或继承升级开关",
+      nodeEnv: undefined,
+      runtimeEnv: "production",
+      expectedRuntimeEnv: "production",
+      migrationEnabled: false,
+      expectedMigrationFlag: "<empty>",
+    },
+  ])(
+    "$name",
+    async (
+      { nodeEnv, runtimeEnv, expectedRuntimeEnv, migrationEnabled, expectedMigrationFlag },
+      { signal },
+    ) => {
+      const workspacePath = mkdtempSync(join(tmpdir(), "zcode-agent-node-env-"));
+      createdDirs.push(workspacePath);
+      restoreEnv("NODE_ENV", nodeEnv);
+      restoreEnv(ZCODE_RUNTIME_ENV_KEY, runtimeEnv);
+      const originalMigrationFlag = process.env.UWORK_SESSION_DB_MIGRATION;
+      restoreEnv("UWORK_SESSION_DB_MIGRATION", "1");
+      const manager = new ZCodeAgentProcessManager({
+        sessionDatabaseMigrationEnabled: migrationEnabled,
+        commandResolver: () => ({
+          command: process.execPath,
+          args: [
+            "-e",
+            `
 require("node:readline").createInterface({ input: process.stdin }).on("line", line => {
   const request = JSON.parse(line);
   process.stdout.write(JSON.stringify({ id: request.id, result: {
     nodeEnv: process.env.NODE_ENV || "<empty>",
     runtimeEnv: process.env.ZCODE_RUNTIME_ENV || "<empty>",
+    sessionDbMigration: process.env.UWORK_SESSION_DB_MIGRATION || "<empty>",
   } }) + "\\n");
 });
 `,
-        ],
-        cwd: workspacePath,
-      }),
-    });
-
-    try {
-      const client = await manager.getClient({ workspacePath });
-      // 修复原因：文件轮询即使延长到 5 秒仍会在慢启动时失败；由 Worker 响应
-      // 确认真实环境已读取，测试整体截止通过 signal 取消请求，不按启动耗时断言。
-      await expect(
-        client.request("workspace/readState", {}, undefined, { signal }),
-      ).resolves.toEqual({
-        nodeEnv: "<empty>",
-        runtimeEnv: expectedRuntimeEnv,
+          ],
+          cwd: workspacePath,
+        }),
       });
-    } finally {
-      await manager.disposeAllAndWait();
-    }
-  });
+
+      try {
+        const client = await manager.getClient({ workspacePath });
+        // 修复原因：文件轮询即使延长到 5 秒仍会在慢启动时失败；由 Worker 响应
+        // 确认真实环境已读取，测试整体截止通过 signal 取消请求，不按启动耗时断言。
+        await expect(
+          client.request("workspace/readState", {}, undefined, { signal }),
+        ).resolves.toEqual({
+          nodeEnv: "<empty>",
+          runtimeEnv: expectedRuntimeEnv,
+          sessionDbMigration: expectedMigrationFlag,
+        });
+      } finally {
+        await manager.disposeAllAndWait();
+        restoreEnv("UWORK_SESSION_DB_MIGRATION", originalMigrationFlag);
+      }
+    },
+  );
 
   it("通过生命周期 reporter 上报本地 agent spawn/exit", async () => {
     const workspacePath = mkdtempSync(join(tmpdir(), "zcode-agent-lifecycle-"));

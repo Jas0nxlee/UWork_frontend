@@ -10,10 +10,111 @@ import {
   updatePluginOptionsInFileConfig,
 } from "../src/config/file-config.adapter.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 describe("config adapters", () => {
+  it("derives the system session database from the effective CLI storage root", () => {
+    const home = join(tmpdir(), "isolated-home");
+    const storageRoot = join(tmpdir(), "isolated-uwork");
+    for (const storage of [storageRoot, join(storageRoot, "cli")]) {
+      const result = createConfig({
+        skipUserConfig: true,
+        env: { HOME: home, ZCODE_STORAGE_DIR: storage, UWORK_SESSION_DB_MIGRATION: "1" },
+      });
+      expect(result.config.storage.sessionDbPath).toBe(join(storageRoot, "cli", "db", "db.sqlite"));
+      expect(result.sources.sessionDb).toBe("system");
+    }
+    const standalone = createConfig({
+      skipUserConfig: true,
+      env: { HOME: home, UWORK_SESSION_DB_MIGRATION: "1" },
+    });
+    expect(standalone.config.storage.sessionDbPath).toBe(
+      join(home, ".zcode", "cli", "db", "db.sqlite"),
+    );
+    expect(
+      createConfig({ skipUserConfig: true, env: { UWORK_SESSION_DB_MIGRATION: "1" } }).config
+        .storage.sessionDbPath,
+    ).toBe(join(homedir(), ".zcode", "cli", "db", "db.sqlite"));
+  });
+
+  it("keeps the historical default in processes without the migration startup gate", () => {
+    for (const flag of [undefined, "0"]) {
+      const result = createConfig({
+        skipUserConfig: true,
+        env: {
+          HOME: join(tmpdir(), "isolated-home"),
+          ZCODE_STORAGE_DIR: join(tmpdir(), "server-storage"),
+          UWORK_SESSION_DB_MIGRATION: flag,
+        },
+      });
+      expect(result.config.storage.sessionDbPath).toBe("~/.zcode/cli/db/db.sqlite");
+      expect(result.sources.sessionDb).toBe("system");
+    }
+  });
+
+  it("reads user database configuration from the same injected storage root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "uwork-config-db-root-"));
+    try {
+      await mkdir(join(root, "cli"), { recursive: true });
+      const explicitDb = join(root, "selected.sqlite");
+      await writeFile(
+        join(root, "cli", "config.json"),
+        JSON.stringify({ storage: { sessionDbPath: explicitDb } }),
+      );
+      const result = createConfig({ env: { HOME: join(root, "home"), ZCODE_STORAGE_DIR: root } });
+      expect(result.config.storage.sessionDbPath).toBe(explicitDb);
+      expect(result.sources.sessionDb).toBe("user");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records explicit session database intent across user, project, env and CLI layers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "uwork-db-provenance-"));
+    const userConfigPath = join(dir, "user.json");
+    const projectConfigPath = join(dir, "project.json");
+    try {
+      await writeFile(
+        userConfigPath,
+        JSON.stringify({ storage: { sessionDbPath: "./user.sqlite" } }),
+      );
+      await writeFile(
+        projectConfigPath,
+        JSON.stringify({ storage: { sessionDbPath: "./project.sqlite" } }),
+      );
+      const user = createConfig({ userConfigPath, env: {} });
+      expect(user.config.storage.sessionDbPath).toBe("./user.sqlite");
+      expect(user.sources.sessionDb).toBe("user");
+      const storageOverride = createConfig({
+        userConfigPath,
+        env: { ZCODE_STORAGE_DIR: join(dir, "other-root") },
+      });
+      expect(storageOverride.config.storage.sessionDbPath).toBe("./user.sqlite");
+      expect(storageOverride.sources.sessionDb).toBe("user");
+      const project = createConfig({ userConfigPath, projectConfigPath, env: {} });
+      expect(project.config.storage.sessionDbPath).toBe("./project.sqlite");
+      expect(project.sources.sessionDb).toBe("project");
+      const environment = createConfig({
+        userConfigPath,
+        projectConfigPath,
+        env: { ZCODE_SESSION_DB_PATH: "./env.sqlite" },
+      });
+      expect(environment.config.storage.sessionDbPath).toBe("./env.sqlite");
+      expect(environment.sources.sessionDb).toBe("env");
+      const cli = createConfig({
+        userConfigPath,
+        projectConfigPath,
+        env: { ZCODE_SESSION_DB: "./env.sqlite" },
+        cliOverrides: { storage: { sessionDbPath: "./cli.sqlite" } },
+      });
+      expect(cli.config.storage.sessionDbPath).toBe("./cli.sqlite");
+      expect(cli.sources.sessionDb).toBe("cli");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("migrates the legacy official CUA plugin id to the canonical id", async () => {
     const dir = await mkdtemp(join(tmpdir(), "zcode-config-cua-identity-"));
     const configPath = join(dir, "config.json");

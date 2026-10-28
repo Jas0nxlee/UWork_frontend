@@ -1925,6 +1925,14 @@ class NodeMcpAdapter implements McpPort {
     onCredentialObservation?: (observation: CredentialGenerationObservation) => void,
   ): Promise<{ transport: McpTransport }> {
     if (config.type === "stdio") {
+      const env = {
+        ...buildMcpStdioEnv({ env: this.env, network: this.network }),
+        ...config.env,
+      };
+      // config.env 中的定向 CUA 凭据必须保留；只删除不能由工具配置授予的 Host 升级键。
+      for (const key of Object.keys(env)) {
+        if (key.toUpperCase() === "UWORK_SESSION_DB_MIGRATION") delete env[key];
+      }
       return {
         transport: new ProcessTreeStdioClientTransport({
           command: config.command,
@@ -1932,10 +1940,7 @@ class NodeMcpAdapter implements McpPort {
           cwd: config.cwd
             ? resolve(workingDirectory ?? this.workingDirectory ?? process.cwd(), config.cwd)
             : (workingDirectory ?? this.workingDirectory),
-          env: {
-            ...buildMcpStdioEnv({ env: this.env, network: this.network }),
-            ...config.env,
-          },
+          env,
           stderr: "pipe",
           ...(isOfficialAuthConfig(config) && config.official
             ? {

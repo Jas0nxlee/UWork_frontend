@@ -15,6 +15,7 @@ export type {
   WorkspaceFileEntry,
   SystemInfo,
   AppSettings,
+  PendingDataDirectoryMigration,
   ElectronReleaseChannel,
   IntegratedTerminalShellDialect,
   IntegratedTerminalShellOption,

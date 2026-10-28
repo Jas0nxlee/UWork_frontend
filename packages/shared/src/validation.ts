@@ -59,6 +59,7 @@ export {
   appSettingsSchema,
   localeSchema,
   postUpdateReleaseNotesPayloadSchema,
+  pendingDataDirectoryMigrationSchema,
 } from "./validationAppSettings.js";
 export { isValidWslUser, WSL_USER_MAX_LENGTH, wslUserSchema } from "./wslUserValidation.js";
 export { zcodeTaskModeSchema } from "./zcode-task-mode-schema.js";
@@ -557,6 +558,7 @@ const hostAgentWarmupTargetSchema = z.object({
 export const hostInitLocalMessageSchema = z.object({
   type: z.literal("init-local"),
   databaseStartupId: z.string().min(1).max(128).optional(),
+  defaultDataBaseDir:z.string().min(1).max(32768).optional(),
   hostId: nonEmptyStringSchema.optional(),
   deliveryKind: taskRealtimeHostDeliveryKindSchema.optional(),
   deviceMid: z.string().optional(),

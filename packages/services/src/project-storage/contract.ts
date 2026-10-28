@@ -2,6 +2,13 @@ import type { DatabaseSync } from "node:sqlite";
 import type { AppSettings } from "@zcode/shared";
 import type { MigrationResult } from "@zcode/shared/sqlite-migrations";
 
+/** 冷启动整根复制的请求身份；停写/请求锁和 bootstrap 设置提交由调用方独占。 */
+export interface DataDirectoryCopyOptions {
+  requestId: string;
+  /** 固定 bootstrap owner；只有位于目标根内时允许保留 bootstrap-only 目标。 */
+  bootstrapSettingsFilePath?: string;
+}
+
 export interface ProjectMigrationContext {
   /** 可信持库 Server 身份；不受客户端请求或旧 canonical route 影响。 */
   hostId?: string;

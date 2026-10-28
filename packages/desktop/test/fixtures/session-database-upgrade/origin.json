@@ -1,0 +1,16 @@
+{
+  "version": "0.1.2",
+  "commit": "26638a4c0bf446e148459b2da3cad5959e4c3354",
+  "schemas": {
+    "cli": {
+      "file": "cli-v0.1.2.sql",
+      "source": "apps/zcode-cli/packages/adapters/src/storage/session-store/schema.baseline.sql",
+      "sha256": "512709f2f268128d49176662d3bc586c626285a1f45f661008b350d1e8bbc3e9"
+    },
+    "host": {
+      "file": "host-v0.1.2.sql",
+      "source": "packages/services/src/project-storage/schema.baseline.sql",
+      "sha256": "bed843d0594ebccf12619277169b7e05fdd1b11e5221a5071059881757b6cb30"
+    }
+  }
+}

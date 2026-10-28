@@ -395,6 +395,8 @@ const enUS: Record<string, string> = {
   "startup.global.waiting": "Waiting for database preparation",
   "startup.global.saving": "Saving updates",
   "startup.global.finishing": "Finishing startup",
+  "startup.global.dataDirectoryMigration": "Moving app data",
+  "startup.global.cancelDataDirectoryMigration": "Cancel migration and use the original directory",
   "startup.global.servicesFailed":
     "Local data is ready, but app services failed to start. Copy the diagnostics, then exit and reopen UWork.",
   "startup.global.starting": "Preparing local data",
@@ -426,6 +428,16 @@ const enUS: Record<string, string> = {
     "The database could not be opened. Check that the data directory exists and is accessible, then retry.",
   "startup.global.error.lock_timeout":
     "Waiting for the database write lock timed out. Another UWork or CLI process may be updating data. Retry after it finishes.",
+  "startup.global.error.legacy_writer_active":
+    "A process still has an old data file open. Close the old UWork app and related processes using that directory, then retry. No other process will be terminated.",
+  "startup.global.error.legacy_writer_check_failed":
+    "The app could not verify that writes to old data files have stopped. Check process inspection tools and access permissions, close the old UWork app and related processes, then retry.",
+  "startup.global.error.session_ownership_unknown":
+    "Some history could not be confirmed as belonging to this UWork app. The original database was preserved and the upgrade stopped. Keep the diagnostics and contact support to verify session ownership. Do not delete the original database.",
+  "startup.global.error.session_source_changed":
+    "The old session database changed during preparation. It was preserved and the switch stopped. Close the old UWork app and related processes using that database, then retry. If it still fails, keep the diagnostics and contact support.",
+  "startup.global.error.data_directory_target_conflict":
+    "The target directory contains other data or its contents changed. It was not overwritten, and the original directory was preserved. Cancel this migration, or choose another empty directory and retry.",
   "startup.global.error.sql_failed":
     "Preparation did not finish. Copy the diagnostics and check the logs. Resolve the issue, then retry manually. The app will not retry automatically.",
   "startup.global.error.startup_status_timeout":
@@ -3312,15 +3324,18 @@ const enUS: Record<string, string> = {
   "settings.taskAutoArchiveDays.option.30": "Archive after 30 days",
   "settings.dataBaseDir": "Data storage path",
   "settings.dataBaseDirDescription":
-    "Root directory for app data (defaults to user home directory). Existing data will be copied to the new location. The .uwork/v2 suffix cannot be changed.",
+    "Save a destination to move data on the next restart. The current directory stays active and the original data is preserved.",
   "settings.dataBaseDirPlaceholder": "Default: user home directory",
   "settings.dataBaseDirBrowse": "Choose folder",
   "settings.dataBaseDirSave": "Save",
-  "settings.dataBaseDirCopying": "Copying data, please do not close the app...",
-  "settings.dataBaseDirCopyFailed": "Data copy failed. Path was not changed.",
+  "settings.dataBaseDirCopying": "Saving the migration request…",
+  "settings.dataBaseDirCopyFailed": "The migration request was not saved. The active directory is unchanged.",
   "settings.dataBaseDirForbiddenInstallDir":
     "The data directory cannot be the UWork installation folder on Windows. Choose a folder outside the app install location.",
-  "settings.dataBaseDirRestartRequired": "Data saved. Please restart the app to take effect.",
+  "settings.dataBaseDirRestartRequired": "Migration scheduled. Restart the app to move your data.",
+  "settings.dataBaseDirPendingTarget": "Active: {active}; destination after restart: {target}",
+  "settings.dataBaseDirMigrationCancelled": "The pending migration was cancelled. The active directory is unchanged.",
+  "settings.dataBaseDirInfoUnavailable": "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
   "settings.locale.system": "System default",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",

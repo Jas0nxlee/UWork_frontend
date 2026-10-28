@@ -147,11 +147,15 @@ let baseServicesForRemoteSessions: IServiceAccessor | null = null;
 const pendingRemoteWorkspaceServicePorts: RemoteWorkspaceServicePortRegistration[] = [];
 
 const desktopPlatform = createDesktopPlatform({ isLocalDevelopmentRuntime });
-initializeDesktopLocalTtft(desktopPlatform);
-initializeDesktopUserActionTrace({
-  platform: desktopPlatform,
-  isLocalDevelopmentRuntime,
-});
+// 冷迁移页出现时业务 Main 尚未加载，遥测配置 IPC handler 也尚未注册；
+// 该窗口只承载存储门禁，正常业务 renderer 再按原时机初始化两类采集。
+if (windowKind !== "data-directory-startup") {
+  initializeDesktopLocalTtft(desktopPlatform);
+  initializeDesktopUserActionTrace({
+    platform: desktopPlatform,
+    isLocalDevelopmentRuntime,
+  });
+}
 
 /**
  * 等待 preload 通过 window.postMessage 转发 MessagePort。
@@ -189,6 +193,13 @@ function renderDatabaseStartup(): void {
           }}
           onCopy={(details) => navigator.clipboard.writeText(details)}
           onExit={() => sendStartupControl({ action: "exit" })}
+          onCancel={() => {
+            if (databaseStartupAdmission.state)
+              sendStartupControl({
+                action: "cancel-data-directory-migration",
+                attemptId: databaseStartupAdmission.state.attemptId,
+              });
+          }}
         />
       </ZCodeIntlProvider>
     </AppErrorBoundary>,

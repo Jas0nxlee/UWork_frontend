@@ -5,13 +5,23 @@ import {
   databaseStartupErrorDetails,
   zcodeProtocolNotifications,
   zcodeStorageStartupStateSchema,
+  ZCODE_STORAGE_PREPARATION_FRAME_MAX_CHARS,
   type ZCodeStorageStartupState,
 } from "@zcode/shared";
+import { sessionDatabaseMigration } from "../session-storage-migration/index.js";
+import type { SessionDatabaseRouteResolver } from "../session-storage-migration/index.js";
+
+interface LegacyMigrationPlan {
+  sourcePath: string;
+  targetPath: string;
+  resolveSessionDatabase?: SessionDatabaseRouteResolver;
+}
 
 export async function openProtocolStartupStorage(options: {
   dbPath: string;
   output: NodeJS.WritableStream;
   onProgress?: (progress: ZCodeStorageStartupState) => void;
+  legacyMigration?: LegacyMigrationPlan & { ownershipManifestPath: string };
 }): Promise<SqliteSessionStore> {
   const attemptId = randomUUID();
   const databaseId = createHash("sha256").update(options.dbPath).digest("hex");
@@ -38,6 +48,19 @@ export async function openProtocolStartupStorage(options: {
   };
   try {
     await report({ phase: "checking", elapsedMs: 0 });
+    if (options.legacyMigration) {
+      const startedAt = Date.now();
+      // 路径升级必须早于 openStartup：先建空库会把未迁移状态误当成新安装，隐藏原有历史。
+      await sessionDatabaseMigration.migrate({
+        ...options.legacyMigration,
+        onProgress: async (phase) =>
+          report({
+            phase: phase === "activating" ? "committing" : "migrating",
+            elapsedMs: Date.now() - startedAt,
+            migrationId: "uwork-session-database-root-v1",
+          }),
+      });
+    }
     return await SqliteSessionStore.openStartup({ dbPath: options.dbPath }, { onProgress: report });
   } catch (error) {
     if (!failedReported) {
@@ -61,37 +84,43 @@ export async function prepareProtocolStartupStorage(options: {
   dbPath: string;
   input: NodeJS.ReadableStream;
   output: NodeJS.WritableStream;
+  legacyMigration?: LegacyMigrationPlan;
 }): Promise<void> {
   const { createInterface } = await import("node:readline");
   const { zcodeStoragePathReadySchema, classifyDatabaseStartupError } =
     await import("@zcode/shared");
   const lines = createInterface({ input: options.input });
   let timer: ReturnType<typeof setTimeout>;
-  const acknowledgement = new Promise<boolean>((resolve, reject) => {
-    timer = setTimeout(
-      () =>
+  const acknowledgement = new Promise<{ reuse?: boolean; ownershipManifestPath?: string }>(
+    (resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            Object.assign(new Error("Storage observation handshake timed out"), {
+              kind: "startup_status_timeout",
+            }),
+          ),
+        30_000,
+      );
+      lines.once("line", (line) => {
+        try {
+          if (line.length > ZCODE_STORAGE_PREPARATION_FRAME_MAX_CHARS)
+            throw new Error("Invalid storage acknowledgement");
+          const ack = zcodeStoragePathReadySchema.parse(JSON.parse(line));
+          resolve(ack);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      lines.once("close", () =>
         reject(
-          Object.assign(new Error("Storage observation handshake timed out"), {
-            kind: "startup_status_timeout",
+          Object.assign(new Error("Storage preparation input closed"), {
+            kind: "transport_closed",
           }),
         ),
-      30_000,
-    );
-    lines.once("line", (line) => {
-      try {
-        if (line.length > 1024) throw new Error("Invalid storage acknowledgement");
-        const ack = zcodeStoragePathReadySchema.parse(JSON.parse(line));
-        resolve(ack.reuse ?? false);
-      } catch (error) {
-        reject(error);
-      }
-    });
-    lines.once("close", () =>
-      reject(
-        Object.assign(new Error("Storage preparation input closed"), { kind: "transport_closed" }),
-      ),
-    );
-  });
+      );
+    },
+  );
   // 路径通知发送失败时也要消费已创建的等待 promise，避免未处理拒绝。
   void acknowledgement.catch(() => {});
   let store: SqliteSessionStore | undefined;
@@ -103,13 +132,34 @@ export async function prepareProtocolStartupStorage(options: {
       );
     });
   try {
-    await write({ method: "startup/storagePath", params: { path: options.dbPath } });
-    const reuse = await acknowledgement;
+    const migration =
+      options.legacyMigration &&
+      !(await sessionDatabaseMigration.isPrepared(options.legacyMigration))
+        ? options.legacyMigration
+        : undefined;
+    await write({
+      method: "startup/storagePath",
+      params: {
+        path: options.dbPath,
+        ...(migration ? { legacySourcePath: migration.sourcePath } : {}),
+      },
+    });
+    const ack = await acknowledgement;
     clearTimeout(timer!);
     lines.close();
+    // 同一路径的显式库准备不代表默认路径升级完成；不能用 Host 的复用 ACK 绕过迁移账本。
+    if (migration && ack.reuse)
+      throw new Error("Legacy session migration cannot reuse an unprepared database");
     // reuse 仅由同一次 Host 准备的成功路径集合授予；不打开连接，也不写永久跳过标记。
-    if (!reuse) {
-      store = await openProtocolStartupStorage(options);
+    if (!ack.reuse) {
+      if (migration && !ack.ownershipManifestPath)
+        throw new Error("Legacy session migration requires ownership manifest / 归属清单");
+      store = await openProtocolStartupStorage({
+        ...options,
+        legacyMigration: migration
+          ? { ...migration, ownershipManifestPath: ack.ownershipManifestPath! }
+          : undefined,
+      });
       store.close();
       store = undefined;
     }

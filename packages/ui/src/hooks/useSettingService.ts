@@ -57,10 +57,17 @@ function setSettingsSnapshot(cacheKey: string, snapshot: SettingsSnapshot): void
   }
 }
 
-async function refreshSharedSettings(cacheKey: string, getSettings: () => Promise<AppSettings>) {
+async function refreshSharedSettings(
+  cacheKey: string,
+  getSettings: () => Promise<AppSettings>,
+  afterCommit = false,
+): Promise<void> {
   const inflight = inflightRefreshes.get(cacheKey);
   if (inflight) {
-    return inflight;
+    await inflight;
+    // 跨窗口通知在写入完成后发出，不能用写入前已开始的旧读结果满足此刷新。
+    if (afterCommit) await refreshSharedSettings(cacheKey, getSettings);
+    return;
   }
 
   setSettingsSnapshot(cacheKey, {
@@ -137,10 +144,10 @@ export function useSettings(options: { cacheKey?: string; services?: IServiceAcc
   useEffect(() => {
     return (
       platform.onSettingsChanged?.(() => {
-        void refresh();
+        void refreshSharedSettings(cacheKey, () => settingService.get(), true);
       }) ?? (() => {})
     );
-  }, [platform, refresh]);
+  }, [platform, cacheKey, settingService]);
 
   const update = useCallback(
     async (

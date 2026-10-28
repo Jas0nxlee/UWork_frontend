@@ -3,6 +3,8 @@ import { createLocalTtftExporter } from "./localTtftExporter.js";
 /* eslint-disable max-lines */
 import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
+import { configureDesktopPrereadyRuntime,getInitialDataDirectoryDefaultBaseDir } from "./data-directory-startup/preready.js";
+import { isColdDataDirectoryWindow } from "./data-directory-startup/index.js";
 import { powerMonitor, powerSaveBlocker } from "electron";
 import { crashCapturePaths } from "./appCrashCaptureBootstrap.js";
 import { armsInitPromise } from "./appARMSBootstrap.js";
@@ -24,7 +26,6 @@ import { installBrowserRestoreBootstrapProtocol } from "./browserView/browserRes
 import {
   createLocalMediaPreviewPathRegistry,
   installLocalMediaPreviewProtocol,
-  registerLocalMediaPreviewScheme,
 } from "./localMediaPreviewProtocol.js";
 import { createDesktopBrowserScreenshotSurfaceCoordinator } from "./browserView/browserScreenshotSurfaceCoordinatorWiring.js";
 import { EMBEDDED_BROWSER_PARTITION } from "./browserDataManager.js";
@@ -41,7 +42,6 @@ import {
   MessageChannelMain,
   nativeImage,
   net,
-  protocol,
   session,
   shell,
   webContents,
@@ -169,11 +169,6 @@ import {
   resolveRemoteAssetDirs,
   resolveZCodeEndpointEnvBaseOrigin,
   desktopRuntimeEnv,
-  runtimeApplicationName,
-  runtimeHomePath,
-  runtimeSessionDataPath,
-  runtimeUserDataPath,
-  shouldUseElectronDefaultUserDataPath,
 } from "./desktopRuntimeEnv.js";
 import { resolveDesktopSettingsFile } from "./desktopHomePath.js";
 import {
@@ -264,35 +259,16 @@ import {
 } from "./windowsInstallResourceLocks.js";
 import { mainMemoryDiagnosticsRegistry } from "./mainMemoryDiagnostics.js";
 import {
-  PLUGIN_SANDBOX_PRIVILEGED_SCHEME,
   getPluginSandboxHost,
   installPluginSandboxHost,
 } from "./pluginSandbox/index.js";
 
-registerLocalMediaPreviewScheme(protocol, [PLUGIN_SANDBOX_PRIVILEGED_SCHEME]);
+configureDesktopPrereadyRuntime();
 const localMediaPreviewPathRegistry = createLocalMediaPreviewPathRegistry();
 
 // e2e 由 Chromedriver 管理远程调试端口；如果这里继续固定到 9229，
 // 会和开发态已打开的 ZCode Dev 抢端口，导致 WebDriver session 创建前白屏超时。
 // 仅本地开发运行默认开启远程调试端口，并允许 e2e 通过环境变量交给 Chromedriver 接管。
-if (!app.isPackaged && process.env.ZCODE_DISABLE_FIXED_REMOTE_DEBUGGING_PORT !== "1") {
-  app.commandLine.appendSwitch("remote-debugging-port", "9229");
-}
-
-app.setName(runtimeApplicationName);
-if (runtimeHomePath) {
-  app.setPath("home", runtimeHomePath);
-}
-if (!shouldUseElectronDefaultUserDataPath) {
-  if (!runtimeUserDataPath || !runtimeSessionDataPath) {
-    throw new Error(
-      "Desktop runtime data paths are required when Electron default userData is disabled",
-    );
-  }
-  app.setPath("userData", runtimeUserDataPath);
-  app.setPath("sessionData", runtimeSessionDataPath);
-}
-process.title = runtimeApplicationName;
 
 process.on("unhandledRejection", (reason) => {
   logger.error("unhandledRejection:", reason);
@@ -691,7 +667,7 @@ const disposingHostProcessTimers = new WeakMap<
   ElectronUtilityProcess,
   ReturnType<typeof setTimeout>
 >();
-const mainSettingService = createSettingService();
+const mainSettingService = createSettingService({defaultDataBaseDir:getInitialDataDirectoryDefaultBaseDir()});
 const UPDATE_STATUS_WINDOW_WIDTH = 512;
 const UPDATE_STATUS_WINDOW_COMPACT_HEIGHT = 205;
 const UPDATE_STATUS_WINDOW_PROGRESS_HEIGHT = 224;
@@ -972,6 +948,9 @@ function syncImmediateAppSettings(patch: ReturnType<typeof appSettingsPatchSchem
     // 这里重建应用菜单 accelerator，并通知所有窗口刷新设置快照 —— 其他窗口的
     // useAppKeyboard 生效表与设置页跟随更新。先例：setAutoDownloadAndInstallUpdates 的全窗口广播。
     rebuildMenu();
+  }
+  // 已提交的 pending 只触发其他窗口重读；不把目标当作运行中的 dataBaseDir，也不再写一次设置。
+  if(patch.shortcutBindings!==undefined || Object.hasOwn(patch,"pendingDataDirectoryMigration")){
     for (const win of getApplicationWindowsExcludingCuaIndicator()) {
       if (!win.isDestroyed()) {
         win.webContents.send(PlatformChannels.SettingsChanged);
@@ -1459,7 +1438,7 @@ function resolveFocusedDesktopZoomLevel(): number {
 
 function getApplicationWindowsExcludingCuaIndicator(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter(
-    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win),
+    (win) => !win.isDestroyed() && !windowsCuaOperationIndicator.ownsWindow(win) && !isColdDataDirectoryWindow(win.id),
   );
 }
 
@@ -1717,6 +1696,7 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
         label,
         {
           ...initMessage,
+          defaultDataBaseDir:getInitialDataDirectoryDefaultBaseDir(),
           zcodeBuiltinProviderConfigFilePath: resolveZCodeBuiltinProviderConfigFilePath(),
           // 合并时漏传随包路径，新设备没有本机覆盖就无法初始化企业登录 adapter。
           enterpriseIdentityBuiltinConfigFilePath: resolveBundledEnterpriseIdentityConfigFilePath({
@@ -1837,7 +1817,7 @@ app.on("open-url", (event, url) => {
     resolveApplicationWindow: () => getApplicationWindowsExcludingCuaIndicator()[0] ?? null,
   });
 });
-const gotTheLock = app.requestSingleInstanceLock(createDeepLinkSingleInstanceData(process.argv));
+const gotTheLock = app.hasSingleInstanceLock() || app.requestSingleInstanceLock(createDeepLinkSingleInstanceData(process.argv));
 if (!gotTheLock) {
   app.quit();
 }

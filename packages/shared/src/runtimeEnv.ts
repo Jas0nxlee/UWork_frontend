@@ -41,6 +41,8 @@ export function isZCodeCuaInternalFeatureEnabled(env: EnvRecord = process.env): 
 }
 
 const SANITIZED_RUNTIME_ENV_KEYS = [
+  // 仅 Host 管理的 CLI 启动入口拥有数据库升级权限，不能被 Bash/MCP 子进程继承。
+  "UWORK_SESSION_DB_MIGRATION",
   "NODE_ENV",
   "ELECTRON_RUN_AS_NODE",
   "NODE_NO_WARNINGS",
@@ -94,6 +96,7 @@ const SANITIZED_RUNTIME_ENV_KEYS = [
 ] as const;
 
 const NON_TOOL_PASSTHROUGH_RUNTIME_ENV_KEYS = [
+  "UWORK_SESSION_DB_MIGRATION",
   "NODE_ENV",
   "ELECTRON_RUN_AS_NODE",
   "NODE_NO_WARNINGS",

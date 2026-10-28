@@ -4345,12 +4345,40 @@ export {
   storageMigrationReportSchema,
 } from "../sqlite-migrations/contract.js";
 
+/** 私有归属清单文件；大清单不进入有界控制帧、业务事件或遥测。 */
+export const zcodeLegacySessionOwnershipManifestSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    sessions: z.array(
+      z
+        .object({
+          sessionId: z.string().min(1),
+          workspacePath: z.string().min(1),
+          workspaceIdentity: z.string().min(1).optional(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type ZCodeLegacySessionOwnershipManifest = z.infer<
+  typeof zcodeLegacySessionOwnershipManifestSchema
+>;
+
 /** 仅存储准备子进程的私有控制帧，原始路径不进入业务事件或遥测。 */
+// 两个最大路径的 JSON 转义可能超过 64 KiB；Host/CLI 使用同一字符预算。
+export const ZCODE_STORAGE_PREPARATION_FRAME_MAX_CHARS = 512 * 1024;
+
 export const zcodeStoragePreparationFrameSchema = z.discriminatedUnion("method", [
   z
     .object({
       method: z.literal("startup/storagePath"),
-      params: z.object({ path: z.string().min(1).max(32768) }).strict(),
+      params: z
+        .object({
+          path: z.string().min(1).max(32768),
+          legacySourcePath: z.string().min(1).max(32768).optional(),
+        })
+        .strict(),
     })
     .strict(),
   z
@@ -4361,7 +4389,11 @@ export const zcodeStoragePreparationFrameSchema = z.discriminatedUnion("method",
     .strict(),
 ]);
 export const zcodeStoragePathReadySchema = z
-  .object({ method: z.literal("startup/storagePathReady"), reuse: z.boolean().optional() })
+  .object({
+    method: z.literal("startup/storagePathReady"),
+    reuse: z.boolean().optional(),
+    ownershipManifestPath: z.string().min(1).max(32768).optional(),
+  })
   .strict();
 
 // 桌面本地 TTFT 的严格事实合同；检查点不能替代实际内容帧。

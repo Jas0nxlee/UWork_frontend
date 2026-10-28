@@ -1,6 +1,8 @@
 import { isAbsolute, resolve } from "node:path";
+import { homedir } from "node:os";
 import { SqliteSessionStore } from "@zcode/adapters/storage";
-import { resolvePath, type ConfigResult } from "@zcode/adapters/config";
+import { createConfig, type ConfigResult } from "@zcode/adapters/config";
+import type { SessionDatabaseRouteResolver } from "../session-storage-migration/contract.js";
 import {
   SESSION_ENTRY_MODEL_SELECTION,
   parseModelSelectionValue,
@@ -136,12 +138,63 @@ export async function openStartupZCodeProtocolSessionStore(
   return store;
 }
 
-export function getSessionDbPath(configResult: ConfigResult, workingDirectory?: string): string {
+export function getSessionDbPath(
+  configResult: ConfigResult,
+  workingDirectory?: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
   const configured = configResult.config.storage.sessionDbPath;
+  if (configured.startsWith("~/")) {
+    return resolve(env.HOME?.trim() || env.USERPROFILE?.trim() || homedir(), configured.slice(2));
+  }
   // 存储 Worker 不能 chdir；显式传入业务实际 cwd，保持相对路径与普通 Agent 一致。
   if (workingDirectory && !isAbsolute(configured) && !configured.startsWith("~/"))
     return resolve(workingDirectory, configured);
-  return resolvePath(configured);
+  return resolve(configured);
+}
+
+/** 只返回 Host 管理的默认路径升级计划；迁移引擎负责归属、快照和激活。 */
+export function resolveLegacySessionDatabaseMigration(
+  configResult: ConfigResult,
+  options: {
+    env?: Record<string, string | undefined>;
+    workingDirectory?: string;
+  } = {},
+): { sourcePath: string; targetPath: string } | undefined {
+  const env = options.env ?? process.env;
+  // 显式值即使恰好等于默认路径也表达用户意图；未知旧快照同样不能据路径猜测迁移资格。
+  if (env.UWORK_SESSION_DB_MIGRATION !== "1" || configResult.sources.sessionDb !== "system") {
+    return undefined;
+  }
+  const home = env.HOME?.trim() || env.USERPROFILE?.trim() || homedir();
+  const sourcePath = resolve(home, ".zcode", "cli", "db", "db.sqlite");
+  const targetPath = getSessionDbPath(configResult, options.workingDirectory, env);
+  return sourcePath === targetPath ? undefined : { sourcePath, targetPath };
+}
+
+/** 每轮准备复用同一配置 resolver；同 workspace 的大量任务不重复读取配置。 */
+export function createSessionDatabaseRouteResolver(
+  env: Record<string, string | undefined> = process.env,
+): SessionDatabaseRouteResolver {
+  const routes = new Map<string, ReturnType<SessionDatabaseRouteResolver>>();
+  return (session) => {
+    const key = session.workspaceIdentity?.trim() || session.workspacePath;
+    let route = routes.get(key);
+    if (!route) {
+      const config = createConfig({
+        env,
+        workingDirectory: session.workspacePath,
+        workspaceIdentity: session.workspaceIdentity,
+      });
+      route = {
+        path: getSessionDbPath(config, session.workspacePath, env),
+        explicitlyConfigured:
+          config.sources.sessionDb !== undefined && config.sources.sessionDb !== "system",
+      };
+      routes.set(key, route);
+    }
+    return route;
+  };
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {

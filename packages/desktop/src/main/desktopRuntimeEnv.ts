@@ -1,3 +1,4 @@
+import { resolveDesktopLifecycleIdentity } from "./data-directory-startup/index.js";
 /* eslint-disable max-lines -- desktop runtime/env 解析需要集中维护 main/host/remote assets 的启动边界，拆分会扩大远程连接回归面。 */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -58,50 +59,20 @@ export const isPreviewPackagedRuntime =
 export const isLocalDevelopmentPackagedRuntime =
   !isLocalDevelopmentRuntime && isLocalDevelopmentDesktopBuild;
 
-function readRuntimeEnvOverride(name: string): string | undefined {
-  return process.env[name]?.trim() || undefined;
-}
-
-function isTruthyRuntimeEnvOverride(name: string): boolean {
-  const value = readRuntimeEnvOverride(name)?.toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
-// e2e 运行的是生产构建，默认会和本机正式版 ZCode 共用 app name / userData，
-// 触发 Electron 单实例锁后只激活已有窗口，Chromedriver 无法接管测试进程。
-// 这里允许测试显式隔离运行时身份，正常桌面/远控路径保持原来的默认值。
-export const runtimeApplicationName =
-  readRuntimeEnvOverride("ZCODE_DESKTOP_APPLICATION_NAME") ??
-  (isLocalDevelopmentPackagedRuntime
-    ? "UWork Local Development"
-    : isLocalDevelopmentRuntime
-      ? "UWork Dev"
-      : isPreviewPackagedRuntime
-        ? "UWork Preview"
-        : "UWork");
-// Electron 的 app.getPath("home") 不一定跟随测试进程里的 HOME 覆盖。
-// e2e 默认工作区依赖 home 路径，因此提供显式覆盖，避免测试写到开发者真实 ~/ZCodeProject。
-export const runtimeHomePath = readRuntimeEnvOverride("ZCODE_DESKTOP_HOME_DIR");
-// Chromedriver 管理 Electron 时会注入临时 userData；e2e 默认路径模式下导入期不能提前读取 appData。
-export const shouldUseElectronDefaultUserDataPath = isTruthyRuntimeEnvOverride(
-  "ZCODE_DESKTOP_USE_ELECTRON_DEFAULT_USER_DATA",
+// 与最早的冷启动入口复用纯生命周期身份解析，不在迁移前载入业务装配来固定数据根。
+export const {
+  runtimeApplicationName,
+  runtimeHomePath,
+  shouldUseElectronDefaultUserDataPath,
+  runtimeUserDataPath,
+  runtimeSessionDataPath,
+} = resolveDesktopLifecycleIdentity(
+  !isLocalDevelopmentRuntime,
+  ZCODE_PRODUCT_FLAVOR,
+  process.env,
+  () => getElectronAppPath("appData"),
+  isLocalDevelopmentDesktopBuild,
 );
-export const runtimeUserDataPath =
-  readRuntimeEnvOverride("ZCODE_DESKTOP_USER_DATA_DIR") ??
-  (shouldUseElectronDefaultUserDataPath
-    ? undefined
-    : join(
-        getElectronAppPath("appData"),
-        readRuntimeEnvOverride("ZCODE_DESKTOP_APPLICATION_NAME") ??
-          (isLocalDevelopmentRuntime
-            ? "UWork Dev"
-            : isPreviewPackagedRuntime
-              ? "UWork Preview"
-              : "UWork"),
-      ));
-export const runtimeSessionDataPath =
-  readRuntimeEnvOverride("ZCODE_DESKTOP_SESSION_DATA_DIR") ??
-  (runtimeUserDataPath ? join(runtimeUserDataPath, "session") : undefined);
 // Chromedriver 会注入临时 --user-data-dir，并在该目录等待 DevToolsActivePort。
 // e2e 如果再用 app.setPath 覆盖 userData/sessionData，端口文件会被写到另一个目录，
 // 导致 Electron 已启动但 WebDriver session 一直创建失败。测试态打开该开关后保留 Chromedriver 的目录。
@@ -622,7 +593,9 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     // Telemetry 的构建身份必须来自 Desktop 编译期元数据，不能让 Agent 在运行时读取
     // 工作树或根据安装路径猜测；否则同一产品版本的不同修复包无法在 ARMS 中区分。
     [ZCODE_BUILD_COMMIT_ID_ENV]: ZCODE_COMMIT,
-    ...(dataBaseDir !== homedir() ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
+    // 两个别名必须共同覆盖父环境；回到 HOME 也不能遗留旧 canonical 根。
+    UWORK_DATA_BASE_DIR:dataBaseDir,
+    ZCODE_DATA_BASE_DIR:dataBaseDir,
     ...(windowsAppInstallDir ? { [ZCODE_WINDOWS_APP_INSTALL_DIR_ENV]: windowsAppInstallDir } : {}),
     ...(bundledCuaHelperAppPath
       ? { [ZCODE_CUA_BUNDLED_HELPER_APP_PATH_ENV]: bundledCuaHelperAppPath }

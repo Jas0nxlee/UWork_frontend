@@ -31,7 +31,12 @@ import {
   parseSlashCommand,
 } from "../src/command-center.js";
 import type { CommandCenterTarget } from "../src/command-center.js";
-import { findDotenv, loadCliDotenv, prepareCliRuntimeEnv } from "../src/env.js";
+import {
+  applyCliRuntimeEnvSanitization,
+  findDotenv,
+  loadCliDotenv,
+  prepareCliRuntimeEnv,
+} from "../src/env.js";
 import { runPluginsCommand } from "../src/plugins-command.js";
 import { runPluginHostCommand } from "../src/plugin-host-command.js";
 import { CLI_PROCESS_NAME, setCliProcessTitle } from "../src/process-name.js";
@@ -177,6 +182,71 @@ const createPromptDeps = (): RunDependencies => ({
       runtime: { registryService: {} },
     }) as never,
   skipUserConfig: true,
+});
+
+test("keeps the Host session migration marker only for app-server and prepare-storage entries", async () => {
+  const input = { UWORK_SESSION_DB_MIGRATION: "1", PATH: "/bin" };
+  for (const args of [
+    ["app-server", "--stdio"],
+    ["app-server", "--stdio", "--prepare-storage"],
+    ["agent-server", "--stdio"],
+  ]) {
+    const argv = [process.execPath, "/cli/zcode.js", ...args];
+    assert.equal(prepareCliRuntimeEnv(input, argv).UWORK_SESSION_DB_MIGRATION, "1");
+    const inPlace = { ...input };
+    applyCliRuntimeEnvSanitization(inPlace, argv);
+    assert.equal(inPlace.UWORK_SESSION_DB_MIGRATION, "1");
+    const ctx = createContext(args);
+    let observed = false;
+    const code = await run(ctx, {
+      env: input,
+      runZCodeProtocolAgent: async (options) => {
+        observed = options?.env?.UWORK_SESSION_DB_MIGRATION === "1";
+      },
+    });
+    assert.equal(code, 0);
+    assert.equal(observed, true);
+  }
+  for (const args of [
+    [],
+    ["--prompt", "app-server"],
+    ["storage-migrate"],
+    ["plugin-host"],
+    ["--help"],
+  ]) {
+    const argv = [process.execPath, "/cli/zcode.js", ...args];
+    assert.equal(prepareCliRuntimeEnv(input, argv).UWORK_SESSION_DB_MIGRATION, undefined);
+    const inPlace: Record<string, string | undefined> = { ...input };
+    applyCliRuntimeEnvSanitization(inPlace, argv);
+    assert.equal(inPlace.UWORK_SESSION_DB_MIGRATION, undefined);
+  }
+  assert.equal(input.UWORK_SESSION_DB_MIGRATION, "1");
+  assert.equal(
+    prepareCliRuntimeEnv({ UWORK_SESSION_DB_MIGRATION: " 1 " }, [
+      process.execPath,
+      "/cli/zcode.js",
+      "app-server",
+    ]).UWORK_SESSION_DB_MIGRATION,
+    undefined,
+  );
+});
+
+test("does not grant the Host session migration marker from a workspace dotenv", async () => {
+  const ctx = createContext(["app-server", "--stdio"]);
+  let observed = false;
+  const exitCode = await run(ctx, {
+    env: { ZCODE_RUNTIME_ENV: "development" },
+    loadDotenv: (options) => {
+      if (options?.env) options.env.UWORK_SESSION_DB_MIGRATION = "1";
+      return { keys: ["UWORK_SESSION_DB_MIGRATION"], loaded: true };
+    },
+    runZCodeProtocolAgent: async (options) => {
+      observed = true;
+      assert.equal(options?.env?.UWORK_SESSION_DB_MIGRATION, undefined);
+    },
+  });
+  assert.equal(exitCode, 0);
+  assert.equal(observed, true);
 });
 
 test("prepares a sanitized CLI runtime env with ZCode-owned runtime keys", () => {

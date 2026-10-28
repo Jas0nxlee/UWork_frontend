@@ -1242,6 +1242,7 @@ export function createZCodeAgentService(
   const automationService = new AutomationService(automationRepo, options?.prepareProjectExecution);
   const automationTaskIndexRepo = new TaskIndexRepo();
   const pluginProcessManager = new ZCodeAgentProcessManager({
+    sessionDatabaseMigrationEnabled: options?.sessionDatabaseMigrationEnabled,
     commandResolver: options?.commandResolver,
     presentationSurface: options?.presentationSurface,
     requestTimeoutMs: options?.requestTimeoutMs,
@@ -1251,6 +1252,7 @@ export function createZCodeAgentService(
   // 合并时误删了独立进程：mcp/list 的慢握手会堵住串行 stdio 队列，连带卡住插件卸载。
   // 恢复专用控制面进程及空闲回收；共享 workspace 路径，不共享请求队列或 watchdog。
   const mcpStatusProcessManager = new ZCodeAgentProcessManager({
+    sessionDatabaseMigrationEnabled: options?.sessionDatabaseMigrationEnabled,
     commandResolver: options?.commandResolver,
     presentationSurface: options?.presentationSurface,
     processLifecycleReporter: options?.processLifecycleReporter,

@@ -3735,7 +3735,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
           service: settingService,
           prepareLegacyAccountConnections,
           setWorkspaceProjection,
-        } = createSettingServiceWithMigrations();
+        } = createSettingServiceWithMigrations({defaultDataBaseDir:msg.defaultDataBaseDir});
         const hostApiNetworkTransport = createHostApiNetworkTransport(async () => {
           const settings = await settingService.get();
           return {

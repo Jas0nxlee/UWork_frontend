@@ -59,6 +59,7 @@ it("BOT-E2E-RW-02 legacy 与 stable Bot 通过同一 Source 身份完成任务�
     ],
   });
   const settingService: ISettingService = {
+    getDataDirectoryInfo:async()=>({activeBaseDir:"/fixture",defaultBaseDir:"/fixture"}),
     get: async () => settings,
     update: async (patch) => {
       settings = appSettingsSchema.parse({ ...settings, ...patch });

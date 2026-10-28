@@ -42,6 +42,7 @@ export function mergeConfigs(...configs: PrioritizedConfig[]): RuntimeConfigPatc
         : inputConfig;
     const previousHooks = result.hooks;
     const previousPlugins = result.plugins;
+    const previousStorage = result.storage;
     Object.assign(result, config);
 
     // Deep merge nested objects
@@ -52,7 +53,9 @@ export function mergeConfigs(...configs: PrioritizedConfig[]): RuntimeConfigPatc
       result.permission = { ...result.permission, ...config.permission };
     }
     if (config.storage) {
-      result.storage = { ...result.storage, ...config.storage };
+      // 上层仅设置 storage.dir 时，Object.assign 已替换整个 storage；必须从旧层合并，
+      // 否则显式 sessionDbPath / 动态默认值丢失，路径与来源判定会分叉。
+      result.storage = { ...previousStorage, ...config.storage };
     }
     if (config.network) {
       result.network = { ...result.network, ...config.network };

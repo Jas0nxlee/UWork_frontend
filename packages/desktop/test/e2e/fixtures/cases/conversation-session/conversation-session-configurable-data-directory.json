@@ -31,6 +31,14 @@
       "source": "synthetic",
       "timingPolicy": "fast-text",
       "syntheticReason": "固定迁移后 completed assistant marker，证明新 App 根下原任务仍可继续。"
+    },
+    {
+      "id": "cdd01-pending-write-main",
+      "description": "保存待迁移请求后继续向旧活动根发送，验证冷迁移包含晚于请求的数据。",
+      "kind": "main",
+      "source": "synthetic",
+      "timingPolicy": "fast-text",
+      "syntheticReason": "固定请求后继续工作的assistant标记，证明未在保存时提前取数据库快照。"
     }
   ]
 }

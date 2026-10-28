@@ -74,6 +74,7 @@ describe("paths", () => {
     writeFileSync(join(oldV2Dir, "setting.json"), '{"dataBaseDir":"/old"}', "utf-8");
     writeFileSync(join(oldV2Dir, "setting.json.lock"), "lock", "utf-8");
     writeFileSync(join(oldV2Dir, "setting.json.123.tmp"), "temp", "utf-8");
+    writeFileSync(join(oldV2Dir, "setting.json.tmp-123-456-deadbeef"), "atomic-temp", "utf-8");
     writeFileSync(join(oldV2Dir, "app-canary.txt"), "app-data", "utf-8");
 
     vi.resetModules();
@@ -82,8 +83,9 @@ describe("paths", () => {
 
     expect(readFileSync(join(newV2Dir, "app-canary.txt"), "utf-8")).toBe("app-data");
     expect(existsSync(join(newV2Dir, "setting.json"))).toBe(false);
-    expect(existsSync(join(newV2Dir, "setting.json.lock"))).toBe(false);
-    expect(existsSync(join(newV2Dir, "setting.json.123.tmp"))).toBe(false);
+    expect(readFileSync(join(newV2Dir, "setting.json.lock"), "utf-8")).toBe("lock");
+    expect(readFileSync(join(newV2Dir, "setting.json.123.tmp"), "utf-8")).toBe("temp");
+    expect(existsSync(join(newV2Dir, "setting.json.tmp-123-456-deadbeef"))).toBe(false);
   });
 
   it("Windows 数据目录不能选择 ZCode 安装目录或其子目录", async () => {

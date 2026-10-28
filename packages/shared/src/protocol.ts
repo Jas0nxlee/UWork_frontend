@@ -252,6 +252,13 @@ export interface ResourceUsageSnapshot {
   processes: ResourceUsageProcess[];
 }
 
+export interface PendingDataDirectoryMigration {
+  requestId: string;
+  sourceBaseDir: string;
+  targetBaseDir: string;
+  resetToDefault: boolean;
+}
+
 export interface AppSettings {
   /** 当前 App/Host 不再显示提交前体验套餐推荐；不改变任何入口的模型选择。 */
   startPlanRecommendationDismissed?: boolean;
@@ -406,6 +413,7 @@ export interface AppSettings {
   lastActiveTaskByWorkspace?: Record<string, string>;
   /** 数据目录的根路径（替代 homedir），默认为 os.homedir()；.zcode/v2 后缀不变 */
   dataBaseDir?: string;
+  pendingDataDirectoryMigration?: PendingDataDirectoryMigration;
   /** 自动更新安装完成后，等待首次启动展示的版本说明 */
   pendingPostUpdateReleaseNotes?: {
     version: string;

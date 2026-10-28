@@ -6,6 +6,7 @@ import {
   initializeE2EElectronServiceBridge,
   registerE2EElectronServiceBridgeReload,
   reloadE2EElectronServiceBridge,
+  waitForE2EBusinessRendererHandoff,
 } from "./e2e/helpers/e2e-electron-service-lifecycle.js";
 
 describe("desktop e2e Electron service lifecycle", () => {
@@ -122,4 +123,42 @@ describe("desktop e2e Electron service lifecycle", () => {
 
     expect(reload).toHaveBeenCalledOnce();
   });
+});
+
+it("re-enumerates closed cold handles and reloads the bridge only on a business renderer", async () => {
+  let selected = "";
+  const execute = vi.fn(async () => {
+    if (selected === "cold") return false;
+    if (selected === "vanished") throw new Error("no such window");
+    return selected === "business";
+  });
+  const browser = {
+    electron: {
+      execute: vi.fn(() => {
+        throw new Error("stale Main context must not be used");
+      }),
+      windowHandle: "cold",
+    },
+    getWindowHandles: vi
+      .fn()
+      .mockResolvedValueOnce(["cold"])
+      .mockResolvedValueOnce(["vanished", "business"]),
+    switchToWindow: vi.fn(async (handle: string) => {
+      selected = handle;
+    }),
+    execute,
+    waitUntil: async (probe: () => Promise<boolean>) => {
+      expect(await probe()).toBe(false);
+      expect(await probe()).toBe(true);
+    },
+  } as unknown as WebdriverIO.Browser;
+  const reload = vi.fn(async () => {
+    expect(selected).toBe("business");
+    expect((browser.electron as { windowHandle?: string }).windowHandle).toBe("business");
+  });
+  registerE2EElectronServiceBridgeReload(browser, reload);
+  await waitForE2EBusinessRendererHandoff(browser);
+  expect(browser.getWindowHandles).toHaveBeenCalledTimes(2);
+  expect(browser.electron.execute).not.toHaveBeenCalled();
+  expect(reload).toHaveBeenCalledOnce();
 });

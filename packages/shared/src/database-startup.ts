@@ -13,6 +13,11 @@ export const databaseStartupErrorCodeSchema = z.enum([
   "startup_status_timeout",
   "transport_closed",
   "unsupported_runtime",
+  "legacy_writer_active",
+  "legacy_writer_check_failed",
+  "session_ownership_unknown",
+  "session_source_changed",
+  "data_directory_target_conflict",
 ]);
 export type DatabaseStartupErrorCode = z.infer<typeof databaseStartupErrorCodeSchema>;
 
@@ -23,6 +28,11 @@ export function classifyDatabaseStartupError(error: unknown): DatabaseStartupErr
   while (error && typeof error === "object" && !seen.has(error) && seen.size < 12) {
     seen.add(error);
     const value = error as { code?: unknown; errcode?: unknown; kind?: unknown; cause?: unknown };
+    // 安全门禁只按稳定 code 识别；继续遍历 cause，让原始 errno 保持更高优先级。
+    if (value.code === "SESSION_MIGRATION_OWNERSHIP") fallback = "session_ownership_unknown";
+    else if (value.code === "SESSION_MIGRATION_SOURCE_CHANGED") fallback = "session_source_changed";
+    else if (value.code === "DATA_DIRECTORY_TARGET_CONFLICT")
+      fallback = "data_directory_target_conflict";
     const primary = typeof value.errcode === "number" ? value.errcode & 0xff : undefined;
     if (primary === 13 || value.code === "ENOSPC" || value.code === "EDQUOT") return "storage_full";
     if (primary === 3 || primary === 8 || value.code === "EACCES" || value.code === "EPERM")
@@ -117,6 +127,8 @@ export type DatabaseMigrationFacts = z.infer<typeof databaseMigrationFactsSchema
 export const databaseStartupStateSchema = z
   .object({
     schemaVersion: z.literal(1),
+    operation: z.literal("data-directory-migration").optional(),
+    canCancelDataDirectoryMigration: z.boolean().optional(),
     startupId: z.string().min(1).max(128),
     attemptId: z.string().min(1).max(128),
     sequence: z.number().int().nonnegative(),
@@ -157,6 +169,12 @@ export const databaseStartupControlSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("snapshot") }).strict(),
   z.object({ action: z.literal("exit") }).strict(),
   z.object({ action: z.literal("retry"), attemptId: z.string().min(1).max(128) }).strict(),
+  z
+    .object({
+      action: z.literal("cancel-data-directory-migration"),
+      attemptId: z.string().min(1).max(128),
+    })
+    .strict(),
 ]);
 export type DatabaseStartupControl = z.infer<typeof databaseStartupControlSchema>;
 
