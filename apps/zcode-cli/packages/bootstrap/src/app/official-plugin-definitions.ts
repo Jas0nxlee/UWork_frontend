@@ -54,8 +54,8 @@ export interface OfficialPluginDefinition {
   /** filesystem/SEA seed 缺少任一项时拒绝生成残缺的官方插件缓存。 */
   requiredSeedPaths?: readonly string[];
   rootCandidates: readonly string[];
-  /** Extra top-level paths intentionally staged as plugin runtime assets. */
-  runtimeTopLevelPaths?: readonly string[];
+  /** 已暂存的原生运行依赖根；仅收集其生产依赖闭包，不扫描整个 node_modules。 */
+  runtimeDependencyRoots?: readonly string[];
   version: string;
 }
 
@@ -420,9 +420,9 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
     ],
     requiredSeedPaths: OFFICIAL_CUA_REQUIRED_SEED_PATHS,
     // Bug 根因：迁移 node_repl 时把旧 MCP launcher 与 SDK 仍需的 Sharp runtime 一并裁掉了。
-    // Dev/desktop 会把最小 Sharp 闭包 stage 到这里；官方 cache 必须继续携带 node_modules，
-    // 否则 seed 原子替换后首次截图才会报 Cannot find module 'sharp'。
-    runtimeTopLevelPaths: ["node_modules"],
+    // Dev/desktop 只在真实 producer 可用时暂存 Sharp，正式包还暂存 Koffi。
+    // 只沿这些已暂存根的生产依赖收集，避免触碰开发依赖中的 dataless 文件而阻塞 CLI 首发。
+    runtimeDependencyRoots: ["sharp", "koffi"],
     // 这里的 version 追踪上游 zcode-cua runtime 版本，使插件 UI 展示、缓存路径、
     // marketplace 条目都对齐；具体版本由原子 producer bump 工作流维护。
     version: "0.6.5",

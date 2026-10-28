@@ -1,5 +1,15 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Logger } from "@zcode/contracts";
@@ -15,7 +25,26 @@ const faults = vi.hoisted(() => ({
   runtimeManifestTargetSuffix: undefined as string | undefined,
   seedLockHeldTargetSuffixes: [] as string[],
   seedLockObservedTimeoutsMs: [] as number[],
+  unreadableModuleFile: undefined as string | undefined,
+  unrelatedModuleReads: 0,
 }));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    readFileSync(
+      path: Parameters<typeof actual.readFileSync>[0],
+      options?: Parameters<typeof actual.readFileSync>[1],
+    ) {
+      if (String(path) === faults.unreadableModuleFile) {
+        faults.unrelatedModuleReads += 1;
+        throw new Error("Unrelated development module must not be read");
+      }
+      return actual.readFileSync(path, options);
+    },
+  };
+});
 
 vi.mock("../src/app/official-plugin-cache-fs.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/app/official-plugin-cache-fs.js")>();
@@ -135,7 +164,76 @@ describe("bundled official plugin cache resilience", () => {
     faults.runtimeManifestTargetSuffix = undefined;
     faults.seedLockHeldTargetSuffixes = [];
     faults.seedLockObservedTimeoutsMs = [];
+    faults.unreadableModuleFile = undefined;
+    faults.unrelatedModuleReads = 0;
     await Promise.all(cleanups.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+  });
+
+  it("seeds only the declared Sharp runtime closure without reading unrelated development modules", async () => {
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    const unrelated = join(sourceRoot, "node_modules", "unrelated-dev", "cache.d 3.ts");
+    await writeFixtureFile(unrelated, "unrelated development content");
+    faults.unreadableModuleFile = unrelated;
+    const nativePath = "node_modules/@img/sharp-darwin-arm64/lib/sharp.node";
+    await chmod(join(sourceRoot, nativePath), 0o755);
+
+    expect(() => resolveOfficialPluginRoots({ storageRoot })).not.toThrow();
+
+    const cacheRoot = join(storageRoot, CUA_CACHE_SUFFIX);
+    for (const path of [
+      "node_modules/sharp/lib/index.js",
+      "node_modules/detect-libc/index.js",
+      "node_modules/runtime-leaf/index.js",
+      "node_modules/@img/colour/index.js",
+      nativePath,
+      "node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips.dylib",
+      "node_modules/koffi/build/koffi.node",
+    ]) {
+      expect(await readFile(join(cacheRoot, path), "utf8")).toBe(path);
+    }
+    if (process.platform !== "win32") {
+      expect((await stat(join(cacheRoot, nativePath))).mode & 0o111).toBe(0o111);
+    }
+    expect(existsSync(join(cacheRoot, "node_modules", "unrelated-dev"))).toBe(false);
+    expect(existsSync(join(cacheRoot, "node_modules", "typescript"))).toBe(false);
+    expect(faults.unrelatedModuleReads).toBe(0);
+  });
+
+  it("rejects a missing required Sharp dependency instead of borrowing workspace hoisted modules", async () => {
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    await rm(join(sourceRoot, "node_modules", "detect-libc"), { recursive: true });
+    await writeFixtureFile(
+      join(dirname(dirname(sourceRoot)), "node_modules", "detect-libc", "package.json"),
+      JSON.stringify({ name: "detect-libc" }),
+    );
+
+    expect(() => resolveOfficialPluginRoots({ storageRoot })).toThrow(/detect-libc/);
+  });
+
+  it("keeps the stub producer valid when Sharp and Koffi roots were not staged", async () => {
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    for (const name of ["sharp", "koffi"]) {
+      await rm(join(sourceRoot, "node_modules", name), { recursive: true });
+    }
+    const unrelated = join(sourceRoot, "node_modules", "unrelated-dev", "cache.d 3.ts");
+    await writeFixtureFile(unrelated, "unrelated");
+    faults.unreadableModuleFile = unrelated;
+
+    expect(() => resolveOfficialPluginRoots({ storageRoot })).not.toThrow();
+    expect(existsSync(join(storageRoot, CUA_CACHE_SUFFIX, "node_modules"))).toBe(false);
+    expect(faults.unrelatedModuleReads).toBe(0);
+  });
+
+  it("rejects scoped traversal segments before resolving a runtime dependency directory", async () => {
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    await writeFixtureFile(
+      join(sourceRoot, "node_modules", "sharp", "package.json"),
+      JSON.stringify({ dependencies: { "@scope/..": "1" } }),
+    );
+
+    expect(() => resolveOfficialPluginRoots({ storageRoot })).toThrow(
+      "Invalid runtime dependency @scope/..",
+    );
   });
 
   it("degrades a persistent transient seed failure when the target is absent", async () => {
@@ -556,6 +654,58 @@ async function createStorageRoot(cleanups: string[]): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "zcode-plugin-cache-resilience-"));
   cleanups.push(root);
   return join(root, "plugins");
+}
+
+async function writeFixtureFile(path: string, content: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, content);
+}
+
+async function createCuaRuntimeFixture(cleanups: string[]) {
+  const root = await mkdtemp(join(tmpdir(), "uwork-cua-runtime-seed-"));
+  cleanups.push(root);
+  process.argv[1] = join(root, "zcode.cjs");
+  const sourceRoot = join(root, "packages", "zcode-cua-plugin");
+  await writeFixtureFile(
+    join(sourceRoot, ".zcode-plugin", "plugin.json"),
+    JSON.stringify({ name: "computer-use", version: CUA_DEFINITION!.version }),
+  );
+  for (const path of CUA_DEFINITION!.requiredSeedPaths ?? []) {
+    await writeFixtureFile(join(sourceRoot, path), "fixture");
+  }
+  const packages = [
+    {
+      name: "sharp",
+      dependencies: { "detect-libc": "1", "@img/colour": "1" },
+      optionalDependencies: { "@img/sharp-darwin-arm64": "1", "absent-platform": "1" },
+      devDependencies: { typescript: "1" },
+    },
+    { name: "detect-libc", dependencies: { "runtime-leaf": "1" } },
+    { name: "runtime-leaf", dependencies: { sharp: "1" } },
+    { name: "@img/colour" },
+    {
+      name: "@img/sharp-darwin-arm64",
+      optionalDependencies: { "@img/sharp-libvips-darwin-arm64": "1" },
+    },
+    { name: "@img/sharp-libvips-darwin-arm64" },
+    { name: "typescript" },
+    { name: "koffi" },
+  ];
+  for (const pkg of packages) {
+    await writeFixtureFile(
+      join(sourceRoot, "node_modules", pkg.name, "package.json"),
+      JSON.stringify(pkg),
+    );
+    const path = `node_modules/${pkg.name}/${pkg.name === "sharp" ? "lib/" : ""}index.js`;
+    await writeFixtureFile(join(sourceRoot, path), path);
+  }
+  for (const path of [
+    "node_modules/@img/sharp-darwin-arm64/lib/sharp.node",
+    "node_modules/@img/sharp-libvips-darwin-arm64/lib/libvips.dylib",
+    "node_modules/koffi/build/koffi.node",
+  ])
+    await writeFixtureFile(join(sourceRoot, path), path);
+  return { sourceRoot, storageRoot: join(root, "plugin-storage") };
 }
 
 async function expectNoSeedBackups(targetRoot: string): Promise<void> {
