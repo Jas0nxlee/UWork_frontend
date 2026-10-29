@@ -4,6 +4,48 @@ import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm, stat } from 
 import { dirname } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 
+const SQLITE_BUSY = 5;
+const SQLITE_LOCKED = 6;
+
+/**
+ * Windows 文件系统可能在进程关闭后延迟释放数据库锁，Linux 在某些文件系统（NFS、某些容器环境）
+ * 也可能遇到类似问题。通用重试逻辑确保跨平台的数据库访问健壮性。
+ */
+function isSqliteLockError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const err = error as { code?: string; errcode?: number; errstr?: string };
+  return (
+    err.code === "ERR_SQLITE_ERROR" &&
+    (err.errstr === "database is locked" ||
+      err.errstr === "database table is locked" ||
+      (typeof err.errcode === "number" && ((err.errcode & 0xff) === SQLITE_BUSY || (err.errcode & 0xff) === SQLITE_LOCKED)))
+  );
+}
+
+async function retryOnLock<T>(
+  operation: () => T | Promise<T>,
+  options: { maxRetries?: number; initialDelayMs?: number; maxDelayMs?: number; context?: string } = {},
+): Promise<T> {
+  const maxRetries = options.maxRetries ?? 10;
+  const initialDelayMs = options.initialDelayMs ?? 200;
+  const maxDelayMs = options.maxDelayMs ?? 2000;
+  const context = options.context ?? "database operation";
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isSqliteLockError(error) || attempt >= maxRetries) {
+        throw error;
+      }
+      // 递增退避：200ms, 400ms, 800ms, 1600ms, 2000ms(最大), ...
+      const delayMs = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error(`${context}: exceeded retry limit`);
+}
+
 export async function exists(path: string): Promise<boolean> {
   try {
     await stat(path);
@@ -76,31 +118,36 @@ export async function syncDirectory(path: string): Promise<void> {
 }
 /** SQLite backup 从只读连接获得 WAL 一致性快照，源不运行 schema migration。 */
 export async function snapshot(source: string, target: string): Promise<void> {
-  const temporary = `${target}.${randomUUID()}.snapshot`;
-  let published = false;
-  try {
-    const db = new DatabaseSync(source, { readOnly: true });
-    try {
-      await backup(db, temporary);
-    } finally {
-      db.close();
-    }
-    await chmod(temporary, 0o600);
-    const file = await open(temporary, "r+");
-    try {
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    await rename(temporary, target);
-    published = true;
-    await syncDirectory(dirname(target));
-  } finally {
-    // backup/权限/同步失败都可能留下大块部分文件；仅清本次 UUID 的未发布产物，保留业务库和已发布备份。
-    if (!published)
-      for (const suffix of ["", "-wal", "-shm", "-journal"])
-        await rm(`${temporary}${suffix}`, { force: true });
-  }
+  await retryOnLock(
+    async () => {
+      const temporary = `${target}.${randomUUID()}.snapshot`;
+      let published = false;
+      try {
+        const db = new DatabaseSync(source, { readOnly: true });
+        try {
+          await backup(db, temporary);
+        } finally {
+          db.close();
+        }
+        await chmod(temporary, 0o600);
+        const file = await open(temporary, "r+");
+        try {
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        await rename(temporary, target);
+        published = true;
+        await syncDirectory(dirname(target));
+      } finally {
+        // backup/权限/同步失败都可能留下大块部分文件；仅清本次 UUID 的未发布产物，保留业务库和已发布备份。
+        if (!published)
+          for (const suffix of ["", "-wal", "-shm", "-journal"])
+            await rm(`${temporary}${suffix}`, { force: true });
+      }
+    },
+    { context: `snapshot ${source} to ${target}` },
+  );
 }
 
 interface LockOwner {

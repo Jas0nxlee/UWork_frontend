@@ -265,7 +265,11 @@ class DraftSessionPrewarmCoordinator {
       this.requestedInvalidationVersion() !== invalidationVersion
     )
       throw new Error("草稿会话已切换，请重新发送");
-    if (!current.binding) throw new Error("草稿会话创建失败，请重试");
+    if (!current.binding) {
+      // 提供更详细的错误信息帮助用户诊断问题
+      const errorMsg = "草稿会话创建失败。可能原因：数据库正在迁移或被占用。请尝试：1) 关闭其他 UWork 实例；2) 等待几秒后重试；3) 重启应用";
+      throw new Error(errorMsg);
+    }
     return current.binding;
   }
 
