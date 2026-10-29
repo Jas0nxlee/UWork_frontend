@@ -805,6 +805,11 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     }),
     update: async () => {},
     updateDataBaseDir: async () => {},
+    // 手机页不碰桌面数据根；这里只补合同要求的方法，两个值取同一占位。
+    getDataDirectoryInfo: async () => ({
+      activeBaseDir: "web-remote-control",
+      defaultBaseDir: "web-remote-control",
+    }),
   };
 
   const emptyGitSummary = (workspacePath: string) => ({
