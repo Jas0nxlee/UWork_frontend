@@ -1203,12 +1203,10 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
     workspaceMainView === "plugin-store" ? showChatMainView : handleTaskNavBack;
   const canPrimaryNavigationBack = workspaceMainView === "plugin-store" || canTaskNavBack;
   useEffect(() => {
-    if (
-      isWebRemoteControlShell &&
-      (workspaceMainView === "automations" || workspaceMainView === "plugin-store")
-    ) {
+    if (isWebRemoteControlShell && workspaceMainView === "automations") {
       // 修复原因：手机远控复用桌面 shell 时可能保留上一次主视图状态；
       // 远控不承载 Automations，必须立即回落到 continuous/replayable 边界之外的聊天页。
+      // 插件市场在远控里是可用主视图（点侧栏那一行就要进去），不能再被这里打回聊天。
       onWorkspaceMainViewChange("chat");
     }
   }, [isWebRemoteControlShell, onWorkspaceMainViewChange, workspaceMainView]);
