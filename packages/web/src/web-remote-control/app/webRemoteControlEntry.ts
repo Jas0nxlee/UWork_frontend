@@ -495,10 +495,19 @@ export class WebRemoteControlEntry {
   /** 免扫码：打开"我的设备"列表（复用设备页视图与分组）。 */
   private async openRemoteDevices(context: EnterpriseAuthContext): Promise<void> {
     this.remoteContext = context;
-    // 只有"刚连过又因版本号重载"时才自动落点；新进来一律停在列表让用户选。
+    // 落点顺序：本次会话刚连过的设备（版本号重载续连）→ 持久记住的上次设备（下次进来自动接回）。
+    // 两者都没有（第一次用）就停在列表让用户选。
     const resume = this.resumeTarget();
-    const lastSid: string | null = resume?.sid ?? null;
-    const lastMid: string | null = resume?.mid ?? null;
+    let persistedSid: string | null = null;
+    let persistedMid: string | null = null;
+    try {
+      persistedSid = this.options.storage.getItem(LAST_DEVICE_KEY);
+      persistedMid = this.options.storage.getItem(LAST_DEVICE_MID_KEY);
+    } catch {
+      // 存储不可用只影响"上次设备"，不影响列表。
+    }
+    const lastSid: string | null = resume?.sid ?? persistedSid;
+    const lastMid: string | null = resume?.mid ?? persistedMid;
     this.list = {
       view: { kind: "devices", devices: [], loading: true, error: false },
       unsubscribe: this.options.subscribeVisible(() => {

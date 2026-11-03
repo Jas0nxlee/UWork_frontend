@@ -143,6 +143,19 @@ export function WebRemoteControlMobileShell({
     setCurrentPage("home");
   }, []);
 
+  /**
+   * 标题栏返回：侧栏/面板打开时先收掉它（这是用户看到的第一层"返回"），
+   * 否则退主视图或回任务列表。避免点了标题什么也不发生。
+   */
+  const handleHeaderBack = useCallback(() => {
+    if (isSidePaneOpen) {
+      onCloseSidePane?.();
+      return;
+    }
+    if (mainViewTakesSurface) onExitMainView?.();
+    else navigateHome();
+  }, [isSidePaneOpen, mainViewTakesSurface, onCloseSidePane, onExitMainView, navigateHome]);
+
   useEffect(() => {
     // 初始意图只随导航变化消费；断点恢复不能重放旧 chat 意图，覆盖用户已经返回的 Home。
     if (initialNavigationIntent === "chat") setCurrentPage("chat");
@@ -196,22 +209,24 @@ export function WebRemoteControlMobileShell({
               data-mobile-page="chat"
             >
               <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-header px-2">
-                <Button
+                {/* 整条标题栏就是返回：先收掉打开的侧栏/面板，再回任务会话或任务列表。
+                    之前只有左边的小箭头可点，点标题（用户更自然的动作）没有任何反应。 */}
+                <button
                   type="button"
-                  variant="ghost"
-                  size="icon-sm"
+                  data-testid="mobile-chat-header-back"
                   aria-label={intl.formatMessage({
                     id: mainViewTakesSurface
                       ? "webRemoteControl.mobileShell.backToChat"
                       : "webRemoteControl.mobileShell.backHome",
                   })}
-                  onClick={mainViewTakesSurface ? () => onExitMainView?.() : navigateHome}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={handleHeaderBack}
                 >
-                  <ArrowLeft className="size-4" />
-                </Button>
-                <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
-                  {intl.formatMessage({ id: "webRemoteControl.mobileShell.chatTitle" })}
-                </span>
+                  <ArrowLeft className="size-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
+                    {intl.formatMessage({ id: "webRemoteControl.mobileShell.chatTitle" })}
+                  </span>
+                </button>
                 <WebRemoteControlThemeMenu />
               </div>
               {renderChatHeader({ onBackHome: navigateHome })}
