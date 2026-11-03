@@ -8,7 +8,7 @@ const ENTRY_HREF = `https://aihub.example.test/remote/v4?backend=uwork&org=${ORG
 const WE_COM_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 wxwork/4.1.26 MicroMessenger/7.0.1";
 
-function setup(href: string, userAgent: string) {
+function setup(href: string, userAgent: string, fetchImpl?: typeof fetch) {
   const connect = vi.fn();
   const onView = vi.fn();
   const storage = new Map<string, string>();
@@ -32,6 +32,7 @@ function setup(href: string, userAgent: string) {
     },
     locale: "zh-CN",
     userAgent,
+    ...(fetchImpl ? { fetchImpl } : {}),
     devices: vi.fn(async () => []),
     subscribeVisible: () => () => {},
     token: vi.fn(async () => "one-use-token"),
@@ -117,6 +118,77 @@ describe("WeCom workbench entry (backend=uwork)", () => {
     expect(params.enterpriseOrg).toBe(ORG);
   });
 
+
+  it("works from a clean workbench URL by resolving the backend on the same origin", async () => {
+    const fetchImpl = vi.fn(async (url: URL) => {
+      const path = String(url);
+      if (path.endsWith("/api/auth/wecom/web-config"))
+        return json({ backend: "uwork", tenantId: ORG });
+      if (path.endsWith("/api/client/remote-devices"))
+        return json({
+          devices: [{ deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac", platform: "darwin" }],
+        });
+      if (path.endsWith("/remote-devices/sid-1/pairings"))
+        return json({ id: "pair-1", expiresAt: Date.now() + 60_000 }, 201);
+      if (path.endsWith("/remote-devices/sid-1/pairings/pair-1"))
+        return json({
+          status: "answered",
+          pairing: {
+            sid: "sid-1",
+            hash: "hash-abcdefghijklmnop",
+            org: ORG,
+            enterpriseAuth: "https://aihub.example.test",
+          },
+        });
+      throw new Error(`unexpected request ${path}`);
+    });
+    const f = setup("https://aihub.example.test/remote/v4", WE_COM_UA, fetchImpl as unknown as typeof fetch);
+    saveEnterpriseAuthToken(
+      {
+        getItem: (key) => f.storage.get(key) ?? null,
+        setItem: (key, value) => {
+          f.storage.set(key, value);
+        },
+      },
+      { apiBaseUrl: "https://aihub.example.test", orgId: ORG },
+      "session-1",
+    );
+    await f.entry.start();
+    // 组织与后端基址都来自同源 web-config，URL 里没有任何参数。
+    expect(fetchImpl.mock.calls[0]?.[0]?.toString()).toBe(
+      "https://aihub.example.test/api/auth/wecom/web-config",
+    );
+    const devicesView = f.onView.mock.calls
+      .map((call) => call[0])
+      .filter((view) => view.kind === "devices")
+      .at(-1);
+    expect(devicesView?.devices).toHaveLength(1);
+    f.entry.selectDevice("sid-1");
+    await vi.waitFor(() => expect(f.connect).toHaveBeenCalledTimes(1));
+    const params = (f.connect.mock.calls[0] as unknown as [{ params: Record<string, unknown> }])[0]
+      .params;
+    expect(params.enterpriseAuth).toBe("https://aihub.example.test");
+    expect(params.enterpriseOrg).toBe(ORG);
+  });
+
+  it("still refuses a plain browser on a clean workbench URL", async () => {
+    const fetchImpl = vi.fn(async () => json({ backend: "uwork", tenantId: ORG }));
+    const f = setup(
+      "https://aihub.example.test/remote/v4",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
+      fetchImpl as unknown as typeof fetch,
+    );
+    await f.entry.start();
+    expect(f.onView).toHaveBeenCalledWith({
+      kind: "failure",
+      failure: { reason: "wecom-app-required" },
+    });
+    // 只做了同源探测，没有触达任何业务接口。
+    expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://aihub.example.test/api/auth/wecom/web-config",
+    ]);
+    expect(f.connect).not.toHaveBeenCalled();
+  });
   it("keeps the scanned QR path unchanged (ucas backend, sid/hash present)", async () => {
     const fetchImpl = vi.fn(async () => json({}));
     vi.stubGlobal("fetch", fetchImpl);

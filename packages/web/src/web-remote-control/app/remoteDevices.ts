@@ -157,3 +157,29 @@ export async function waitRemotePairing(options: {
     await sleep(PAIRING_POLL_INTERVAL_MS);
   }
 }
+
+/**
+ * 同源入口探测（照 ucas-proxy"页面与 API 同源"的口径）：页面与后台同源时，
+ * 组织与后端形态由 Host 解析，企微应用主页只需要一个干净的 `/remote/v4`。
+ * 非本后端的 origin 返回 404，调用方回落到二维码/显式参数入口。
+ */
+export async function readSameOriginBackend(options: {
+  origin: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ backend: "uwork"; tenantId: string } | null> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  try {
+    const response = await fetchImpl(new URL("/api/auth/wecom/web-config", `${options.origin}/`), {
+      method: "GET",
+      credentials: "omit",
+      redirect: "error",
+    });
+    if (!response.ok) return null;
+    const body = await readJson(response);
+    const tenantId = typeof body["tenantId"] === "string" ? body["tenantId"] : "";
+    if (body["backend"] !== "uwork" || !tenantId) return null;
+    return { backend: "uwork", tenantId };
+  } catch {
+    return null;
+  }
+}

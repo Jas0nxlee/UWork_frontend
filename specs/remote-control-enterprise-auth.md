@@ -90,12 +90,19 @@
 
 ### 6.1 入口与配置
 
-- 企微自建应用主页：`https://<手机页>/remote/v4?backend=uwork&org=<tenantId>&enterprise_auth=<后台 origin>`；
-  两个参数都是公开参数，和二维码里的一致。**缺省 `backend` 视为 `ucas`**。
+- **企微自建应用主页就是一个干净地址：`https://<后台同源域名>/remote/v4`**，不带任何参数。
+  页面与后台**同源**（nginx 在同一 host 上发页面静态文件、把 `/api` 反代到后台），所以：
+  - `apiBaseUrl` 由页面自己的 `location.origin` 推出（不再有 `enterprise_auth`）；
+  - 组织由**请求 Host** 解析（照 ucas-proxy 的口径：显式映射 → 唯一可登录租户 → 唯一租户），
+    不再有 `org`；
+  - `backend` 由 `GET /api/auth/wecom/web-config`（同源、公开）确认，返回
+    `{backend:"uwork", tenantId}`；不是本后台的 origin 直接 404，页面回落到二维码/显式参数入口。
+  - 组织映射在后台用 `TENANT_HOSTS="host=tenantId,host2=tenantId2"` 配置（缺省空 = 单租户自动解析）。
+- 页面仍**向后兼容**显式参数：URL 带 `backend`/`org`/`enterprise_auth` 时以参数为准（二维码路径照旧）。
 - 桌面随包配置 `config/mobile-remote-control.json` 的 `enterpriseAuth` 增加
   `"backend": "uwork"`（缺省 `ucas`）；只有 uwork 才启用设备登记与配对应答通道。
-- 企微侧：应用「可信域名/网页授权回调域」要包含手机页域名；后台 `PUBLIC_URL` 必须是
-  HTTPS 公网 origin（回调 `/api/auth/wecom/callback`）。
+- 企微侧：应用「可信域名/网页授权回调域」要包含该同源域名；后台 `PUBLIC_URL` 必须是
+  HTTPS 公网 origin（回调 `/api/auth/wecom/callback`），且与页面同源。
 
 ### 6.2 页面准入（只允许企微应用）
 

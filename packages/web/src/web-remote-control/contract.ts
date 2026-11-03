@@ -62,6 +62,8 @@ export interface WebRemoteControlEntryOptions {
   locale: "zh-CN" | "en-US";
   /** 企微内置浏览器判定用；缺省读 navigator.userAgent（测试可注入）。 */
   userAgent?: string;
+  /** 同源入口探测与配对请求可注入（测试用）。 */
+  fetchImpl?: typeof fetch;
   devices(jwt: string, signal: AbortSignal): Promise<WebRemoteControlRelayV2Device[]>;
   subscribeVisible(listener: () => void): () => void;
   loginOptions?: Parameters<WebAuthService["startLogin"]>[0];

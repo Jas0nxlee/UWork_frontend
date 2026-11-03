@@ -31,6 +31,7 @@ import {
 } from "#src/web-remote-control/app/enterpriseAuth.js";
 import {
   fetchRemoteDevices,
+  readSameOriginBackend,
   requestRemotePairing,
   toRelayDeviceView,
   waitRemotePairing,
@@ -75,6 +76,9 @@ export class WebRemoteControlEntry {
   /** 企微工作台入口（backend=uwork）时的企业上下文；存在即表示走免扫码设备目录。 */
   private remoteContext: EnterpriseAuthContext | undefined;
   private backend: "ucas" | "uwork" = "ucas";
+  /** 本次入口解析出的企业后端基址与组织（同源入口时来自 web-config）。 */
+  private entryAuthBase: string | undefined;
+  private entryOrgId: string | undefined;
   private list:
     | {
         view: WebRemoteControlDeviceListView;
@@ -97,6 +101,8 @@ export class WebRemoteControlEntry {
   private reset(): void {
     this.dispose();
     this.remoteContext = undefined;
+    this.entryAuthBase = undefined;
+    this.entryOrgId = undefined;
     this.scope = new AbortController();
   }
 
@@ -117,21 +123,38 @@ export class WebRemoteControlEntry {
   async start(): Promise<void> {
     this.reset();
     const url = new URL(this.options.getHref());
-    this.backend = url.searchParams.get("backend") === "uwork" ? "uwork" : "ucas";
-    // 修复原因：自建配对材料与已退役账号无关；仅显式 HMAC 构建绕过 V2 登录入口。
+    const hasPairingParams = ["sid", "hash", "t"].some((key) => url.searchParams.has(key));
     if (this.options.protocol === "hmac-v1") {
+      const explicitBackend = url.searchParams.get("backend");
+      let backend: "ucas" | "uwork" | undefined =
+        explicitBackend === "uwork" ? "uwork" : explicitBackend ? "ucas" : undefined;
+      let authBase = url.searchParams.get("enterprise_auth") ?? undefined;
+      let orgId = url.searchParams.get("org") ?? undefined;
+      // 同源入口（企微工作台）：页面与后台同源，组织与后端形态由 Host 解析，
+      // 企微应用主页只需要一个干净的 /remote/v4（照 ucas-proxy 的口径）。
+      if (!authBase && !hasPairingParams) {
+        const sameOrigin = await readSameOriginBackend({
+          origin: url.origin,
+          ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+        });
+        if (sameOrigin) {
+          backend = "uwork";
+          authBase = url.origin;
+          orgId = sameOrigin.tenantId;
+        }
+      }
+      this.backend = backend ?? "ucas";
+      this.entryAuthBase = authBase;
+      this.entryOrgId = orgId;
       // 只允许从企业微信工作台进入的入口（backend=uwork）：普通浏览器直接拒绝。
       if (this.backend === "uwork" && !this.isWeComAppBrowser()) {
         this.options.onView({ kind: "failure", failure: { reason: "wecom-app-required" } });
         return;
       }
-      const hasPairingParams = ["sid", "hash", "t"].some((key) => url.searchParams.has(key));
       if (!hasPairingParams) {
-        // 免扫码通路：入口带 org + enterprise_auth 时先登录，再看"我的设备"。
-        const entryAuth = url.searchParams.get("enterprise_auth");
-        const entryOrg = url.searchParams.get("org");
-        if (this.backend === "uwork" && entryAuth && entryOrg) {
-          const context = { apiBaseUrl: entryAuth, orgId: entryOrg };
+        // 免扫码通路：同源入口或显式 org + enterprise_auth 时先登录，再看"我的设备"。
+        if (this.backend === "uwork" && authBase && orgId) {
+          const context = { apiBaseUrl: authBase, orgId };
           const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
           if (!authorized) return;
           await this.openRemoteDevices(context);
@@ -157,6 +180,7 @@ export class WebRemoteControlEntry {
       this.connect(params);
       return;
     }
+    this.backend = url.searchParams.get("backend") === "uwork" ? "uwork" : "ucas";
     if (isWebRemoteControlOAuthCallback(url)) {
       this.options.onView({ kind: "callback" });
       return;
@@ -419,7 +443,12 @@ export class WebRemoteControlEntry {
     this.options.onView(list.view);
     list.request = (async () => {
       try {
-        const devices = await fetchRemoteDevices({ context, token, signal });
+        const devices = await fetchRemoteDevices({
+          context,
+          token,
+          signal,
+          ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+        });
         if (signal.aborted) return;
         const knownDevices = readKnownDevices(this.options.storage);
         const views = devices.map(toRelayDeviceView);
@@ -458,13 +487,19 @@ export class WebRemoteControlEntry {
     list.view = { ...list.view, loading: true, error: false };
     this.options.onView(list.view);
     try {
-      const pairing = await requestRemotePairing({ context, token, deviceSid: sid });
+      const pairing = await requestRemotePairing({
+        context,
+        token,
+        deviceSid: sid,
+        ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+      });
       const material = await waitRemotePairing({
         context,
         token,
         deviceSid: sid,
         pairingId: pairing.id,
         signal: this.scope.signal,
+        ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
       });
       if (!material) {
         // 桌面没应答或请求过期：给出"电脑端未响应"而不是空白等待。
