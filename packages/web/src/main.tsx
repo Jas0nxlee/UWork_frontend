@@ -106,6 +106,7 @@ import {
 
 import {
   WebRemoteControlDeviceListPage,
+  WebRemoteControlBrand,
   WebRemoteControlScanPage,
   WebRemoteControlLoadingScreen,
   type WebRemoteControlConnectingDevice,
@@ -296,6 +297,39 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
   );
 }
 
+/** 本次标签页是否处于"刚连过、页面因版本号重载"的续连过程。 */
+function isResumingThisTab(): boolean {
+  try {
+    return Boolean(window.sessionStorage.getItem("zcode-web-remote-resume"));
+  } catch {
+    return false;
+  }
+}
+
+/** 续连时的过渡页：不再闪设备列表，明确告诉用户在连哪台。 */
+function renderWebRemoteControlConnectingPage(): void {
+  document.title = "UWork - 远程控制";
+  const zh = isZhLocale();
+  root.render(
+    <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-8 text-foreground">
+      <section className="w-full max-w-sm rounded-xl border border-card-border bg-card p-5 shadow-sm">
+        <WebRemoteControlBrand className="mb-2" />
+        <div className="flex items-center gap-2">
+          <div className="size-4 animate-spin rounded-full border-2 border-foreground-subtle border-t-transparent" />
+          <h1 className="text-ui-lg font-medium">
+            {zh ? "正在连接上次的设备…" : "Reconnecting to your device…"}
+          </h1>
+        </div>
+        <p className="mt-2 text-ui-xs leading-6 text-foreground-subtle">
+          {zh
+            ? "连上后会自动进入这台电脑的任务列表。"
+            : "You will land on its task list once connected."}
+        </p>
+      </section>
+    </main>,
+  );
+}
+
 /** 免扫码入口的过渡页：正在跳企业微信授权（不放 ZCode 官方登录入口）。 */
 function renderWebAuthorizingPage(): void {
   document.title = "UWork - 远程控制";
@@ -463,6 +497,12 @@ const remoteEntry = new WebRemoteControlEntry({
     else if (view.kind === "authorizing") renderWebAuthorizingPage();
     else if (view.kind === "devices") {
       document.title = "UWork - 远程控制";
+      // 连接后的版本号重载会重跑一次入口：这次不要再把设备列表画出来，
+      // 否则用户会看到"设备选择刷新两遍"，直接给一张正在连接的过渡页。
+      if (isResumingThisTab()) {
+        renderWebRemoteControlConnectingPage();
+        return;
+      }
       root.render(
         <WebRemoteControlDeviceListPage
           view={view}
@@ -1823,15 +1863,6 @@ async function bootstrapExternalRelayWebRemoteControl(
     return { bridge: response.bridge, services, relayProtocol };
   };
 
-  /** 连接后的版本号重载：本次标签页有续连标记时，Root 直接落在任务会话而不是首页。 */
-  const resumeChatIntent = (): WebRemoteControlMobileNavigationIntent | undefined => {
-    try {
-      return window.sessionStorage.getItem("zcode-web-remote-resume") ? "chat" : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-
   const renderExternalRelayRoot = (
     services: Awaited<ReturnType<typeof connectViaProtocol>>,
     bridge: WebRemoteControlExternalWorkspaceBridge,
@@ -2089,7 +2120,7 @@ async function bootstrapExternalRelayWebRemoteControl(
     const result = await openWorkspaceBridge(selectedWorkspace.workspaceKey, {
       taskId: selectedWorkspace.taskId,
     });
-    renderExternalRelayRoot(result.services, result.bridge, resumeChatIntent());
+    renderExternalRelayRoot(result.services, result.bridge);
   };
 
   const lifecycle = createWebRemoteControlLifecycleRecovery({
