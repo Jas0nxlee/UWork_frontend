@@ -72,6 +72,7 @@ export function WebRemoteControlMobileShell({
   renderChatHeader,
   sidePaneContent,
   switcher,
+  mainView,
   webRemoteControlTerminalTransportState,
 }: {
   children?: ReactNode;
@@ -92,6 +93,11 @@ export function WebRemoteControlMobileShell({
   chatContent: ReactNode;
   chatOverlay?: ReactNode;
   sidePaneContent?: ReactNode;
+  /**
+   * 当前主视图。非 chat（自动化/插件市场）时，手机端必须落在承载 chatContent 的那一页，
+   * 否则侧栏点了主视图已经切走、界面上什么都没变。
+   */
+  mainView?: "chat" | "automations" | "plugin-store";
   webRemoteControlTerminalTransportState?: WebRemoteControlTerminalTransportState;
 }) {
   const { intl } = useZCodeIntl();
@@ -103,6 +109,9 @@ export function WebRemoteControlMobileShell({
     webRemoteControlTerminalTransportState,
   );
   const shouldInertChatSurface = Boolean(sidePaneContent) && isSidePaneOpen;
+  // 主视图接管时强制停在承载页：plugin-store/automations 都渲染在 chatContent 里。
+  const effectivePage: WebRemoteControlMobilePage =
+    mainView && mainView !== "chat" ? "chat" : currentPage;
 
   const navigateToChat = useCallback(() => {
     setCurrentPage("chat");
@@ -164,7 +173,7 @@ export function WebRemoteControlMobileShell({
       />
       {isMobileViewport ? (
         <div className="relative flex h-full min-h-0 min-w-0 flex-col bg-background">
-          {currentPage === "home" ? (
+          {effectivePage === "home" ? (
             <section className="flex h-full min-h-0 min-w-0 flex-col" data-mobile-page="home">
               {renderTaskHome({ navigateToChat, setSwitching: setSwitchingWorkspace })}
             </section>
