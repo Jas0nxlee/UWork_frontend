@@ -1,8 +1,5 @@
 import type { RendererTelemetryEventPayload } from "@zcode/shared";
-import {
-  startRemotePairingChannel,
-  type RemotePairingChannel,
-} from "./webRemoteControlRemotePairing.js";
+import { startRemotePairingChannel, type RemotePairingChannel } from "./webRemoteControlRemotePairing.js";
 /* eslint-disable max-lines -- Web 远程控制 manager 承担外部 relay app payload 路由与 workspace bridge 编排。 */
 import type { MessagePortMain, UtilityProcess as ElectronUtilityProcess } from "electron";
 import { randomUUID } from "node:crypto";
@@ -149,8 +146,6 @@ interface WindowControlRuntime {
   enterpriseGate?: "pending" | "verified";
   /** 本机身份（组织 + 人），用于与手机上报的身份比对。 */
   enterpriseSubject?: { orgId: string; userId: string; displayName?: string };
-  /** backend=uwork：本机在后台的成员实体（登记设备时后台回填），手机身份帧跟它比对。 */
-  remoteMember?: { tenantId: string; memberId: string };
   /** 校验通过后记下的远端身份，用于日志与状态展示。 */
   remoteEnterpriseName?: string;
   currentBridge?: WorkspaceBridgeRuntime;
@@ -1390,56 +1385,6 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       reject("企业身份令牌缺失或过长。");
       return;
     }
-    // 自有后台（backend=uwork）：手机令牌是本后台会话，问后台"这是谁"再与本机登记的成员比对；
-    // 手机能与这台设备配对本身就受后台的 tenant+member 约束，这一跳把结论再验一次。
-    if (enterprise.backend === "uwork") {
-      const registration = runtime.remoteMember;
-      if (!registration) {
-        reject("这台设备还没有登记到企业后台，请重新开启远控。");
-        return;
-      }
-      let identity: { tenantId?: unknown; memberId?: unknown; displayName?: unknown };
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), ENTERPRISE_IDENTITY_TIMEOUT_MS);
-        try {
-          const response = await fetch(`${enterprise.apiBaseUrl}/api/client/remote-identity`, {
-            method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          });
-          if (!response.ok) {
-            reject(`企业身份校验失败（HTTP ${response.status}）。`);
-            return;
-          }
-          identity = (await response.json()) as typeof identity;
-        } finally {
-          clearTimeout(timer);
-        }
-      } catch (error) {
-        reject(`企业身份校验请求失败：${error instanceof Error ? error.message : String(error)}`);
-        return;
-      }
-      const tenantId = typeof identity.tenantId === "string" ? identity.tenantId : "";
-      const memberId = typeof identity.memberId === "string" ? identity.memberId : "";
-      if (!tenantId || tenantId !== registration.tenantId) {
-        reject("当前登录的企业与这台设备所属公司不一致。");
-        return;
-      }
-      if (!enterprise.allowSameOrgAnyUser && memberId !== registration.memberId) {
-        reject("只能由登录这台设备的同一个人控制。");
-        return;
-      }
-      runtime.enterpriseGate = "verified";
-      runtime.remoteEnterpriseName =
-        typeof identity.displayName === "string" ? identity.displayName : undefined;
-      dependencies.logger.info("[web-remote-control] enterprise identity verified", {
-        windowId: runtime.windowId,
-        orgId: tenantId,
-        sameUser: memberId === registration.memberId,
-      });
-      return;
-    }
     let user: { id?: unknown; org_id?: unknown; wecom_userid?: unknown; name?: unknown };
     try {
       const controller = new AbortController();
@@ -1846,12 +1791,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         ...enterpriseQr,
       });
       // 自有后台（backend=uwork）：登记设备并等待手机页的免扫码配对请求。
-      const activeRuntime = runtime;
-      if (
-        enterprise?.backend === "uwork" &&
-        enterpriseSubject &&
-        enterprise.resolveLocalSessionToken
-      ) {
+      if (enterprise?.backend === "uwork" && enterpriseSubject && enterprise.resolveLocalSessionToken) {
         const token = await enterprise.resolveLocalSessionToken().catch(() => null);
         if (!token)
           dependencies.logger.warn(
@@ -1861,9 +1801,6 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
           const channel = startRemotePairingChannel({
             apiBaseUrl: enterprise.apiBaseUrl,
             token,
-            onRegistered: (identity) => {
-              if (!controller.signal.aborted) activeRuntime.remoteMember = identity;
-            },
             deviceSid: auth.deviceSid,
             deviceMid: dependencies.deviceMid,
             deviceName: dependencies.deviceName,

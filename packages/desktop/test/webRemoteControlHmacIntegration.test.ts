@@ -27,13 +27,11 @@ async function fixture(
     enterpriseAuth?: {
       apiBaseUrl: string;
       allowSameOrgAnyUser: boolean;
-      backend?: "ucas" | "uwork";
       resolveLocalSubject?: () => Promise<{
         orgId: string;
         userId: string;
         displayName?: string;
       } | null>;
-      resolveLocalSessionToken?: () => Promise<string | null>;
     };
   } = {},
 ) {
@@ -489,103 +487,5 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     const error = received.find((payload) => payload.zcode_type === "app-error");
     expect(error).toMatchObject({ reason: "enterprise-identity-rejected" });
     expect(String(error?.error ?? "")).toContain("公司");
-  });
-});
-
-describe("自有后台（backend=uwork）的身份准入", () => {
-  const okJson = (value: unknown) => ({
-    ok: true,
-    status: 200,
-    json: async () => value,
-  });
-
-  function uworkFetch(identity: unknown, seen: Array<{ url: string; auth?: string }>) {
-    return vi.fn(async (url: URL | string, init?: RequestInit) => {
-      const target = String(url);
-      const headers = (init?.headers ?? {}) as Record<string, string>;
-      seen.push({ url: target, auth: headers.Authorization });
-      if (target.includes("/api/client/remote-devices/") && init?.method === "PUT")
-        return okJson({ ok: true, tenantId: "tenant-1", memberId: "member-1" });
-      if (target.includes("/api/client/remote-devices/") && init?.method === "DELETE")
-        return okJson({ ok: true });
-      if (target.includes("/api/client/remote-pairings/next")) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return okJson({ pairing: null });
-      }
-      if (target.includes("/api/client/remote-identity")) return okJson(identity);
-      throw new Error(`unexpected request ${init?.method ?? "GET"} ${target}`);
-    });
-  }
-
-  async function startUwork(options: { identity: unknown }) {
-    const seen: Array<{ url: string; auth?: string }> = [];
-    const fetchImpl = uworkFetch(options.identity, seen);
-    vi.stubGlobal("fetch", fetchImpl);
-    cleanups.push(() => vi.unstubAllGlobals());
-    const f = await fixture({
-      enterpriseAuth: {
-        apiBaseUrl: "https://backend.example.com",
-        allowSameOrgAnyUser: false,
-        backend: "uwork",
-        resolveLocalSubject: async () => ({ orgId: "tenant-1", userId: "member-1" }),
-        resolveLocalSessionToken: async () => "desktop-pivot-token",
-      },
-    });
-    const started = await f.start();
-    const params = parseWebRemoteControlHmacQrParams(new URL(started.qrUrl).searchParams)!;
-    // 免扫码通道：桌面带自己的令牌登记设备，后台回填成员实体。
-    await vi.waitFor(() =>
-      expect(seen.some((call) => call.url.includes("/api/client/remote-devices/"))).toBe(true),
-    );
-    const registration = seen.find((call) => call.url.includes("/api/client/remote-devices/"));
-    expect(registration?.auth).toBe("Bearer desktop-pivot-token");
-    const received: WebRemoteControlAppPayload[] = [];
-    const terminal = new WebRemoteControlHmacTerminalTransport({
-      relayWsUrl: f.relay.wsUrl,
-      deviceSid: params.deviceSid,
-      passHash: params.passHash,
-      authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
-      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      onStateChange: () => {},
-      onFailure: vi.fn(),
-      onError: vi.fn(),
-      reloadPage: vi.fn(),
-      onPayload: (payload) => received.push(payload),
-    });
-    cleanups.push(() => terminal.dispose());
-    terminal.start();
-    await vi.waitFor(() => expect(f.manager.getStatus(1).mobileConnected).toBe(true));
-    return { f, params, received, terminal, seen };
-  }
-
-  it("放行同一个人：手机令牌经后台解析后与本机登记的成员一致", async () => {
-    const { received, terminal, seen } = await startUwork({
-      identity: { tenantId: "tenant-1", memberId: "member-1", displayName: "张三" },
-    });
-    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-session-token" });
-    await vi.waitFor(() =>
-      expect(seen.some((call) => call.url.includes("/api/client/remote-identity"))).toBe(true),
-    );
-    const identityCall = seen.find((call) => call.url.includes("/api/client/remote-identity"));
-    expect(identityCall?.auth).toBe("Bearer phone-session-token");
-    terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-1" });
-    await vi.waitFor(() =>
-      expect(
-        received.filter((payload) => payload.zcode_type === "bootstrap-response"),
-      ).toHaveLength(1),
-    );
-  });
-
-  it("同组织但不同人时拒绝，并把原因回给手机", async () => {
-    const { received, terminal } = await startUwork({
-      identity: { tenantId: "tenant-1", memberId: "member-2", displayName: "李四" },
-    });
-    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-session-token" });
-    await vi.waitFor(() =>
-      expect(received.some((payload) => payload.zcode_type === "app-error")).toBe(true),
-    );
-    const error = received.find((payload) => payload.zcode_type === "app-error");
-    expect(error).toMatchObject({ reason: "enterprise-identity-rejected" });
-    expect(String(error?.error ?? "")).toContain("同一个人");
   });
 });
