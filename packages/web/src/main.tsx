@@ -296,6 +296,26 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
   );
 }
 
+/** 免扫码入口的过渡页：正在跳企业微信授权（不放 ZCode 官方登录入口）。 */
+function renderWebAuthorizingPage(): void {
+  document.title = "ZCode - Web Remote Control";
+  root.render(
+    <main className="flex min-h-screen items-center justify-center bg-background px-6">
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <div className="size-6 animate-spin rounded-full border-2 border-foreground-subtle border-t-transparent" />
+        <h1 className="text-ui-lg font-medium text-foreground">
+          {isZhLocale() ? "正在跳转企业微信授权…" : "Redirecting to WeCom…"}
+        </h1>
+        <p className="text-ui-base/relaxed text-foreground-subtle">
+          {isZhLocale()
+            ? "授权完成后会自动回到本页，无需手动登录。"
+            : "You will return here automatically after authorization."}
+        </p>
+      </div>
+    </main>,
+  );
+}
+
 function isWebOAuthCallback(params: URLSearchParams): boolean {
   return (
     isWebRemoteControlOAuthCallback(new URL(window.location.href)) ||
@@ -439,6 +459,7 @@ const remoteEntry = new WebRemoteControlEntry({
       );
     else if (view.kind === "callback") renderWebAuthCallbackPage();
     else if (view.kind === "login") renderWebLoginPage();
+    else if (view.kind === "authorizing") renderWebAuthorizingPage();
     else if (view.kind === "devices") {
       document.title = "ZCode - Web Remote Control";
       root.render(

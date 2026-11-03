@@ -38,6 +38,9 @@
         "**/packages/ui/src/web-remote-control/WebRemoteControlDialog.tsx",
         "**/packages/ui/test/browser/manual-review/pending/plugin-store-mode-order.test.mjs",
         "**/packages/ui/test/browser/manual-review/pending/side-pane-plugin-menu.test.mjs",
+        // 手机页入口是一个完整的状态机（企微门禁/授权/设备目录/配对应答/连接），
+        // 拆分只会把状态与副作用拆散；沿用同一档 800 行上限。
+        "**/packages/web/src/web-remote-control/app/webRemoteControlEntry.ts",
         "**/packages/web/src/web-remote-control/adapters/hmacTransport.ts",
         "**/packages/web/src/web-remote-control/adapters/webRemoteControlTransport.ts",
         "**/packages/web/test/e2e/manual-review/pending/remote-login-v2.mjs"

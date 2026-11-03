@@ -109,8 +109,7 @@ export class WebRemoteControlEntry {
   /** 企微内置浏览器判定：UA 带 wxwork；本机回环放行以便开发与自动化。 */
   private isWeComAppBrowser(): boolean {
     const userAgent =
-      this.options.userAgent ??
-      (typeof navigator === "undefined" ? "" : navigator.userAgent);
+      this.options.userAgent ?? (typeof navigator === "undefined" ? "" : navigator.userAgent);
     if (userAgent.toLowerCase().includes("wxwork")) return true;
     try {
       const host = new URL(this.options.getHref()).hostname;
@@ -160,9 +159,7 @@ export class WebRemoteControlEntry {
           const context: EnterpriseAuthContext = {
             apiBaseUrl: authBase,
             orgId,
-            ...(pivotLoginBase
-              ? { login: { apiBaseUrl: pivotLoginBase, orgId: "" } }
-              : {}),
+            ...(pivotLoginBase ? { login: { apiBaseUrl: pivotLoginBase, orgId: "" } } : {}),
           };
           const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
           if (!authorized) return;
@@ -357,7 +354,10 @@ export class WebRemoteControlEntry {
         if (pivotLogin) {
           // 与桌面同一套 pivot 登录：code 直接换 pivot 会话，之后设备接口由后台内省该令牌。
           token = await exchangeEnterpriseAuthCode({
-            context: { apiBaseUrl: pivotLogin.apiBaseUrl, orgId: pivotLogin.orgId ?? context.orgId },
+            context: {
+              apiBaseUrl: pivotLogin.apiBaseUrl,
+              orgId: pivotLogin.orgId ?? context.orgId,
+            },
             code,
             ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
           });
@@ -415,7 +415,8 @@ export class WebRemoteControlEntry {
         });
         authorizeUrl = started.authorizeUrl;
       } else authorizeUrl = await resolveEnterpriseAuthorizeUrl({ context, returnTo: url.href });
-      this.options.onView({ kind: "login" });
+      // 免扫码入口：这是"去企微静默授权"的一跳，不能渲染 ZCode 官方登录页。
+      this.options.onView({ kind: "authorizing" });
       window.location.assign(authorizeUrl);
     } catch (error) {
       this.options.onView({

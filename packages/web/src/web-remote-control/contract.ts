@@ -34,6 +34,8 @@ export type WebRemoteControlDeviceListView = {
 
 export type WebRemoteControlEntryView =
   | { kind: "callback" | "login" | "scan" }
+  /** 免扫码入口跳企微授权时的过渡页：直接跳走，不能落到 ZCode 官方登录页。 */
+  | { kind: "authorizing" }
   | WebRemoteControlDeviceListView
   | { kind: "failure"; failure: WebRemoteControlFailure };
 
