@@ -10,10 +10,15 @@
  */
 
 export interface EnterpriseAuthContext {
-  /** ucas-proxy control-plane 基址（已由共享层校验过是 https 且无 query/hash）。 */
+  /** 免扫码设备/配对接口的基址（backend=uwork 时是自建后台）。 */
   apiBaseUrl: string;
   /** 桌面当前登录的组织 id。 */
   orgId: string;
+  /**
+   * 登录服务与上面不是同一个后端时（backend=uwork：设备接口在自建后台、登录在 pivot），
+   * 授权与换令牌打这里；缺省即 apiBaseUrl。
+   */
+  login?: { apiBaseUrl: string; orgId?: string };
 }
 
 const TOKEN_KEY_PREFIX = "uwork.remote-enterprise-token:";

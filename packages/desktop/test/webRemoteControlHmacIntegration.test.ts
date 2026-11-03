@@ -26,6 +26,7 @@ async function fixture(
     remoteUrl?: string;
     enterpriseAuth?: {
       apiBaseUrl: string;
+      identityApiBaseUrl?: string;
       allowSameOrgAnyUser: boolean;
       resolveLocalSubject?: () => Promise<{
         orgId: string;
@@ -129,7 +130,7 @@ describe("UWork HMAC 双端真实 loopback 配对", () => {
     await expect(f.start()).rejects.toThrow("self-hosted relay endpoints are required");
     expect(f.relay.messages).toEqual([]);
     expect(f.getLogin).not.toHaveBeenCalled();
-    expect(f.manager.getStatus(1)).toEqual({ status: "idle" });
+    expect(f.manager.getStatus(1)).toEqual({ status: "idle", entry: "qr" });
   });
 
   it("持久化 SID 从窗口1切到窗口2时先释放旧 device owner，保留配对材料且不争抢 socket", async () => {
@@ -142,7 +143,7 @@ describe("UWork HMAC 双端真实 loopback 配对", () => {
     )!;
     expect(second.deviceSid).toBe(first.deviceSid);
     expect(second.passHash).toBe(first.passHash);
-    expect(f.manager.getStatus(1)).toEqual({ status: "idle" });
+    expect(f.manager.getStatus(1)).toEqual({ status: "idle", entry: "qr" });
     expect(f.manager.getStatus(2).status).toBe("running");
     expect(
       f.relay.messages.filter((message) => message.type === "device_register_init"),
@@ -159,7 +160,7 @@ describe("UWork HMAC 双端真实 loopback 配对", () => {
     const second = f.start(2);
     expect(await first).toBeInstanceOf(Error);
     const result = await second;
-    expect(f.manager.getStatus(1)).toEqual({ status: "idle" });
+    expect(f.manager.getStatus(1)).toEqual({ status: "idle", entry: "qr" });
     expect(f.manager.getStatus(2).status).toBe("running");
     const params = parseWebRemoteControlHmacQrParams(new URL(result.qrUrl).searchParams)!;
     expect(await f.authStorage.load()).toMatchObject({
@@ -440,6 +441,74 @@ describe("手机远控的企业身份准入（方案 A）", () => {
       expect(
         received.filter((payload) => payload.zcode_type === "bootstrap-response"),
       ).toHaveLength(1),
+    );
+  });
+
+
+  it("backend=uwork 且登录在 pivot 时：身份证校验打 pivot，设备登记仍打自建后台", async () => {
+    const refresh = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        token: "phone-token-2",
+        user: { id: "user-1", org_id: "org-a", wecom_userid: "wx-1", name: "张三" },
+      }),
+    }));
+    const deviceCalls: string[] = [];
+    const fetchImpl = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const target = String(url);
+      if (target.startsWith("https://pivot.example.com/api/auth/refresh")) return refresh();
+      if (target.includes("/api/client/remote-devices/") && init?.method === "PUT") {
+        deviceCalls.push(target);
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      if (target.includes("/api/client/remote-pairings/next")) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: true, status: 200, json: async () => ({ pairing: null }) };
+      }
+      if (target.includes("/api/client/remote-devices/") && init?.method === "DELETE")
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      throw new Error(`unexpected request ${init?.method ?? "GET"} ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    cleanups.push(() => vi.unstubAllGlobals());
+    const f = await fixture({
+      enterpriseAuth: {
+        apiBaseUrl: "https://backend.example.com",
+        identityApiBaseUrl: "https://pivot.example.com",
+        allowSameOrgAnyUser: false,
+        backend: "uwork",
+        resolveLocalSubject: async () => ({ orgId: "org-a", userId: "user-1" }),
+        resolveLocalSessionToken: async () => "desktop-pivot-token",
+      },
+    });
+    const params = parseWebRemoteControlHmacQrParams(
+      new URL((await f.start()).qrUrl).searchParams,
+    )!;
+    await vi.waitFor(() => expect(deviceCalls.length).toBeGreaterThan(0));
+    // 设备登记打自建后台，手机令牌的身份校验打 pivot。
+    expect(deviceCalls[0]).toContain("https://backend.example.com/api/client/remote-devices/");
+    const received: WebRemoteControlAppPayload[] = [];
+    const terminal = new WebRemoteControlHmacTerminalTransport({
+      relayWsUrl: f.relay.wsUrl,
+      deviceSid: params.deviceSid,
+      passHash: params.passHash,
+      authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
+      WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
+      onStateChange: () => {},
+      onFailure: vi.fn(),
+      onError: vi.fn(),
+      reloadPage: vi.fn(),
+      onPayload: (payload) => received.push(payload),
+    });
+    cleanups.push(() => terminal.dispose());
+    terminal.start();
+    await vi.waitFor(() => expect(f.manager.getStatus(1).mobileConnected).toBe(true));
+    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-1" });
+    await vi.waitFor(() =>
+      expect(received.filter((payload) => payload.zcode_type === "bootstrap-response")).toHaveLength(1),
     );
   });
 

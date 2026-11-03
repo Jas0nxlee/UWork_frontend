@@ -548,7 +548,7 @@ describe("createWebRemoteControlManager external relay", () => {
 
     await expect(manager.stop(1)).rejects.toThrow("settings write failed");
 
-    expect(manager.getStatus(1)).toEqual({ status: "idle" });
+    expect(manager.getStatus(1)).toEqual({ status: "idle", entry: "qr" });
     expect(disposeTransport).toHaveBeenCalledOnce();
     expect(disposeWorkspaceHostAttachmentsForWindow).toHaveBeenCalledWith(1, "manual-stop");
   });
@@ -565,7 +565,7 @@ describe("createWebRemoteControlManager external relay", () => {
     await expect(
       manager.restorePreviouslyEnabled(1, [{ workspacePath: "/workspace/other" }]),
     ).resolves.toBe(false);
-    expect(manager.getStatus(1)).toEqual({ status: "idle" });
+    expect(manager.getStatus(1)).toEqual({ status: "idle", entry: "qr" });
 
     await expect(
       manager.restorePreviouslyEnabled(1, [

@@ -950,6 +950,9 @@ const webRemoteControlManager = createWebRemoteControlManager({
     ? {
         enterpriseAuth: {
           apiBaseUrl: webRemoteEnterpriseAuth.apiBaseUrl,
+          ...(webRemoteEnterpriseAuth.identityApiBaseUrl
+            ? { identityApiBaseUrl: webRemoteEnterpriseAuth.identityApiBaseUrl }
+            : {}),
           allowSameOrgAnyUser: webRemoteEnterpriseAuth.allowSameOrgAnyUser,
           backend: webRemoteEnterpriseAuth.backend ?? "ucas",
           // 身份事实在 Host，但会话存在共享凭据里；读不到就返回 null（manager 会按未启用处理）。

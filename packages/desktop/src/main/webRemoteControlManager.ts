@@ -183,6 +183,8 @@ interface WebRemoteControlManagerDependencies {
    */
   enterpriseAuth?: {
     apiBaseUrl: string;
+    /** 身份校验基址；缺省 apiBaseUrl（backend=uwork 且手机登录走 pivot 时填 pivot）。 */
+    identityApiBaseUrl?: string;
     allowSameOrgAnyUser: boolean;
     /** uwork = 自有后台：额外开启免扫码的"设备登记 + 配对应答"通道。 */
     backend?: "ucas" | "uwork";
@@ -541,6 +543,11 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     runtime.mobileDisconnectGraceTimer = undefined;
   }
 
+  /** 入口形态与状态无关：backend=uwork 只有企微工作台入口，空态/待登录态也不该渲染二维码。 */
+  function entryKind(): NonNullable<WebRemoteControlStatus["entry"]> {
+    return dependencies.enterpriseAuth?.backend === "uwork" ? "wecom-workbench" : "qr";
+  }
+
   function buildRuntimeStatus(runtime: WindowControlRuntime): WebRemoteControlStatus {
     const target = getRuntimeStatusTarget(runtime);
     return {
@@ -551,7 +558,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       mobileViewState: runtime.mobileViewState,
       mobileTaskView: runtime.mobileTaskView ?? null,
       mobileDeviceInfo: runtime.mobileDeviceInfo,
-      entry: dependencies.enterpriseAuth?.backend === "uwork" ? "wecom-workbench" : "qr",
+      entry: entryKind(),
       qrUrl: runtime.qrUrl,
       connectUrl: runtime.connectUrl,
       workspacePath: target.workspacePath,
@@ -582,7 +589,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
 
   function emitIdleStatus(windowId: number): void {
-    dependencies.onStatusChanged?.(windowId, { status: "idle" });
+    dependencies.onStatusChanged?.(windowId, { status: "idle", entry: entryKind() });
   }
 
   function scheduleMobileDisconnectGrace(runtime: WindowControlRuntime): void {
@@ -783,7 +790,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     void stopWindowRuntime(windowId, "auth-required");
     authRequiredWindows.add(windowId);
     startupRestoreClaimed = false;
-    dependencies.onStatusChanged?.(windowId, { status: "auth-required" });
+    dependencies.onStatusChanged?.(windowId, { status: "auth-required", entry: entryKind() });
   }
 
   function getRuntimeWorkspaceTarget(
@@ -1390,7 +1397,9 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), ENTERPRISE_IDENTITY_TIMEOUT_MS);
       try {
-        const response = await fetch(`${enterprise.apiBaseUrl}/api/auth/refresh`, {
+        // 手机令牌的归属方：backend=uwork 且手机页登录走 pivot 时是 pivot，否则就是 apiBaseUrl 本身。
+    const identityBase = enterprise.identityApiBaseUrl ?? enterprise.apiBaseUrl;
+    const response = await fetch(`${identityBase}/api/auth/refresh`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           signal: controller.signal,
@@ -2179,7 +2188,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
           if (revision !== authNotificationRevision) return;
         }
         for (const id of authRequiredWindows)
-          dependencies.onStatusChanged?.(id, { status: "idle" });
+          dependencies.onStatusChanged?.(id, { status: "idle", entry: entryKind() });
         authRequiredWindows.clear();
         for (const [candidateWindowId, contexts] of availableWorkspacesByWindowId) {
           if (await this.restorePreviouslyEnabled(candidateWindowId, contexts)) break;
@@ -2283,7 +2292,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       if (authRequiredWindows.has(windowId)) return { status: "auth-required" };
       const runtime = runtimes.get(windowId);
       if (!runtime) {
-        return { status: "idle" };
+        return { status: "idle", entry: entryKind() };
       }
 
       return buildRuntimeStatus(runtime);

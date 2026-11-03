@@ -130,6 +130,8 @@ export class WebRemoteControlEntry {
         explicitBackend === "uwork" ? "uwork" : explicitBackend ? "ucas" : undefined;
       let authBase = url.searchParams.get("enterprise_auth") ?? undefined;
       let orgId = url.searchParams.get("org") ?? undefined;
+      // backend=uwork 且后台配置了 pivot 时，手机页登录走 pivot（与桌面同一套身份）。
+      let pivotLoginBase: string | undefined;
       // 同源入口（企微工作台）：页面与后台同源，组织与后端形态由 Host 解析，
       // 企微应用主页只需要一个干净的 /remote/v4（照 ucas-proxy 的口径）。
       if (!authBase && !hasPairingParams) {
@@ -141,6 +143,7 @@ export class WebRemoteControlEntry {
           backend = "uwork";
           authBase = url.origin;
           orgId = sameOrigin.tenantId;
+          pivotLoginBase = sameOrigin.pivotApiBaseUrl;
         }
       }
       this.backend = backend ?? "ucas";
@@ -154,7 +157,13 @@ export class WebRemoteControlEntry {
       if (!hasPairingParams) {
         // 免扫码通路：同源入口或显式 org + enterprise_auth 时先登录，再看"我的设备"。
         if (this.backend === "uwork" && authBase && orgId) {
-          const context = { apiBaseUrl: authBase, orgId };
+          const context: EnterpriseAuthContext = {
+            apiBaseUrl: authBase,
+            orgId,
+            ...(pivotLoginBase
+              ? { login: { apiBaseUrl: pivotLoginBase, orgId: "" } }
+              : {}),
+          };
           const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
           if (!authorized) return;
           await this.openRemoteDevices(context);
@@ -340,11 +349,19 @@ export class WebRemoteControlEntry {
     url: URL,
     backend: "ucas" | "uwork" = "ucas",
   ): Promise<boolean> {
+    const pivotLogin = backend === "uwork" ? context.login : undefined;
     const code = url.searchParams.get("code");
     if (code) {
       try {
         let token: string;
-        if (backend === "uwork") {
+        if (pivotLogin) {
+          // 与桌面同一套 pivot 登录：code 直接换 pivot 会话，之后设备接口由后台内省该令牌。
+          token = await exchangeEnterpriseAuthCode({
+            context: { apiBaseUrl: pivotLogin.apiBaseUrl, orgId: pivotLogin.orgId ?? context.orgId },
+            code,
+            ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+          });
+        } else if (backend === "uwork") {
           // 自建后端：回调里的 code 必须配对本页发起的 attempt（state 即 attempt id）。
           const attempt = readUworkWebAttempt(this.options.storage, context);
           if (!attempt || attempt.attemptId !== url.searchParams.get("state"))
@@ -381,7 +398,14 @@ export class WebRemoteControlEntry {
     if (readEnterpriseAuthToken(this.options.storage, context)) return true;
     try {
       let authorizeUrl: string;
-      if (backend === "uwork") {
+      if (pivotLogin) {
+        // 组织由 pivot 按入口 Host 解析；这里只把回跳地址交给它。
+        authorizeUrl = await resolveEnterpriseAuthorizeUrl({
+          context: { apiBaseUrl: pivotLogin.apiBaseUrl, orgId: pivotLogin.orgId ?? context.orgId },
+          returnTo: url.href,
+          ...(this.options.fetchImpl ? { fetchImpl: this.options.fetchImpl } : {}),
+        });
+      } else if (backend === "uwork") {
         // 企微内置浏览器：OAuth2 网页授权（snsapi_base），回跳到本页再换会话。
         const started = await startUworkWebAuthorize({ context, returnTo: url.href });
         saveUworkWebAttempt(this.options.storage, context, {

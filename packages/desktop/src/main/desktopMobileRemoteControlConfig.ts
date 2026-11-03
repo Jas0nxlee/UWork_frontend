@@ -20,8 +20,13 @@ export interface MobileRemoteControlConfig {
 }
 
 export interface MobileRemoteControlEnterpriseAuthConfig {
-  /** 企业后端基址（手机页拿它做企微授权与换 token）。 */
+  /** 企业后端基址（backend=uwork 时是自建后台：设备目录与配对应答都在这里）。 */
   apiBaseUrl: string;
+  /**
+   * 身份校验基址；缺省等于 apiBaseUrl。backend=uwork 且手机页登录走 pivot 时，
+   * 手机令牌是 pivot 会话，桌面必须拿 pivot 校验（设备接口仍在 apiBaseUrl）。
+   */
+  identityApiBaseUrl?: string;
   /** 放宽为"同组织任意员工可控制"；默认 false = 必须同一个人。 */
   allowSameOrgAnyUser: boolean;
   /**
@@ -111,8 +116,10 @@ function parseEnterpriseAuth(raw: unknown): MobileRemoteControlEnterpriseAuthCon
   const record = raw as Record<string, unknown>;
   const apiBaseUrl = parseEnterpriseAuthBaseUrl(record["apiBaseUrl"]);
   if (!apiBaseUrl) return null;
+  const identityApiBaseUrl = parseEnterpriseAuthBaseUrl(record["identityApiBaseUrl"]);
   return {
     apiBaseUrl,
+    ...(identityApiBaseUrl ? { identityApiBaseUrl } : {}),
     allowSameOrgAnyUser: record["allowSameOrgAnyUser"] === true,
     backend: record["backend"] === "uwork" ? ("uwork" as const) : ("ucas" as const),
   };

@@ -3,6 +3,7 @@
   "relayWsUrl": "wss://aihub.ucas.com.cn/remote/ws",
   "enterpriseAuth": {
     "apiBaseUrl": "https://aihub.ucas.com.cn",
+    "identityApiBaseUrl": "https://pivot.ucas.com.cn:23090",
     "allowSameOrgAnyUser": false,
     "backend": "uwork"
   }

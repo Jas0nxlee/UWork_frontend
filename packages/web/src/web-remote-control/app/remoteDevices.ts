@@ -166,7 +166,7 @@ export async function waitRemotePairing(options: {
 export async function readSameOriginBackend(options: {
   origin: string;
   fetchImpl?: typeof fetch;
-}): Promise<{ backend: "uwork"; tenantId: string } | null> {
+}): Promise<{ backend: "uwork"; tenantId: string; pivotApiBaseUrl?: string } | null> {
   const fetchImpl = options.fetchImpl ?? fetch;
   try {
     const response = await fetchImpl(new URL("/api/auth/wecom/web-config", `${options.origin}/`), {
@@ -178,7 +178,13 @@ export async function readSameOriginBackend(options: {
     const body = await readJson(response);
     const tenantId = typeof body["tenantId"] === "string" ? body["tenantId"] : "";
     if (body["backend"] !== "uwork" || !tenantId) return null;
-    return { backend: "uwork", tenantId };
+    // 后台告诉我们登录该走哪套身份（配置了 pivot 时手机页与桌面共用 pivot 登录）。
+    const pivot = typeof body["pivotApiBaseUrl"] === "string" ? body["pivotApiBaseUrl"].trim() : "";
+    return {
+      backend: "uwork",
+      tenantId,
+      ...(pivot.startsWith("https://") ? { pivotApiBaseUrl: pivot } : {}),
+    };
   } catch {
     return null;
   }

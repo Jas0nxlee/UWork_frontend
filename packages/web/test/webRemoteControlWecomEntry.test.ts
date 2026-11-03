@@ -171,6 +171,46 @@ describe("WeCom workbench entry (backend=uwork)", () => {
     expect(params.enterpriseOrg).toBe(ORG);
   });
 
+
+  it("后台配了 pivot 时：手机页用 pivot 换令牌，设备接口仍打自建后台", async () => {
+    const calls: Array<{ url: string; body?: string }> = [];
+    const fetchImpl = vi.fn(async (url: URL, init?: RequestInit) => {
+      const target = String(url);
+      calls.push({ url: target, ...(typeof init?.body === "string" ? { body: init.body } : {}) });
+      if (target.endsWith("/api/auth/wecom/web-config"))
+        return json({ backend: "uwork", tenantId: ORG, pivotApiBaseUrl: "https://pivot.example.test:23090" });
+      if (target.startsWith("https://pivot.example.test:23090/api/auth/login"))
+        return json({ token: "pivot-session-token", user: { id: "u-1", org_id: "org-1" } });
+      if (target.endsWith("/api/client/remote-devices"))
+        return json({
+          devices: [{ deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac", platform: "darwin" }],
+        });
+      throw new Error(`unexpected request ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+    // 企微授权回跳：带 code/state 回到本页。
+    const f = setup(
+      "https://aihub.example.test/remote/v4?code=wecom-code-1&state=org-1",
+      WE_COM_UA,
+      fetchImpl as unknown as typeof fetch,
+    );
+    await f.entry.start();
+    const loginCall = calls.find((call) => call.url.includes("/api/auth/login"));
+    expect(loginCall?.url).toBe("https://pivot.example.test:23090/api/auth/login");
+    expect(loginCall?.body).toContain("wecom-code-1");
+    const devicesView = f.onView.mock.calls
+      .map((call) => call[0])
+      .filter((view) => view.kind === "devices")
+      .at(-1);
+    expect(devicesView?.devices).toHaveLength(1);
+    // 设备目录用的是自建后台（同源），带的是 pivot 会话令牌。
+    const devicesCall = fetchImpl.mock.calls.find(([url]) => String(url).endsWith("/api/client/remote-devices"));
+    expect(String(devicesCall?.[0])).toBe("https://aihub.example.test/api/client/remote-devices");
+    expect((devicesCall?.[1]?.headers as Record<string, string>).Authorization).toBe(
+      "Bearer pivot-session-token",
+    );
+  });
+
   it("still refuses a plain browser on a clean workbench URL", async () => {
     const fetchImpl = vi.fn(async () => json({ backend: "uwork", tenantId: ORG }));
     const f = setup(
