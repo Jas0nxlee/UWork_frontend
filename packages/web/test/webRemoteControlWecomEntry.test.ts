@@ -125,6 +125,15 @@ describe("WeCom workbench entry (backend=uwork)", () => {
     expect(params.enterpriseOrg).toBe(ORG);
     // 连接后手机顶部显示的是设备名，缺了就会退化成"未命名设备"。
     expect(params.deviceName).toBe("办公室 Mac");
+
+    // 连接后点顶部设备名（切换设备）要回到"我的设备"，不能退回二维码页。
+    const viewsBefore = f.onView.mock.calls.length;
+    await f.entry.chooseOtherDevice();
+    const afterViews = f.onView.mock.calls
+      .slice(viewsBefore)
+      .map(([view]) => view as { kind: string });
+    expect(afterViews.some((view) => view.kind === "devices")).toBe(true);
+    expect(afterViews.some((view) => view.kind === "scan")).toBe(false);
   });
 
   it("works from a clean workbench URL by resolving the backend on the same origin", async () => {

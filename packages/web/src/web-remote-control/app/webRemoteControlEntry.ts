@@ -77,6 +77,11 @@ export class WebRemoteControlEntry {
   private scope = new AbortController();
   /** 企微工作台入口（backend=uwork）时的企业上下文；存在即表示走免扫码设备目录。 */
   private remoteContext: EnterpriseAuthContext | undefined;
+  /**
+   * 本页作为免扫码入口的上下文（连接后仍保留）：切回"选择其他设备"要回到设备列表，
+   * 不能像扫码页那样退回二维码提示。
+   */
+  private entryContext: EnterpriseAuthContext | undefined;
   private backend: "ucas" | "uwork" = "ucas";
   /** 本次入口解析出的企业后端基址与组织（同源入口时来自 web-config）。 */
   private entryAuthBase: string | undefined;
@@ -164,6 +169,8 @@ export class WebRemoteControlEntry {
             orgId,
             ...(pivotLoginBase ? { login: { apiBaseUrl: pivotLoginBase, orgId: "" } } : {}),
           };
+          // 免扫码入口：留着这份上下文，连接后"切换设备"要能回到列表。
+          this.entryContext = context;
           const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
           if (!authorized) return;
           await this.openRemoteDevices(context);
@@ -332,8 +339,9 @@ export class WebRemoteControlEntry {
 
   async chooseOtherDevice(): Promise<void> {
     if (this.options.protocol === "hmac-v1") {
-      if (this.remoteContext) {
-        const context = this.remoteContext;
+      // 免扫码入口（企业微信工作台）连接后也要回到"我的设备"，不能退回二维码页。
+      const context = this.remoteContext ?? this.entryContext;
+      if (context) {
         this.reset();
         await this.openRemoteDevices(context);
         return;
