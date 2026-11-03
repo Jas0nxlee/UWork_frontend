@@ -2396,6 +2396,9 @@ const zhCN: Record<string, string> = {
   "webRemoteControl.failure.wecomAppRequired":
     "这个入口只允许从企业微信工作台打开，请在企业微信里重试。",
   "webRemoteControl.failure.unexpectedError": "无法启动移动端远程控制，请回到桌面端重试。",
+  "webRemoteControl.workbench.title": "已在企业微信开放",
+  "webRemoteControl.workbench.description":
+    "打开企业微信 → 工作台 → UWork 远程控制，就能直接连接到这台电脑，无需扫码。",
   "webRemoteControl.copyLink": "复制链接",
   "webRemoteControl.copyLink.copied": "已复制远程控制链接",
   "webRemoteControl.copyLinkFailed": "复制远程控制链接失败：{error}",

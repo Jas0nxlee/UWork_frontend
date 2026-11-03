@@ -102,14 +102,66 @@ function readWebRemoteControlDialogSource() {
 describe("WebRemoteControlDialog layout", () => {
   afterEach(() => {
     cleanup();
-    platformMock.getWebRemoteControlStatus.mockClear();
-    platformMock.startWebRemoteControl.mockClear();
+    // mockClear 不会清 mockResolvedValue 的实现，逐个用例设置的状态会泄漏到下一条；
+    // 这里重置回夹具默认值，保证每条用例从 idle 开始。
+    platformMock.getWebRemoteControlStatus.mockReset();
+    platformMock.getWebRemoteControlStatus.mockResolvedValue({ status: "idle" } as never);
+    platformMock.startWebRemoteControl.mockReset();
+    platformMock.startWebRemoteControl.mockResolvedValue({ status: "running" } as never);
     platformMock.stopWebRemoteControl.mockClear();
     platformMock.refreshWebRemoteControlPairing.mockClear();
     feedbackMocks.confirm.mockClear();
     feedbackMocks.error.mockClear();
     feedbackMocks.info.mockClear();
     feedbackMocks.toast.mockClear();
+  });
+
+
+  it("企微工作台入口只显示已开启，不再出二维码与复制链接", async () => {
+    const workbenchStatus = {
+      status: "running",
+      entry: "wecom-workbench",
+      sessionId: "sid-workbench",
+      workspacePath: "/tmp/project",
+      qrUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+      connectUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+    };
+    platformMock.getWebRemoteControlStatus.mockResolvedValue(workbenchStatus as never);
+    platformMock.startWebRemoteControl.mockResolvedValue(workbenchStatus as never);
+    const view = render(
+      createElement(WebRemoteControlDialog, {
+        open: true,
+        onOpenChange: vi.fn(),
+        workspacePath: "/tmp/project",
+      }),
+    );
+    await view.findByText("webRemoteControl.workbench.title");
+    expect(view.queryByTestId("web-remote-control-copy-link-row")).toBeNull();
+    expect(view.container.querySelector('img[alt="webRemoteControl.qrAlt"]')).toBeNull();
+    expect(view.queryByText("webRemoteControl.mobileQr.title")).toBeNull();
+  });
+
+  it("二维码入口照旧显示复制链接与二维码说明", async () => {
+    const qrStatus = {
+      status: "running",
+      entry: "qr",
+      sessionId: "sid-qr",
+      workspacePath: "/tmp/project",
+      qrUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+      connectUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+    };
+    platformMock.getWebRemoteControlStatus.mockResolvedValue(qrStatus as never);
+    platformMock.startWebRemoteControl.mockResolvedValue(qrStatus as never);
+    const view = render(
+      createElement(WebRemoteControlDialog, {
+        open: true,
+        onOpenChange: vi.fn(),
+        workspacePath: "/tmp/project",
+      }),
+    );
+    await view.findByText("webRemoteControl.mobileQr.title");
+    expect(view.queryByTestId("web-remote-control-copy-link-row")).not.toBeNull();
+    expect(view.queryByText("webRemoteControl.workbench.title")).toBeNull();
   });
 
   it("刷新自建二维码先确认，再透传 identity/session 到唯一平台轮换命令", async () => {

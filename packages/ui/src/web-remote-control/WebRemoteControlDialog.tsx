@@ -13,6 +13,7 @@ import QRCode from "qrcode";
 import type { BotProvider, WebRemoteControlStatus } from "@zcode/shared";
 import {
   Bot as BotIcon,
+  Building2,
   CopyIcon,
   LoaderCircle,
   MonitorSmartphone,
@@ -102,6 +103,8 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
   });
   const [loading, setLoading] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  // 自有后台（backend=uwork）：手机从企微工作台进来，桌面只负责"开启 + 注册"，不再展示二维码。
+  const workbenchEntry = status.entry === "wecom-workbench";
   const [botsDialogOpen, setBotsDialogOpen] = useState(false);
   const [botEntryProvider, setBotEntryProvider] = useState<RemoteControlBotProvider | null>(null);
 
@@ -484,21 +487,23 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                   </div>
                 ) : (
                   <>
-                    <div className="mb-4 flex items-start gap-2">
-                      <Smartphone className="mt-0.5 size-4 shrink-0 text-foreground-subtle" />
-                      <div className="min-w-0 space-y-1">
-                        <div className="text-ui-base font-medium text-foreground">
-                          {intl.formatMessage({
-                            id: "webRemoteControl.mobileQr.title",
-                          })}
+                    {workbenchEntry ? null : (
+                      <div className="mb-4 flex items-start gap-2">
+                        <Smartphone className="mt-0.5 size-4 shrink-0 text-foreground-subtle" />
+                        <div className="min-w-0 space-y-1">
+                          <div className="text-ui-base font-medium text-foreground">
+                            {intl.formatMessage({
+                              id: "webRemoteControl.mobileQr.title",
+                            })}
+                          </div>
+                          <p className="text-ui-base/relaxed text-foreground-subtle">
+                            {intl.formatMessage({
+                              id: "webRemoteControl.mobileQr.description",
+                            })}
+                          </p>
                         </div>
-                        <p className="text-ui-base/relaxed text-foreground-subtle">
-                          {intl.formatMessage({
-                            id: "webRemoteControl.mobileQr.description",
-                          })}
-                        </p>
                       </div>
-                    </div>
+                    )}
                     <div
                       data-testid="web-remote-control-connection-card"
                       className="mb-3 rounded-lg bg-surface px-3 py-2"
@@ -549,6 +554,7 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                       ) : status.error ? (
                         <p className="mt-3 text-ui-base/relaxed text-destructive">{status.error}</p>
                       ) : null}
+                      {workbenchEntry ? null : (
                       <div
                         data-testid="web-remote-control-copy-link-row"
                         className="mt-3 flex min-h-10 flex-wrap items-center gap-3 border-t border-border pt-3"
@@ -583,9 +589,23 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                           {intl.formatMessage({ id: "webRemoteControl.copyLink" })}
                         </Button>
                       </div>
+                      )}
                     </div>
-                    <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-background-alt p-4">
-                      {qrDataUrl ? (
+                    <div
+                      data-testid="web-remote-control-entry-panel"
+                      className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-background-alt p-4"
+                    >
+                      {workbenchEntry ? (
+                        <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+                          <Building2 className="size-8 text-foreground-subtle" />
+                          <p className="text-ui-lg font-medium">
+                            {intl.formatMessage({ id: "webRemoteControl.workbench.title" })}
+                          </p>
+                          <p className="text-ui-xs leading-6 text-foreground-subtle">
+                            {intl.formatMessage({ id: "webRemoteControl.workbench.description" })}
+                          </p>
+                        </div>
+                      ) : qrDataUrl ? (
                         <img
                           src={qrDataUrl}
                           alt={intl.formatMessage({ id: "webRemoteControl.qrAlt" })}

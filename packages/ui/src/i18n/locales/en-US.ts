@@ -2576,6 +2576,9 @@ const enUS: Record<string, string> = {
     "This entry only works from the WeCom workbench; open it in WeCom and retry.",
   "webRemoteControl.failure.unexpectedError":
     "Could not start mobile remote control. Try again from desktop.",
+  "webRemoteControl.workbench.title": "Available in WeCom",
+  "webRemoteControl.workbench.description":
+    "Open WeCom → Workbench → UWork remote control to connect to this computer directly, no QR scan needed.",
   "webRemoteControl.copyLink": "Copy link",
   "webRemoteControl.copyLink.copied": "Remote control link copied",
   "webRemoteControl.copyLinkFailed": "Could not copy remote control link: {error}",

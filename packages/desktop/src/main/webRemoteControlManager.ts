@@ -551,6 +551,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       mobileViewState: runtime.mobileViewState,
       mobileTaskView: runtime.mobileTaskView ?? null,
       mobileDeviceInfo: runtime.mobileDeviceInfo,
+      entry: dependencies.enterpriseAuth?.backend === "uwork" ? "wecom-workbench" : "qr",
       qrUrl: runtime.qrUrl,
       connectUrl: runtime.connectUrl,
       workspacePath: target.workspacePath,

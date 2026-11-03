@@ -526,6 +526,11 @@ export interface WebRemoteControlStatus {
   /** Main 校验后的瞬时可见任务；remoteSessionId 仅由所属 bridge 注入，不接受 Web 自报。 */
   mobileTaskView?: (WebRemoteControlMobileTaskView & { remoteSessionId?: string }) | null;
   mobileDeviceInfo?: WebRemoteControlMobileDeviceInfo;
+  /**
+   * 手机侧的进入方式：`qr` = 扫桌面二维码（ucas 老路径）；
+   * `wecom-workbench` = 桌面只做"开启并注册"，员工从企微工作台直接进来（uwork 后台）。
+   */
+  entry?: "qr" | "wecom-workbench";
   qrUrl?: string;
   connectUrl?: string;
   workspacePath?: string;
