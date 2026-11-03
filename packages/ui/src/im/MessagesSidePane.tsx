@@ -116,6 +116,11 @@ export const MessagesSidePane = memo(function MessagesSidePane({ tab }: Messages
   useEffect(() => {
     if (band !== "narrow") setListOverlayOpen(false);
   }, [band]);
+  // 窄档且还没选会话时，列表浮层默认打开：否则面板只显示"从左侧选择一个会话"，
+  // 而窄档根本没有左侧那一栏，用户找不到入口（选完会话后浮层仍会自动收）。
+  useEffect(() => {
+    if (band === "narrow" && !selected) setListOverlayOpen(true);
+  }, [band, selected]);
   // 卡片动作的分派（server 动作的执行者）：解决"按钮画出来但没人执行"（§12.18）。
   const cardActions = useImCardActionDispatch({
     service: im.service,

@@ -2602,6 +2602,7 @@ const enUS: Record<string, string> = {
   "webRemoteControl.taskStatus.error": "Error",
   "webRemoteControl.switchDevice": "Switch device",
   "webRemoteControl.unnamedDevice": "Unnamed device",
+  "webRemoteControl.mobileShell.backToTask": "Back to task",
   "webRemoteControl.mobileShell.backToChat": "Back to task",
   "webRemoteControl.mobileShell.backHome": "Back to task home",
   "webRemoteControl.mobileShell.chatTitle": "Task chat",

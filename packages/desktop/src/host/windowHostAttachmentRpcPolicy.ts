@@ -50,6 +50,8 @@ const WEB_REMOTE_REPLAYABLE_ALLOWED_CHANNELS = new Set<string>([
   // 企业网关的账号/套餐/用量是"这台电脑"的事实，手机远控看使用统计时要读它。
   // 与其它 channel 同一套准入（配对已过同人校验），不额外放宽写操作。
   ServiceChannels.UcasGateway,
+  // 基础 IM（消息）：手机端"消息"界面要读这台电脑上的会话与消息；同一套配对准入。
+  ServiceChannels.Im,
   ServiceChannels.ClientScenes,
   ServiceChannels.Skills,
   ServiceChannels.SkillSync,

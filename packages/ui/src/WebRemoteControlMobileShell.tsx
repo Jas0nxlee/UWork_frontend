@@ -120,6 +120,12 @@ export function WebRemoteControlMobileShell({
     if (mainViewTakesSurface && currentPage !== "chat") setCurrentPage("chat");
   }, [mainViewTakesSurface, currentPage]);
 
+  // 手机端侧栏（消息/预览等）只挂在承载页里；在任务首页点"消息"时也要先落到那儿，
+  // 否则点了什么都不出现（只有横屏用宽布局才看得到右侧栏）。
+  useEffect(() => {
+    if (isSidePaneOpen && !mainViewTakesSurface && currentPage !== "chat") setCurrentPage("chat");
+  }, [isSidePaneOpen, mainViewTakesSurface, currentPage]);
+
   const navigateToChat = useCallback(() => {
     setCurrentPage("chat");
     pushWebRemoteControlMobileChatHistory();
@@ -230,19 +236,51 @@ export function WebRemoteControlMobileShell({
                     ].join(" ")}
                     aria-hidden={!isSidePaneOpen}
                     data-mobile-side-pane-overlay="true"
+                    data-mobile-side-pane-full-screen={isMobileViewport ? "true" : undefined}
                   >
-                    <button
-                      type="button"
-                      className="absolute inset-0 bg-background/60 backdrop-blur-[1px]"
-                      aria-label={intl.formatMessage({ id: "sidePane.collapse" })}
-                      onClick={onCloseSidePane}
-                    />
+                    {isMobileViewport ? null : (
+                      <button
+                        type="button"
+                        className="absolute inset-0 bg-background/60 backdrop-blur-[1px]"
+                        aria-label={intl.formatMessage({ id: "sidePane.collapse" })}
+                        onClick={onCloseSidePane}
+                      />
+                    )}
                     <div
                       className={[
-                        "absolute top-0 right-0 h-full w-[min(88vw,28rem)] max-w-full border-l border-border bg-background shadow-2xl transition-transform duration-200 ease-out",
-                        isSidePaneOpen ? "translate-x-0" : "translate-x-full",
+                        isMobileViewport
+                          ? // 窄屏整屏只渲染这一栏（消息/预览），顶部给"返回任务"。
+                            "absolute inset-0 flex h-full min-h-0 flex-col bg-background"
+                          : "absolute top-0 right-0 h-full w-[min(88vw,28rem)] max-w-full border-l border-border bg-background shadow-2xl transition-transform duration-200 ease-out",
+                        isMobileViewport
+                          ? ""
+                          : isSidePaneOpen
+                            ? "translate-x-0"
+                            : "translate-x-full",
                       ].join(" ")}
                     >
+                      {isMobileViewport ? (
+                        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-header px-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            data-testid="mobile-side-pane-back"
+                            aria-label={intl.formatMessage({
+                              id: "webRemoteControl.mobileShell.backToTask",
+                            })}
+                            onClick={onCloseSidePane}
+                          >
+                            <ArrowLeft className="size-4" />
+                          </Button>
+                          <span className="min-w-0 flex-1 truncate text-ui-base font-medium">
+                            {intl.formatMessage({ id: "im.title" })}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+                        {sidePaneContent}
+                      </div>
                       {/* Bugfix: 手机远控之前把 side pane 作为底部纵向面板渲染，
                       会挤压聊天区且不像桌面右侧栏。这里改成右侧覆盖抽屉，
                       只覆盖手机聊天区，不改变桌面端分栏布局。 */}
