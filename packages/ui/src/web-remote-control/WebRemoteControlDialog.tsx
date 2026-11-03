@@ -8,7 +8,7 @@ import {
   isSameWebRemoteControlStatus,
   getFailureDescription,
 } from "@/web-remote-control/domain/presentation.js";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import type { BotProvider, WebRemoteControlStatus } from "@zcode/shared";
 import {
@@ -108,7 +108,12 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
   const [synced, setSynced] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   // 自有后台（backend=uwork）：手机从企微工作台进来，桌面只负责"开启 + 注册"，不再展示二维码。
-  const workbenchEntry = status.entry === "wecom-workbench";
+  // 入口形态是部署事实：状态对象在停止/失败等路径上可能不带 entry，不能因此退回二维码入口。
+  const entryKindRef = useRef<WebRemoteControlStatus["entry"]>(undefined);
+  useEffect(() => {
+    if (status.entry) entryKindRef.current = status.entry;
+  }, [status.entry]);
+  const workbenchEntry = (status.entry ?? entryKindRef.current) === "wecom-workbench";
   const [botsDialogOpen, setBotsDialogOpen] = useState(false);
   const [botEntryProvider, setBotEntryProvider] = useState<RemoteControlBotProvider | null>(null);
 
@@ -403,7 +408,10 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     setLoading(true);
     try {
       await platform.stopWebRemoteControl();
-      setStatus({ status: "idle" });
+      setStatus({
+        status: "idle",
+        ...(entryKindRef.current ? { entry: entryKindRef.current } : {}),
+      });
       // 停止只停止，不替用户关弹层：用户仍然可以看状态、改主意再开启。
       toast(intl.formatMessage({ id: "webRemoteControl.stopSuccess" }));
       logger.info("[WebRemoteControlDialog] 已关闭 Web 远程控制", {

@@ -234,6 +234,34 @@ describe("WebRemoteControlDialog layout", () => {
     await view.findByRole("button", { name: "webRemoteControl.authRequired.login" });
     expect(feedbackMocks.toast).not.toHaveBeenCalled();
   });
+
+  it("停止之后仍是工作台入口，不再冒出二维码与复制链接", async () => {
+    const workbenchStatus = {
+      status: "running",
+      entry: "wecom-workbench",
+      sessionId: "sid-workbench",
+      workspacePath: "/tmp/project",
+      qrUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+      connectUrl: "https://relay.example/remote/v4?sid=x&hash=y&t=1",
+    };
+    platformMock.getWebRemoteControlStatus.mockResolvedValue(workbenchStatus as never);
+    platformMock.stopWebRemoteControl.mockResolvedValueOnce(undefined as never);
+    const view = render(
+      createElement(WebRemoteControlDialog, {
+        open: true,
+        onOpenChange: vi.fn(),
+        workspacePath: "/tmp/project",
+      }),
+    );
+    await view.findByText("webRemoteControl.workbench.title");
+    fireEvent.click(view.getByText("webRemoteControl.stop"));
+    await waitFor(() =>
+      expect(view.container.textContent).toContain("webRemoteControl.statusDetail.idle"),
+    );
+    expect(view.queryByTestId("web-remote-control-copy-link-row")).toBeNull();
+    expect(view.queryByText("webRemoteControl.mobileQr.title")).toBeNull();
+  });
+
   it("treats native start cancellation as idle without failure UI", async () => {
     platformMock.startWebRemoteControl.mockResolvedValueOnce({ status: "cancelled" });
 
