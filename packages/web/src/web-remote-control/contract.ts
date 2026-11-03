@@ -61,6 +61,11 @@ export interface WebRemoteControlEntryOptions {
   getHref(): string;
   replaceHref(href: string): void;
   storage: Pick<Storage, "getItem" | "setItem">;
+  /**
+   * 仅本次标签页有效的会话存储：用来标记"这是连接之后的重载，需要接着连"。
+   * 缺省时不做自动续连（每次都停在设备列表）。
+   */
+  sessionStorage?: Pick<Storage, "getItem" | "setItem" | "removeItem">;
   locale: "zh-CN" | "en-US";
   /** 企微内置浏览器判定用；缺省读 navigator.userAgent（测试可注入）。 */
   userAgent?: string;

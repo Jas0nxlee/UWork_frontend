@@ -12,6 +12,7 @@ function setup(href: string, userAgent: string, fetchImpl?: typeof fetch) {
   const connect = vi.fn();
   const onView = vi.fn();
   const storage = new Map<string, string>();
+  const session = new Map<string, string>();
   const entry = new WebRemoteControlEntry({
     auth: {
       getZCodeJwtToken: () => null,
@@ -30,6 +31,15 @@ function setup(href: string, userAgent: string, fetchImpl?: typeof fetch) {
         storage.set(key, value);
       },
     },
+    sessionStorage: {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        session.set(key, value);
+      },
+      removeItem: (key: string) => {
+        session.delete(key);
+      },
+    },
     locale: "zh-CN",
     userAgent,
     ...(fetchImpl ? { fetchImpl } : {}),
@@ -39,7 +49,7 @@ function setup(href: string, userAgent: string, fetchImpl?: typeof fetch) {
     connect,
     onView,
   });
-  return { entry, connect, onView, storage };
+  return { entry, connect, onView, storage, session };
 }
 
 const json = (value: unknown, status = 200) =>
@@ -283,6 +293,91 @@ describe("WeCom workbench entry (backend=uwork)", () => {
       views.some((view) => view.kind === "failure" && view.failure?.reason === "unexpected-error"),
     ).toBe(true);
     expect(views.some((view) => view.kind === "scan")).toBe(false);
+  });
+
+  it("新进来时停在设备列表，不自动进上次的会话", async () => {
+    const fetchImpl = vi.fn(async (url: URL) => {
+      const path = String(url);
+      if (path.endsWith("/api/auth/wecom/web-config"))
+        return json({ backend: "uwork", tenantId: ORG });
+      if (path.endsWith("/api/client/remote-devices"))
+        return json({
+          devices: [
+            { deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac", platform: "darwin" },
+          ],
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const f = setup(
+      "https://aihub.example.test/remote/v4",
+      WE_COM_UA,
+      fetchImpl as unknown as typeof fetch,
+    );
+    saveEnterpriseAuthToken(
+      {
+        getItem: (key) => f.storage.get(key) ?? null,
+        setItem: (key, v) => {
+          f.storage.set(key, v);
+        },
+      },
+      { apiBaseUrl: "https://aihub.example.test", orgId: ORG },
+      "session-1",
+    );
+    // 之前连过（列表偏好还在），但本次标签页没有续连标记。
+    f.storage.set("zcode-web-remote-last-device-sid", "sid-1");
+    await f.entry.start();
+    await vi.waitFor(() =>
+      expect(
+        fetchImpl.mock.calls.some(([url]) => String(url).endsWith("/api/client/remote-devices")),
+      ).toBe(true),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(f.connect).not.toHaveBeenCalled();
+  });
+
+  it("连接之后的版本号重载按续连标记自动接回同一台设备", async () => {
+    const fetchImpl = vi.fn(async (url: URL) => {
+      const path = String(url);
+      if (path.endsWith("/api/auth/wecom/web-config"))
+        return json({ backend: "uwork", tenantId: ORG });
+      if (path.endsWith("/api/client/remote-devices"))
+        return json({
+          devices: [
+            { deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac", platform: "darwin" },
+          ],
+        });
+      if (path.endsWith("/remote-devices/sid-1/pairings"))
+        return json({ id: "pair-1", expiresAt: Date.now() + 60_000 }, 201);
+      if (path.endsWith("/remote-devices/sid-1/pairings/pair-1"))
+        return json({
+          status: "answered",
+          pairing: {
+            sid: "sid-1",
+            hash: "hash-abcdefghijklmnop",
+            org: ORG,
+            enterpriseAuth: BACKEND,
+          },
+        });
+      throw new Error(`unexpected ${path}`);
+    });
+    const f = setup(
+      "https://aihub.example.test/remote/v4",
+      WE_COM_UA,
+      fetchImpl as unknown as typeof fetch,
+    );
+    saveEnterpriseAuthToken(
+      {
+        getItem: (key) => f.storage.get(key) ?? null,
+        setItem: (key, v) => {
+          f.storage.set(key, v);
+        },
+      },
+      { apiBaseUrl: "https://aihub.example.test", orgId: ORG },
+      "session-1",
+    );
+    f.session.set("zcode-web-remote-resume", JSON.stringify({ sid: "sid-1", mid: "mid-1" }));
+    await f.entry.start();
+    await vi.waitFor(() => expect(f.connect).toHaveBeenCalledTimes(1));
   });
 
   it("still refuses a plain browser on a clean workbench URL", async () => {

@@ -52,6 +52,11 @@ export function isWebRemoteControlOAuthCallback(url: URL): boolean {
 
 const LAST_DEVICE_KEY = "zcode-web-remote-last-device-sid";
 const LAST_DEVICE_MID_KEY = "zcode-web-remote-last-device-mid";
+/**
+ * 续连标记：只在"刚配对成功、页面因版本号重载"的这一次会话里有效。
+ * 从企微工作台新进来时没有它，就老老实实停在设备列表，不自动进上次的会话。
+ */
+const RESUME_KEY = "zcode-web-remote-resume";
 
 /**
  * 最近设备的自动落点：最近 SID 在线优先；否则同一台电脑（最近 MID）恰好一个在线 SID 时接上它。
@@ -75,6 +80,39 @@ function resolveAutoConnectSid(
 /** 只负责连接前的 admission；配对后的 workspace/恢复仍归既有 bootstrap。 */
 export class WebRemoteControlEntry {
   private scope = new AbortController();
+  /** 本次标签页是否应当接着上次的连接（版本号重载续连）。 */
+  private resumeTarget(): { sid: string; mid?: string } | null {
+    try {
+      const raw = this.options.sessionStorage?.getItem(RESUME_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { sid?: unknown; mid?: unknown };
+      const sid = typeof parsed.sid === "string" ? parsed.sid : "";
+      if (!sid) return null;
+      return { sid, ...(typeof parsed.mid === "string" && parsed.mid ? { mid: parsed.mid } : {}) };
+    } catch {
+      return null;
+    }
+  }
+
+  private setResumeTarget(sid: string, mid: string | undefined): void {
+    try {
+      this.options.sessionStorage?.setItem(
+        RESUME_KEY,
+        JSON.stringify({ sid, ...(mid ? { mid } : {}) }),
+      );
+    } catch {
+      // 存储不可用只是少了续连，不影响本次连接。
+    }
+  }
+
+  private clearResumeTarget(): void {
+    try {
+      this.options.sessionStorage?.removeItem(RESUME_KEY);
+    } catch {
+      // 同上。
+    }
+  }
+
   /** 企微工作台入口（backend=uwork）时的企业上下文；存在即表示走免扫码设备目录。 */
   private remoteContext: EnterpriseAuthContext | undefined;
   /**
@@ -343,6 +381,7 @@ export class WebRemoteControlEntry {
       const context = this.remoteContext ?? this.entryContext;
       if (context) {
         this.reset();
+        this.clearResumeTarget();
         await this.openRemoteDevices(context);
         return;
       }
@@ -456,14 +495,10 @@ export class WebRemoteControlEntry {
   /** 免扫码：打开"我的设备"列表（复用设备页视图与分组）。 */
   private async openRemoteDevices(context: EnterpriseAuthContext): Promise<void> {
     this.remoteContext = context;
-    let lastSid: string | null = null;
-    let lastMid: string | null = null;
-    try {
-      lastSid = this.options.storage.getItem(LAST_DEVICE_KEY);
-      lastMid = this.options.storage.getItem(LAST_DEVICE_MID_KEY);
-    } catch {
-      // 存储不可用只影响"最近设备"偏好，不影响列表。
-    }
+    // 只有"刚连过又因版本号重载"时才自动落点；新进来一律停在列表让用户选。
+    const resume = this.resumeTarget();
+    const lastSid: string | null = resume?.sid ?? null;
+    const lastMid: string | null = resume?.mid ?? null;
     this.list = {
       view: { kind: "devices", devices: [], loading: true, error: false },
       unsubscribe: this.options.subscribeVisible(() => {
@@ -555,6 +590,7 @@ export class WebRemoteControlEntry {
         return;
       }
       this.rememberDevice(material.sid, device?.device_mid);
+      this.setResumeTarget(material.sid, device?.device_mid);
       this.connect({
         deviceSid: material.sid,
         ...(device?.device_mid ? { deviceMid: device.device_mid } : {}),

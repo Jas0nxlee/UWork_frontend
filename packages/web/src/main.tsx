@@ -436,6 +436,7 @@ const remoteEntry = new WebRemoteControlEntry({
   getHref: () => window.location.href,
   replaceHref: (href) => window.history.replaceState(window.history.state, "", href),
   storage: webRemoteControlStorage,
+  sessionStorage: window.sessionStorage,
   locale: resolveWebRemoteControlScreenLocale(navigator.language),
   devices: createWebRemoteControlDeviceClient(window.location.origin),
   subscribeVisible: (listener) => {
