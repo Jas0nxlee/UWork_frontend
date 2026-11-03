@@ -29,6 +29,8 @@ export interface RemotePairingChannelOptions {
   heartbeatMs?: number;
   /** 单轮长轮询的等待秒数（后台上限 30s）。 */
   pollWaitSeconds?: number;
+  /** 登记成功后回报"本机在这个后台是谁"（tenant + member 实体），用于校验手机身份帧。 */
+  onRegistered?: (identity: { tenantId: string; memberId: string }) => void;
 }
 
 export interface RemotePairingChannel {
@@ -71,6 +73,17 @@ export function startRemotePairingChannel(
         });
         return false;
       }
+      const body = (await response.json().catch(() => null)) as {
+        tenantId?: unknown;
+        memberId?: unknown;
+      } | null;
+      if (
+        typeof body?.tenantId === "string" &&
+        typeof body.memberId === "string" &&
+        body.tenantId &&
+        body.memberId
+      )
+        options.onRegistered?.({ tenantId: body.tenantId, memberId: body.memberId });
       return true;
     } catch {
       return false;

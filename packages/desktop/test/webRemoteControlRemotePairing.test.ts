@@ -28,7 +28,7 @@ describe("remote pairing channel (desktop)", () => {
     let nextCalls = 0;
     const fetchImpl = vi.fn(async (url: URL, init?: RequestInit) => {
       const path = String(url);
-      if (init?.method === "PUT") return ok();
+      if (init?.method === "PUT") return json({ ok: true, tenantId: "t-1", memberId: "m-1" });
       if (init?.method === "DELETE") return ok();
       if (path.includes("/remote-pairings/next")) {
         nextCalls += 1;
@@ -40,28 +40,38 @@ describe("remote pairing channel (desktop)", () => {
       throw new Error(`unexpected ${init?.method} ${path}`);
     });
     const controller = new AbortController();
+    const registered: Array<{ tenantId: string; memberId: string }> = [];
     const channel = startRemotePairingChannel({
       ...base,
+      onRegistered: (identity) => registered.push(identity),
       fetchImpl: fetchImpl as unknown as typeof fetch,
       signal: controller.signal,
     });
     await vi.waitFor(() =>
       expect(
-        fetchImpl.mock.calls.some(([url]) => String(url).includes("/remote-pairings/pair-1/answer")),
+        fetchImpl.mock.calls.some(([url]) =>
+          String(url).includes("/remote-pairings/pair-1/answer"),
+        ),
       ).toBe(true),
     );
     const answerCall = fetchImpl.mock.calls.find(([url]) =>
       String(url).includes("/remote-pairings/pair-1/answer"),
     );
-    expect(answerCall?.[1]?.body).toBe(JSON.stringify({ sid: "sid-1", hash: "hash-abcdefghijklmnop" }));
+    expect(answerCall?.[1]?.body).toBe(
+      JSON.stringify({ sid: "sid-1", hash: "hash-abcdefghijklmnop" }),
+    );
     const registerCall = fetchImpl.mock.calls.find(([, init]) => init?.method === "PUT");
-    expect(String(registerCall?.[0])).toBe("https://backend.example.test/api/client/remote-devices/sid-1");
+    expect(String(registerCall?.[0])).toBe(
+      "https://backend.example.test/api/client/remote-devices/sid-1",
+    );
     expect(JSON.parse(String(registerCall?.[1]?.body))).toMatchObject({
       deviceMid: "mid-1",
       name: "办公室 Mac",
       platform: "darwin",
     });
 
+    // 登记响应里的成员实体回报给上层，供身份帧比对（手机令牌 → 同一个人）。
+    expect(registered).toEqual([{ tenantId: "t-1", memberId: "m-1" }]);
     await channel.dispose();
     await flush();
     expect(fetchImpl.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
