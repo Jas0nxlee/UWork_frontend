@@ -494,6 +494,11 @@ export interface WebRemoteControlStartResult {
   status: Extract<WebRemoteControlStatusKind, "running" | "connecting" | "active">;
   sessionId: string;
   windowControlSessionId?: string;
+  /**
+   * 入口形态：启动结果也要带，否则 UI 拿到 start 的返回值时不知道是企微工作台入口，
+   * 会先按二维码入口画一帧（"点开启先闪二维码"就是这样来的）。
+   */
+  entry?: WebRemoteControlStatus["entry"];
   deviceToken?: string;
   tokenKind?: WebRemoteControlTokenKind;
   expiresAt?: number;

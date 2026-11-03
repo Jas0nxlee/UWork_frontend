@@ -1833,6 +1833,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         status: runtime.status === "active" ? "active" : "running",
         sessionId: auth.deviceSid,
         windowControlSessionId: auth.deviceSid,
+        entry: entryKind(),
         qrUrl: runtime.qrUrl,
         connectUrl: runtime.connectUrl,
         ...context,

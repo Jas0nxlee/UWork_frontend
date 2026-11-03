@@ -116,7 +116,6 @@ describe("WebRemoteControlDialog layout", () => {
     feedbackMocks.toast.mockClear();
   });
 
-
   it("企微工作台入口只显示已开启，不再出二维码与复制链接", async () => {
     const workbenchStatus = {
       status: "running",
@@ -229,6 +228,9 @@ describe("WebRemoteControlDialog layout", () => {
         workspacePath: "/tmp/project",
       }),
     );
+    // 打开不自动开启：点"开启"才会走到 start，再由 main 的 auth-required 状态收口。
+    const start = await view.findByTestId("web-remote-control-start");
+    fireEvent.click(start);
     await view.findByRole("button", { name: "webRemoteControl.authRequired.login" });
     expect(feedbackMocks.toast).not.toHaveBeenCalled();
   });

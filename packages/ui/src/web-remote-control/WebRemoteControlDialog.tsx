@@ -374,7 +374,11 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
         remoteSessionId,
         initialTaskId,
       });
-      setStatus(result.status === "cancelled" ? { status: "idle" } : result);
+      setStatus(
+        result.status === "cancelled"
+          ? { status: "idle" }
+          : { ...result, entry: result.entry ?? status.entry },
+      );
       logger.info("[WebRemoteControlDialog] 已开启 Web 远程控制", {
         workspacePath,
         workspaceIdentity: workspaceIdentity ?? "none",
@@ -400,7 +404,7 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     try {
       await platform.stopWebRemoteControl();
       setStatus({ status: "idle" });
-      onOpenChange(false);
+      // 停止只停止，不替用户关弹层：用户仍然可以看状态、改主意再开启。
       toast(intl.formatMessage({ id: "webRemoteControl.stopSuccess" }));
       logger.info("[WebRemoteControlDialog] 已关闭 Web 远程控制", {
         workspacePath,
