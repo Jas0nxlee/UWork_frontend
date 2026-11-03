@@ -110,3 +110,126 @@ export async function exchangeEnterpriseAuthCode(options: {
   if (!token) throw new Error("token missing");
   return token;
 }
+
+const ATTEMPT_KEY_PREFIX = "uwork.remote-enterprise-attempt:";
+
+/** 自建后端（uwork）网页授权的一次性尝试材料；只活在一次跳转周期内。 */
+export interface UworkWebAttempt {
+  attemptId: string;
+  proof: string;
+  expiresAt: number;
+}
+
+function attemptKey(context: EnterpriseAuthContext): string {
+  return `${ATTEMPT_KEY_PREFIX}${context.apiBaseUrl}|${context.orgId}`;
+}
+
+export function readUworkWebAttempt(
+  storage: EnterpriseAuthStorageLike,
+  context: EnterpriseAuthContext,
+): UworkWebAttempt | null {
+  try {
+    const raw = storage.getItem(attemptKey(context));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<UworkWebAttempt>;
+    if (
+      typeof parsed.attemptId !== "string" ||
+      typeof parsed.proof !== "string" ||
+      typeof parsed.expiresAt !== "number"
+    )
+      return null;
+    return { attemptId: parsed.attemptId, proof: parsed.proof, expiresAt: parsed.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+export function saveUworkWebAttempt(
+  storage: EnterpriseAuthStorageLike,
+  context: EnterpriseAuthContext,
+  attempt: UworkWebAttempt,
+): void {
+  try {
+    storage.setItem(attemptKey(context), JSON.stringify(attempt));
+  } catch {
+    // 存不下就不能安全地完成回调：start 侧会按"没有本地尝试"处理。
+  }
+}
+
+export function clearUworkWebAttempt(
+  storage: EnterpriseAuthStorageLike,
+  context: EnterpriseAuthContext,
+): void {
+  try {
+    storage.removeItem?.(attemptKey(context));
+  } catch {
+    // 清理失败不阻塞后续登录。
+  }
+}
+
+/**
+ * 自建后端（企微内置浏览器）的网页授权起点：mode=web 让后台返回 OAuth2
+ * 网页授权链接（snsapi_base），returnTo 指向本页，授权后带 code 回到这里。
+ */
+export async function startUworkWebAuthorize(options: {
+  context: EnterpriseAuthContext;
+  returnTo: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ attemptId: string; proof: string; expiresAt: number; authorizeUrl: string }> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(
+    new URL("/api/auth/wecom/attempts", `${options.context.apiBaseUrl}/`),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId: options.context.orgId,
+        mode: "web",
+        returnTo: options.returnTo,
+      }),
+    },
+  );
+  if (!response.ok) throw new Error(`attempts ${response.status}`);
+  const body = await readJson(response);
+  const attemptId = typeof body["id"] === "string" ? body["id"] : "";
+  const proof = typeof body["proof"] === "string" ? body["proof"] : "";
+  const authorizeUrl = typeof body["authorizeUrl"] === "string" ? body["authorizeUrl"] : "";
+  const expiresAt = typeof body["expiresAt"] === "number" ? body["expiresAt"] : 0;
+  if (!attemptId || !proof || !authorizeUrl || !expiresAt)
+    throw new Error("attempt payload missing");
+  return { attemptId, proof, authorizeUrl, expiresAt };
+}
+
+/** 回调里的 code 换企业会话（complete + claim），换到的身份由桌面端再校验一次。 */
+export async function exchangeUworkWebCode(options: {
+  context: EnterpriseAuthContext;
+  attemptId: string;
+  proof: string;
+  code: string;
+  fetchImpl?: typeof fetch;
+}): Promise<string> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const base = `${options.context.apiBaseUrl}/`;
+  const complete = await fetchImpl(
+    new URL(`/api/auth/wecom/attempts/${encodeURIComponent(options.attemptId)}/complete`, base),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proof: options.proof, code: options.code }),
+    },
+  );
+  if (!complete.ok) throw new Error(`complete ${complete.status}`);
+  const claim = await fetchImpl(
+    new URL(`/api/auth/wecom/attempts/${encodeURIComponent(options.attemptId)}/claim`, base),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ proof: options.proof, delivery: "token" }),
+    },
+  );
+  if (!claim.ok) throw new Error(`claim ${claim.status}`);
+  const body = await readJson(claim);
+  const token = typeof body["token"] === "string" ? body["token"] : "";
+  if (!token) throw new Error("session token missing");
+  return token;
+}

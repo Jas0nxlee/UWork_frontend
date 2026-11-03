@@ -20,10 +20,15 @@ export interface MobileRemoteControlConfig {
 }
 
 export interface MobileRemoteControlEnterpriseAuthConfig {
-  /** ucas-proxy control-plane 基址（手机页拿它做企微授权与换 token）。 */
+  /** 企业后端基址（手机页拿它做企微授权与换 token）。 */
   apiBaseUrl: string;
   /** 放宽为"同组织任意员工可控制"；默认 false = 必须同一个人。 */
   allowSameOrgAnyUser: boolean;
+  /**
+   * 后端形态：`ucas` = 原 ucas-proxy（扫码 + 方案 A）；`uwork` = 自有后台
+   * （企微工作台入口的免扫码通路：设备目录 + 配对应答）。缺省 `ucas`。
+   */
+  backend?: "ucas" | "uwork";
 }
 
 const MAX_CONFIG_BYTES = 16_384;
@@ -109,6 +114,7 @@ function parseEnterpriseAuth(raw: unknown): MobileRemoteControlEnterpriseAuthCon
   return {
     apiBaseUrl,
     allowSameOrgAnyUser: record["allowSameOrgAnyUser"] === true,
+    backend: record["backend"] === "uwork" ? ("uwork" as const) : ("ucas" as const),
   };
 }
 

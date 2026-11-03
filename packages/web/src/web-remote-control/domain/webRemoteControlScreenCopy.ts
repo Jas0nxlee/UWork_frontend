@@ -151,6 +151,19 @@ const WEB_REMOTE_CONTROL_SCREEN_COPY = {
       ],
       action: "重新登录",
     },
+    "wecom-app-required": {
+      tone: "warning",
+      badge: "入口受限",
+      title: "请在企业微信中打开",
+      description: "Web 远程控制只允许从企业微信工作台进入，普通浏览器无法连接。",
+      detailLabel: "访问方式",
+      nextStepsTitle: "下一步",
+      nextSteps: [
+        "打开企业微信，在工作台里点开「UWork 远程控制」。",
+        "如果工作台里没有这个应用，请联系管理员开通可见范围。",
+      ],
+      action: "重新加载",
+    },
     "enterprise-identity-rejected": {
       tone: "danger",
       badge: "身份未通过",
@@ -332,6 +345,20 @@ const WEB_REMOTE_CONTROL_SCREEN_COPY = {
         "Scan the QR code again if the redirect does not come back.",
       ],
       action: "Sign in again",
+    },
+    "wecom-app-required": {
+      tone: "warning",
+      badge: "Entry restricted",
+      title: "Open this from WeCom",
+      description:
+        "Web remote control is only available from the WeCom workbench; plain browsers cannot connect.",
+      detailLabel: "Access",
+      nextStepsTitle: "Next steps",
+      nextSteps: [
+        "Open WeCom and tap \"UWork remote control\" in the workbench.",
+        "If the app is missing, ask an administrator to enable its visibility.",
+      ],
+      action: "Reload",
     },
     "enterprise-identity-rejected": {
       tone: "danger",

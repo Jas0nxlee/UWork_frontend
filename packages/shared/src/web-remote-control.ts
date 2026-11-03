@@ -71,6 +71,8 @@ export type WebRemoteControlFailureReason =
   | "unsupported-action"
   | "enterprise-identity-required"
   | "enterprise-identity-rejected"
+  /** 企微内置浏览器专属入口：普通浏览器打开时直接拒绝。 */
+  | "wecom-app-required"
   | "unexpected-error";
 
 export interface WebRemoteControlFailure {

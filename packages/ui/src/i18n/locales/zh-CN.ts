@@ -2393,6 +2393,8 @@ const zhCN: Record<string, string> = {
     "这台设备只允许本公司员工连接，请先完成企业微信授权。",
   "webRemoteControl.failure.enterpriseIdentityRejected":
     "登录的企业身份与这台设备不匹配，桌面端已拒绝本次连接。",
+  "webRemoteControl.failure.wecomAppRequired":
+    "这个入口只允许从企业微信工作台打开，请在企业微信里重试。",
   "webRemoteControl.failure.unexpectedError": "无法启动移动端远程控制，请回到桌面端重试。",
   "webRemoteControl.copyLink": "复制链接",
   "webRemoteControl.copyLink.copied": "已复制远程控制链接",

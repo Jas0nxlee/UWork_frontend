@@ -18,12 +18,23 @@ import {
 } from "#src/web-remote-control/app/webRemoteControlKnownDevices.js";
 import {
   clearEnterpriseAuthToken,
+  clearUworkWebAttempt,
   exchangeEnterpriseAuthCode,
+  exchangeUworkWebCode,
   readEnterpriseAuthToken,
+  readUworkWebAttempt,
   resolveEnterpriseAuthorizeUrl,
   saveEnterpriseAuthToken,
+  saveUworkWebAttempt,
+  startUworkWebAuthorize,
   type EnterpriseAuthContext,
 } from "#src/web-remote-control/app/enterpriseAuth.js";
+import {
+  fetchRemoteDevices,
+  requestRemotePairing,
+  toRelayDeviceView,
+  waitRemotePairing,
+} from "#src/web-remote-control/app/remoteDevices.js";
 
 export function isWebRemoteControlOAuthCallback(url: URL): boolean {
   return (
@@ -61,6 +72,9 @@ function resolveAutoConnectSid(
 /** 只负责连接前的 admission；配对后的 workspace/恢复仍归既有 bootstrap。 */
 export class WebRemoteControlEntry {
   private scope = new AbortController();
+  /** 企微工作台入口（backend=uwork）时的企业上下文；存在即表示走免扫码设备目录。 */
+  private remoteContext: EnterpriseAuthContext | undefined;
+  private backend: "ucas" | "uwork" = "ucas";
   private list:
     | {
         view: WebRemoteControlDeviceListView;
@@ -82,15 +96,47 @@ export class WebRemoteControlEntry {
 
   private reset(): void {
     this.dispose();
+    this.remoteContext = undefined;
     this.scope = new AbortController();
+  }
+
+  /** 企微内置浏览器判定：UA 带 wxwork；本机回环放行以便开发与自动化。 */
+  private isWeComAppBrowser(): boolean {
+    const userAgent =
+      this.options.userAgent ??
+      (typeof navigator === "undefined" ? "" : navigator.userAgent);
+    if (userAgent.toLowerCase().includes("wxwork")) return true;
+    try {
+      const host = new URL(this.options.getHref()).hostname;
+      return ["localhost", "127.0.0.1", "[::1]"].includes(host);
+    } catch {
+      return false;
+    }
   }
 
   async start(): Promise<void> {
     this.reset();
     const url = new URL(this.options.getHref());
+    this.backend = url.searchParams.get("backend") === "uwork" ? "uwork" : "ucas";
     // 修复原因：自建配对材料与已退役账号无关；仅显式 HMAC 构建绕过 V2 登录入口。
     if (this.options.protocol === "hmac-v1") {
-      if (!["sid", "hash", "t"].some((key) => url.searchParams.has(key))) {
+      // 只允许从企业微信工作台进入的入口（backend=uwork）：普通浏览器直接拒绝。
+      if (this.backend === "uwork" && !this.isWeComAppBrowser()) {
+        this.options.onView({ kind: "failure", failure: { reason: "wecom-app-required" } });
+        return;
+      }
+      const hasPairingParams = ["sid", "hash", "t"].some((key) => url.searchParams.has(key));
+      if (!hasPairingParams) {
+        // 免扫码通路：入口带 org + enterprise_auth 时先登录，再看"我的设备"。
+        const entryAuth = url.searchParams.get("enterprise_auth");
+        const entryOrg = url.searchParams.get("org");
+        if (this.backend === "uwork" && entryAuth && entryOrg) {
+          const context = { apiBaseUrl: entryAuth, orgId: entryOrg };
+          const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
+          if (!authorized) return;
+          await this.openRemoteDevices(context);
+          return;
+        }
         this.options.onView({ kind: "scan" });
         return;
       }
@@ -104,6 +150,7 @@ export class WebRemoteControlEntry {
         const authorized = await this.ensureEnterpriseIdentity(
           { apiBaseUrl: params.enterpriseAuth, orgId: params.enterpriseOrg },
           url,
+          this.backend,
         );
         if (!authorized) return;
       }
@@ -164,6 +211,7 @@ export class WebRemoteControlEntry {
     const list = this.list;
     if (!list) return;
     if (list.request) return list.request;
+    if (this.remoteContext) return this.refreshRemoteDevices(this.remoteContext, list);
     const jwt = this.options.auth.getZCodeJwtToken();
     if (!jwt) return this.switchAccount();
     if (list.acceptedJwt && list.acceptedJwt !== jwt) return this.start();
@@ -209,6 +257,10 @@ export class WebRemoteControlEntry {
 
   selectDevice(sid: string): void {
     if (!this.list || this.list.view.loading || this.list.view.error) return;
+    if (this.remoteContext) {
+      void this.pairRemoteDevice(sid);
+      return;
+    }
     if (this.list.acceptedJwt !== this.options.auth.getZCodeJwtToken()) {
       void this.start();
       return;
@@ -235,6 +287,12 @@ export class WebRemoteControlEntry {
 
   async chooseOtherDevice(): Promise<void> {
     if (this.options.protocol === "hmac-v1") {
+      if (this.remoteContext) {
+        const context = this.remoteContext;
+        this.reset();
+        await this.openRemoteDevices(context);
+        return;
+      }
       this.reset();
       const url = new URL(this.options.getHref());
       for (const key of ["sid", "hash", "t", "mid", "name"]) url.searchParams.delete(key);
@@ -256,11 +314,27 @@ export class WebRemoteControlEntry {
   private async ensureEnterpriseIdentity(
     context: EnterpriseAuthContext,
     url: URL,
+    backend: "ucas" | "uwork" = "ucas",
   ): Promise<boolean> {
     const code = url.searchParams.get("code");
     if (code) {
       try {
-        const token = await exchangeEnterpriseAuthCode({ context, code });
+        let token: string;
+        if (backend === "uwork") {
+          // 自建后端：回调里的 code 必须配对本页发起的 attempt（state 即 attempt id）。
+          const attempt = readUworkWebAttempt(this.options.storage, context);
+          if (!attempt || attempt.attemptId !== url.searchParams.get("state"))
+            throw new Error("enterprise attempt missing");
+          token = await exchangeUworkWebCode({
+            context,
+            attemptId: attempt.attemptId,
+            proof: attempt.proof,
+            code,
+          });
+          clearUworkWebAttempt(this.options.storage, context);
+        } else {
+          token = await exchangeEnterpriseAuthCode({ context, code });
+        }
         saveEnterpriseAuthToken(this.options.storage, context, token);
       } catch (error) {
         clearEnterpriseAuthToken(this.options.storage, context);
@@ -276,15 +350,23 @@ export class WebRemoteControlEntry {
       // 回调带回的 code 只消费一次：清掉它再继续，刷新页面不会重复兑换。
       const cleaned = new URL(url.href);
       cleaned.searchParams.delete("code");
+      cleaned.searchParams.delete("state");
       this.options.replaceHref(cleaned.href);
       return true;
     }
     if (readEnterpriseAuthToken(this.options.storage, context)) return true;
     try {
-      const authorizeUrl = await resolveEnterpriseAuthorizeUrl({
-        context,
-        returnTo: url.href,
-      });
+      let authorizeUrl: string;
+      if (backend === "uwork") {
+        // 企微内置浏览器：OAuth2 网页授权（snsapi_base），回跳到本页再换会话。
+        const started = await startUworkWebAuthorize({ context, returnTo: url.href });
+        saveUworkWebAttempt(this.options.storage, context, {
+          attemptId: started.attemptId,
+          proof: started.proof,
+          expiresAt: started.expiresAt,
+        });
+        authorizeUrl = started.authorizeUrl;
+      } else authorizeUrl = await resolveEnterpriseAuthorizeUrl({ context, returnTo: url.href });
       this.options.onView({ kind: "login" });
       window.location.assign(authorizeUrl);
     } catch (error) {
@@ -297,6 +379,115 @@ export class WebRemoteControlEntry {
       });
     }
     return false;
+  }
+
+  /** 免扫码：打开"我的设备"列表（复用设备页视图与分组）。 */
+  private async openRemoteDevices(context: EnterpriseAuthContext): Promise<void> {
+    this.remoteContext = context;
+    let lastSid: string | null = null;
+    let lastMid: string | null = null;
+    try {
+      lastSid = this.options.storage.getItem(LAST_DEVICE_KEY);
+      lastMid = this.options.storage.getItem(LAST_DEVICE_MID_KEY);
+    } catch {
+      // 存储不可用只影响"最近设备"偏好，不影响列表。
+    }
+    this.list = {
+      view: { kind: "devices", devices: [], loading: true, error: false },
+      unsubscribe: this.options.subscribeVisible(() => {
+        void this.refreshDevices();
+      }),
+      lastSid,
+      lastMid,
+    };
+    this.options.onView(this.list.view);
+    await this.refreshDevices();
+  }
+
+  private async refreshRemoteDevices(
+    context: EnterpriseAuthContext,
+    list: NonNullable<WebRemoteControlEntry["list"]>,
+  ): Promise<void> {
+    const token = readEnterpriseAuthToken(this.options.storage, context);
+    if (!token) {
+      // 企业会话已失效（关页面即过期）：重新走一次企微授权，不能沿用旧列表。
+      void this.start();
+      return;
+    }
+    const { signal } = this.scope;
+    list.view = { ...list.view, loading: true, error: false };
+    this.options.onView(list.view);
+    list.request = (async () => {
+      try {
+        const devices = await fetchRemoteDevices({ context, token, signal });
+        if (signal.aborted) return;
+        const knownDevices = readKnownDevices(this.options.storage);
+        const views = devices.map(toRelayDeviceView);
+        const groups = groupWebRemoteControlDevices(views, this.options.locale, knownDevices);
+        rememberKnownDevices(this.options.storage, knownDevices, groups);
+        list.view = { ...list.view, devices: groups, loading: false, error: false };
+        const autoSid = resolveAutoConnectSid(views, groups, list.lastSid, list.lastMid);
+        list.lastSid = null;
+        list.lastMid = null;
+        if (autoSid) void this.pairRemoteDevice(autoSid);
+        else this.options.onView(list.view);
+      } catch {
+        if (signal.aborted) return;
+        list.view = { ...list.view, loading: false, error: true };
+        this.options.onView(list.view);
+      } finally {
+        list.request = undefined;
+      }
+    })();
+    return list.request;
+  }
+
+  /** 选中设备 → 后台建配对请求 → 等桌面应答 → 用材料走既有 HMAC 连接。 */
+  private async pairRemoteDevice(sid: string): Promise<void> {
+    const context = this.remoteContext;
+    const list = this.list;
+    if (!context || !list || list.view.loading || list.view.error) return;
+    const device = list.view.devices
+      .flatMap((group) => group.onlineConnections)
+      .find((item) => item.device_sid === sid);
+    const token = readEnterpriseAuthToken(this.options.storage, context);
+    if (!token) {
+      void this.start();
+      return;
+    }
+    list.view = { ...list.view, loading: true, error: false };
+    this.options.onView(list.view);
+    try {
+      const pairing = await requestRemotePairing({ context, token, deviceSid: sid });
+      const material = await waitRemotePairing({
+        context,
+        token,
+        deviceSid: sid,
+        pairingId: pairing.id,
+        signal: this.scope.signal,
+      });
+      if (!material) {
+        // 桌面没应答或请求过期：给出"电脑端未响应"而不是空白等待。
+        this.options.onView({ kind: "failure", failure: { reason: "desktop-disconnected" } });
+        return;
+      }
+      this.rememberDevice(material.sid, device?.device_mid);
+      this.connect({
+        deviceSid: material.sid,
+        ...(device?.device_mid ? { deviceMid: device.device_mid } : {}),
+        passHash: material.hash,
+        enterpriseAuth: context.apiBaseUrl,
+        enterpriseOrg: context.orgId,
+      });
+    } catch (error) {
+      this.options.onView({
+        kind: "failure",
+        failure: {
+          reason: "unexpected-error",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
   }
 
   private rememberDevice(sid: string, mid: string | undefined): void {

@@ -81,3 +81,66 @@
 3. 换一个组织的账号（或另一名员工，未放宽策略）→ 桌面拒绝，手机看到 `enterprise-identity-rejected`。
 4. 不带身份帧的连接 → 桌面拒绝，手机看到 `enterprise-identity-required`。
 5. relay 侧零改动；`packages/relay` 的契约测试与集成测保持通过。
+
+## 六、企微工作台入口（backend=uwork，免扫码）2026-11-03
+
+上面第 1–5 节是看板 A：**扫码进页面**。本节是另一条入口——员工从**企业微信工作台**打开自建应用，
+页面在企微内置浏览器里完成企微身份登录，然后**直接选设备连接，全程不扫码**。只对
+`backend = "uwork"` 的自有后台生效；`ucas` 模式保持第 1–5 节行为不变。
+
+### 6.1 入口与配置
+
+- 企微自建应用主页：`https://<手机页>/remote/v4?backend=uwork&org=<tenantId>&enterprise_auth=<后台 origin>`；
+  两个参数都是公开参数，和二维码里的一致。**缺省 `backend` 视为 `ucas`**。
+- 桌面随包配置 `config/mobile-remote-control.json` 的 `enterpriseAuth` 增加
+  `"backend": "uwork"`（缺省 `ucas`）；只有 uwork 才启用设备登记与配对应答通道。
+- 企微侧：应用「可信域名/网页授权回调域」要包含手机页域名；后台 `PUBLIC_URL` 必须是
+  HTTPS 公网 origin（回调 `/api/auth/wecom/callback`）。
+
+### 6.2 页面准入（只允许企微应用）
+
+- `backend=uwork` 时，页面在**任何网络请求之前**校验 UA 含 `wxwork`；否则直接渲染
+  `wecom-app-required` 失败页（文案「请在企业微信中打开」），不连 relay。
+- 本机 `localhost` / `127.0.0.1` / `[::1]` 放行方便开发与自动化；其余一律拒绝。
+- 这只是体验层门禁：真正的准入仍是企微身份 + 桌面端二次校验（见 6.4）。
+
+### 6.3 登录（企微内置浏览器，免扫码）
+
+1. 页面 `POST {后台}/api/auth/wecom/attempts {tenantId: org, mode:"web", returnTo:<本页 URL>}`；
+2. 后台返回 `https://open.weixin.qq.com/connect/oauth2/authorize?...scope=snsapi_base&state=<attempt>`；
+3. 企微静默授权后回跳到本页（带 `state`/`code`）→ 页面 `POST /attempts/:id/complete {proof,code}`
+   → `POST /attempts/:id/claim` 换不透明会话，存 `sessionStorage`（关页面失效）；
+4. 回调里的 `state` 必须与页面记录的 attempt 一致，`proof` 不出页面。
+
+后台侧复用既有 attempt/callback/claim 与 `provider.identity`，只新增 `mode:"web"` 的授权链接与
+`returnTo` 回跳（https，或本机回环）。开发态合成登录（`UWORK_DEV_SYNTHETIC_LOGIN` + 回环
+`PUBLIC_URL`）在 web 模式下同样可用，便于本机验收。
+
+### 6.4 设备目录与配对应答（材料不落后台存储）
+
+| 步骤 | 端点 | 说明 |
+| --- | --- | --- |
+| 桌面登记 | `PUT /api/client/remote-devices/:sid` | `{deviceMid,name,platform,ttlSeconds≤600}`，幂等心跳，**不含密钥** |
+| 手机列设备 | `GET /api/client/remote-devices` | 只列本人 TTL 内设备 |
+| 手机请求配对 | `POST /api/client/remote-devices/:sid/pairings` | `{id,expiresAt}`（≤60s） |
+| 桌面应答 | `GET /api/client/remote-pairings/next?deviceSid=` + `POST .../:id/answer {sid,hash}` | 长轮询 ≤30s；材料只留在后台进程内 Map（一次性） |
+| 手机取材料 | `GET /api/client/remote-devices/:sid/pairings/:id` | `answered` 时一次性返回 `{sid,hash,org,enterpriseAuth}` |
+
+- 组织/成员隔离：全部端点按会话的 `tenant_id + user_id` 过滤，跨成员一律 404；
+  因此"同组织任意人可连"在本入口不成立（`allowSameOrgAnyUser` 不参与），比扫码更严。
+- 手机拿到 `{sid,hash}` 后走**既有 HMAC 连接**：relay 与协议零改动；
+  连接后仍发 `enterprise-identity` 帧，桌面端按第 3.4 节再校验一次。
+
+### 6.5 验收
+
+- 页面单测：UA 门禁（普通 UA → `wecom-app-required` 且零请求）、企微 UA + 已登录 → 设备列表 →
+  配对 → `connect({sid, passHash, enterpriseAuth, enterpriseOrg})`；带 `sid/hash` 的扫码链接行为不变。
+- 桌面单测：登记/心跳/只应答同人/材料缺失不应答/注销。
+- 后台单测：设备 TTL 与隔离、列表不含密钥、配对一次性、过期与跨成员、web 授权 URL 与回跳。
+- 真机验收（需企微管理员）：工作台点开 → 静默授权 → 设备列表 → 连接；普通浏览器被拒。
+
+### 6.6 不做（本批）
+
+- 不改 relay/协议；不给 relay 加身份。
+- 不做后台菜单开关、`remote` 渠道准入、管理台设备页与审计（下一批，接口已按 `/api/client/*` 命名）。
+- 不做设备凭据轮换/过期策略本身；ucas 模式不提供免扫码。

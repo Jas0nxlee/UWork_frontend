@@ -259,8 +259,29 @@ describe("企业身份准入配置（方案 A）", () => {
         enterpriseAuth: { apiBaseUrl: "https://pivot.example.com", allowSameOrgAnyUser: true },
       }),
     ).toMatchObject({
-      enterpriseAuth: { apiBaseUrl: "https://pivot.example.com", allowSameOrgAnyUser: true },
+      enterpriseAuth: {
+        apiBaseUrl: "https://pivot.example.com",
+        allowSameOrgAnyUser: true,
+        backend: "ucas",
+      },
     });
+  });
+
+  it("backend 只认 uwork，其余一律回落到 ucas", () => {
+    const uwork = parseMobileRemoteControlConfig({
+      remotePageBaseUrl: "https://aihub.example.com/remote/v4",
+      relayWsUrl: "wss://aihub.example.com/remote/ws",
+      enterpriseAuth: { apiBaseUrl: "https://backend.example.com", backend: "uwork" },
+    });
+    expect(uwork?.enterpriseAuth?.backend).toBe("uwork");
+    for (const backend of ["UCAS", "other", 1, null]) {
+      const parsed = parseMobileRemoteControlConfig({
+        remotePageBaseUrl: "https://aihub.example.com/remote/v4",
+        relayWsUrl: "wss://aihub.example.com/remote/ws",
+        enterpriseAuth: { apiBaseUrl: "https://backend.example.com", backend },
+      });
+      expect(parsed?.enterpriseAuth?.backend).toBe("ucas");
+    }
   });
 
   it("allowSameOrgAnyUser 缺省为 false；基址不合法时整个准入配置被忽略但不影响远控", () => {
@@ -272,6 +293,7 @@ describe("企业身份准入配置（方案 A）", () => {
     expect(parsed?.enterpriseAuth).toEqual({
       apiBaseUrl: "https://pivot.example.com",
       allowSameOrgAnyUser: false,
+      backend: "ucas",
     });
     const rejected = parseMobileRemoteControlConfig({
       remotePageBaseUrl: "https://aihub.example.com/remote/v4",

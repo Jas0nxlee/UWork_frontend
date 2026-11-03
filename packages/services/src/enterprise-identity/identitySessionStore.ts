@@ -113,6 +113,26 @@ export function createSharedIdentitySessionStore(
  * 省略 transaction 时按单次读处理——读失败/并发写导致的解析失败一律返回 null，
  * 调用方据此把准入当作不可用，而不是拿半截身份去放行。
  */
+/** 与 readEnterpriseIdentitySubject 同一份共享会话；额外给出 opaque token（仅 Host 内部使用）。 */
+export async function readEnterpriseIdentitySession(
+  credentials: ICredentialService,
+  transaction: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation(),
+): Promise<{ orgId: string; userId: string; displayName: string; token: string } | null> {
+  try {
+    const record = await createSharedIdentitySessionStore(credentials, transaction).read();
+    const session = record.session;
+    if (!session) return null;
+    return {
+      orgId: session.profile.tenantId,
+      userId: session.profile.id,
+      displayName: session.profile.displayName,
+      token: session.token,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function readEnterpriseIdentitySubject(
   credentials: ICredentialService,
   transaction: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation(),

@@ -60,6 +60,8 @@ export interface WebRemoteControlEntryOptions {
   replaceHref(href: string): void;
   storage: Pick<Storage, "getItem" | "setItem">;
   locale: "zh-CN" | "en-US";
+  /** 企微内置浏览器判定用；缺省读 navigator.userAgent（测试可注入）。 */
+  userAgent?: string;
   devices(jwt: string, signal: AbortSignal): Promise<WebRemoteControlRelayV2Device[]>;
   subscribeVisible(listener: () => void): () => void;
   loginOptions?: Parameters<WebAuthService["startLogin"]>[0];

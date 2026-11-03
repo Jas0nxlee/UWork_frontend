@@ -1,4 +1,5 @@
 import type { RendererTelemetryEventPayload } from "@zcode/shared";
+import { startRemotePairingChannel, type RemotePairingChannel } from "./webRemoteControlRemotePairing.js";
 /* eslint-disable max-lines -- Web 远程控制 manager 承担外部 relay app payload 路由与 workspace bridge 编排。 */
 import type { MessagePortMain, UtilityProcess as ElectronUtilityProcess } from "electron";
 import { randomUUID } from "node:crypto";
@@ -183,11 +184,15 @@ interface WebRemoteControlManagerDependencies {
   enterpriseAuth?: {
     apiBaseUrl: string;
     allowSameOrgAnyUser: boolean;
+    /** uwork = 自有后台：额外开启免扫码的"设备登记 + 配对应答"通道。 */
+    backend?: "ucas" | "uwork";
     resolveLocalSubject?: () => Promise<{
       orgId: string;
       userId: string;
       displayName?: string;
     } | null>;
+    /** 本机企业会话令牌；免扫码通道用它访问 /api/client/remote-*。 */
+    resolveLocalSessionToken?: () => Promise<string | null>;
   };
   relayWsUrl: string;
   mobileRemoteControlUrl: string;
@@ -736,9 +741,17 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     emitRuntimeStatus(runtime);
   }
 
+  /** backend=uwork 时的免扫码配对通道，按窗口生命周期启停。 */
+  const remotePairingChannels = new Map<number, RemotePairingChannel>();
+
   async function stopWindowRuntime(windowId: number, reason: string): Promise<void> {
     windowLifecycles.get(windowId)?.controller.abort();
     windowLifecycles.delete(windowId);
+    const pairingChannel = remotePairingChannels.get(windowId);
+    if (pairingChannel) {
+      remotePairingChannels.delete(windowId);
+      void pairingChannel.dispose();
+    }
     const runtime = runtimes.get(windowId);
     if (!runtime) {
       return;
@@ -1776,6 +1789,28 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         appVersion: dependencies.appVersion,
         ...enterpriseQr,
       });
+      // 自有后台（backend=uwork）：登记设备并等待手机页的免扫码配对请求。
+      if (enterprise?.backend === "uwork" && enterpriseSubject && enterprise.resolveLocalSessionToken) {
+        const token = await enterprise.resolveLocalSessionToken().catch(() => null);
+        if (!token)
+          dependencies.logger.warn(
+            "[web-remote-control] remote pairing skipped: no enterprise session token",
+          );
+        else {
+          const channel = startRemotePairingChannel({
+            apiBaseUrl: enterprise.apiBaseUrl,
+            token,
+            deviceSid: auth.deviceSid,
+            deviceMid: dependencies.deviceMid,
+            deviceName: dependencies.deviceName,
+            platform: process.platform,
+            readPassHash: () => acceptedAuth.passHash,
+            logger: dependencies.logger,
+            signal: controller.signal,
+          });
+          remotePairingChannels.set(windowId, channel);
+        }
+      }
       emitRuntimeStatus(runtime);
       return {
         status: runtime.status === "active" ? "active" : "running",

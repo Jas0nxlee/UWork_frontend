@@ -214,6 +214,12 @@ export function getFailureDescription(
         failure.message ??
         formatMessage({ id: "webRemoteControl.failure.enterpriseIdentityRejected" })
       );
+    // 只允许企微应用进入的入口：普通浏览器被拦下时的可读原因。
+    case "wecom-app-required":
+      return (
+        failure.message ??
+        formatMessage({ id: "webRemoteControl.failure.wecomAppRequired" })
+      );
     case "unexpected-error":
       return formatMessage({ id: "webRemoteControl.failure.unexpectedError" });
   }

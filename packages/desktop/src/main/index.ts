@@ -68,6 +68,7 @@ import {
   setDataBaseDir,
   migrateApplicationStorage,
   resolveDefaultZCodeAgentCommand,
+  readEnterpriseIdentitySession,
   readEnterpriseIdentitySubject,
   startupStorage,
 } from "@zcode/services/node";
@@ -950,9 +951,13 @@ const webRemoteControlManager = createWebRemoteControlManager({
         enterpriseAuth: {
           apiBaseUrl: webRemoteEnterpriseAuth.apiBaseUrl,
           allowSameOrgAnyUser: webRemoteEnterpriseAuth.allowSameOrgAnyUser,
+          backend: webRemoteEnterpriseAuth.backend ?? "ucas",
           // 身份事实在 Host，但会话存在共享凭据里；读不到就返回 null（manager 会按未启用处理）。
           resolveLocalSubject: () =>
             readEnterpriseIdentitySubject(webRemoteControlCredentialService),
+          // 免扫码通道用它访问 /api/client/remote-*；没有会话就不启用通道（扫码兜底仍在）。
+          resolveLocalSessionToken: async () =>
+            (await readEnterpriseIdentitySession(webRemoteControlCredentialService))?.token ?? null,
         },
       }
     : {}),

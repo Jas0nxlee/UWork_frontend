@@ -2572,6 +2572,8 @@ const enUS: Record<string, string> = {
     "This device only accepts employees of the same company. Sign in with WeCom first.",
   "webRemoteControl.failure.enterpriseIdentityRejected":
     "The signed-in company identity does not match this device, so desktop rejected the connection.",
+  "webRemoteControl.failure.wecomAppRequired":
+    "This entry only works from the WeCom workbench; open it in WeCom and retry.",
   "webRemoteControl.failure.unexpectedError":
     "Could not start mobile remote control. Try again from desktop.",
   "webRemoteControl.copyLink": "Copy link",
