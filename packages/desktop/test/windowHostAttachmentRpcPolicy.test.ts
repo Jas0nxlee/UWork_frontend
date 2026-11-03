@@ -30,7 +30,9 @@ describe("Window Host attachment RPC policy", () => {
     expect([...policy!.allowedChannels].every((channel) => registeredChannels.has(channel))).toBe(
       true,
     );
-    expect(policy?.allowedChannels.size).toBe(46);
+    // 企业网关：手机远控的使用统计要读被控电脑的账号/套餐/用量。
+    expect(policy?.allowedChannels.has(ServiceChannels.UcasGateway)).toBe(true);
+    expect(policy?.allowedChannels.size).toBe(47);
   });
 
   it("keeps the complete service surface for desktop attachments", () => {

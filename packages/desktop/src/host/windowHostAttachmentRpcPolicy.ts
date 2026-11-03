@@ -47,6 +47,9 @@ const WEB_REMOTE_REPLAYABLE_ALLOWED_CHANNELS = new Set<string>([
   ServiceChannels.SourceServerWorkspace,
   ServiceChannels.UsageStats,
   ServiceChannels.CodingPlanSubscription,
+  // 企业网关的账号/套餐/用量是"这台电脑"的事实，手机远控看使用统计时要读它。
+  // 与其它 channel 同一套准入（配对已过同人校验），不额外放宽写操作。
+  ServiceChannels.UcasGateway,
   ServiceChannels.ClientScenes,
   ServiceChannels.Skills,
   ServiceChannels.SkillSync,
