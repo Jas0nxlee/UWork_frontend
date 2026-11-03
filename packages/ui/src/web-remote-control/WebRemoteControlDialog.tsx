@@ -16,6 +16,7 @@ import {
   Building2,
   CopyIcon,
   LoaderCircle,
+  Play,
   MonitorSmartphone,
   RefreshCw,
   Smartphone,
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { BotsDialog } from "@/BotsDialog.js";
 import { ProviderIcon } from "@/BotsDialog/shared.js";
+import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
@@ -102,6 +104,8 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     status: "idle",
   });
   const [loading, setLoading] = useState(false);
+  /** 首次读到 main 的真实状态前不渲染二维码/入口卡：避免打开时先闪一张二维码。 */
+  const [synced, setSynced] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   // 自有后台（backend=uwork）：手机从企微工作台进来，桌面只负责"开启 + 注册"，不再展示二维码。
   const workbenchEntry = status.entry === "wecom-workbench";
@@ -151,19 +155,18 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
         ) {
           nextStatus = currentStatus;
         } else {
-          const startResult = await platform.startWebRemoteControl({
-            workspacePath,
-            workspaceIdentity,
-            remoteSessionId,
-            initialTaskId,
-          });
-          // 兼容仍可返回 cancelled 的平台实现；当前 Desktop 不再叠加原生确认。
-          nextStatus = startResult.status === "cancelled" ? { status: "idle" } : startResult;
+          // 打开弹层只反映状态，不自动开启：开关由用户点"开启/停止"决定（状态是持久的）。
+          // 只保留 main 已经算好的入口形态（qr / wecom-workbench），避免闪二维码。
+          nextStatus = {
+            status: "idle",
+            ...(currentStatus.entry ? { entry: currentStatus.entry } : {}),
+          };
         }
         // Bugfix: 手机端默认主题已统一收敛到 dark，不再依赖二维码 URL 透传 theme。
         // 这里去掉启动参数里的 theme，避免桌面端主题无意义地参与远控链路。
 
         if (!cancelled) {
+          setSynced(true);
           setStatus(nextStatus);
           logger.info("[WebRemoteControlDialog] Web 远程控制状态已同步", {
             workspacePath,
@@ -208,6 +211,7 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
 
     return () => {
       cancelled = true;
+      setSynced(false);
     };
   }, [intl, open, platform, remoteSessionId, workspaceIdentity, workspacePath, initialTaskId]);
 
@@ -361,6 +365,36 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
     }
   };
 
+  const handleStart = async () => {
+    setLoading(true);
+    try {
+      const result = await platform.startWebRemoteControl({
+        workspacePath,
+        workspaceIdentity,
+        remoteSessionId,
+        initialTaskId,
+      });
+      setStatus(result.status === "cancelled" ? { status: "idle" } : result);
+      logger.info("[WebRemoteControlDialog] 已开启 Web 远程控制", {
+        workspacePath,
+        workspaceIdentity: workspaceIdentity ?? "none",
+        remoteSessionId: remoteSessionId ?? "none",
+        status: result.status,
+      });
+    } catch (error) {
+      const currentStatus = await platform.getWebRemoteControlStatus().catch(() => null);
+      if (currentStatus?.status === "auth-required") {
+        setStatus(currentStatus);
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus({ status: "error", workspacePath, remoteSessionId, error: message });
+      toast(intl.formatMessage({ id: "webRemoteControl.startFailed" }, { error: message }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStop = async () => {
     setLoading(true);
     try {
@@ -488,7 +522,7 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                 ) : (
                   <>
                     {workbenchEntry ? null : (
-                      <div className="mb-4 flex items-start gap-2">
+                      <div className={cn("mb-4 flex items-start gap-2", !synced && "invisible")}>
                         <Smartphone className="mt-0.5 size-4 shrink-0 text-foreground-subtle" />
                         <div className="min-w-0 space-y-1">
                           <div className="text-ui-base font-medium text-foreground">
@@ -527,6 +561,19 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                         </div>
                         {loading ? (
                           <LoaderCircle className="size-4 animate-spin text-foreground-subtle" />
+                        ) : status.status === "idle" ? (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="default"
+                            data-testid="web-remote-control-start"
+                            className="shrink-0 gap-2 enabled:cursor-pointer"
+                            onClick={() => void handleStart()}
+                            disabled={!synced}
+                          >
+                            <Play className="size-3.5" />
+                            {intl.formatMessage({ id: "webRemoteControl.start" })}
+                          </Button>
                         ) : (
                           <Button
                             type="button"
@@ -534,7 +581,6 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                             size="default"
                             className="shrink-0 gap-2 enabled:cursor-pointer"
                             onClick={() => void handleStop()}
-                            disabled={status.status === "idle"}
                           >
                             <Unplug className="size-3.5" />
                             {intl.formatMessage({ id: "webRemoteControl.stop" })}
@@ -555,45 +601,53 @@ export const WebRemoteControlDialog = memo(function WebRemoteControlDialogCompon
                         <p className="mt-3 text-ui-base/relaxed text-destructive">{status.error}</p>
                       ) : null}
                       {workbenchEntry ? null : (
-                      <div
-                        data-testid="web-remote-control-copy-link-row"
-                        className="mt-3 flex min-h-10 flex-wrap items-center gap-3 border-t border-border pt-3"
-                      >
-                        <div className="min-w-48 flex-1 text-ui-base/relaxed text-foreground-subtle">
-                          {intl.formatMessage({
-                            id: "webRemoteControl.copyLink.description",
-                          })}
-                        </div>
-                        {platform.refreshWebRemoteControlPairing ? (
+                        <div
+                          data-testid="web-remote-control-copy-link-row"
+                          aria-hidden={!synced || undefined}
+                          className={cn(
+                            "mt-3 flex min-h-10 flex-wrap items-center gap-3 border-t border-border pt-3",
+                            !synced && "invisible",
+                          )}
+                        >
+                          <div className="min-w-48 flex-1 text-ui-base/relaxed text-foreground-subtle">
+                            {intl.formatMessage({
+                              id: "webRemoteControl.copyLink.description",
+                            })}
+                          </div>
+                          {platform.refreshWebRemoteControlPairing ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="default"
+                              className="shrink-0 gap-2 enabled:cursor-pointer"
+                              onClick={() => void handleRefreshQr()}
+                              disabled={loading}
+                            >
+                              <RefreshCw className="size-3.5" />
+                              {intl.formatMessage({ id: "webRemoteControl.refreshQr" })}
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="outline"
                             size="default"
                             className="shrink-0 gap-2 enabled:cursor-pointer"
-                            onClick={() => void handleRefreshQr()}
-                            disabled={loading}
+                            onClick={() => void handleCopyLink()}
+                            disabled={!status.connectUrl || loading}
                           >
-                            <RefreshCw className="size-3.5" />
-                            {intl.formatMessage({ id: "webRemoteControl.refreshQr" })}
+                            <CopyIcon className="size-3.5" />
+                            {intl.formatMessage({ id: "webRemoteControl.copyLink" })}
                           </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="default"
-                          className="shrink-0 gap-2 enabled:cursor-pointer"
-                          onClick={() => void handleCopyLink()}
-                          disabled={!status.connectUrl || loading}
-                        >
-                          <CopyIcon className="size-3.5" />
-                          {intl.formatMessage({ id: "webRemoteControl.copyLink" })}
-                        </Button>
-                      </div>
+                        </div>
                       )}
                     </div>
                     <div
                       data-testid="web-remote-control-entry-panel"
-                      className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-background-alt p-4"
+                      aria-hidden={!synced || undefined}
+                      className={cn(
+                        "flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-background-alt p-4",
+                        !synced && "invisible",
+                      )}
                     >
                       {workbenchEntry ? (
                         <div className="flex max-w-sm flex-col items-center gap-2 text-center">

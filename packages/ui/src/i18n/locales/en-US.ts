@@ -2588,6 +2588,8 @@ const enUS: Record<string, string> = {
     "Refreshing will invalidate any remote control links that were copied or scanned before. Connected phones will need to scan the new QR code.",
   "webRemoteControl.refreshQr.success": "Remote control QR refreshed",
   "webRemoteControl.refreshQr.failed": "Could not refresh remote control QR: {error}",
+  "webRemoteControl.start": "Start",
+  "webRemoteControl.loadingStatus": "Reading remote control status…",
   "webRemoteControl.stop": "Stop",
   "webRemoteControl.switchWorkspace": "Switch workspace",
   "webRemoteControl.expandNavigation": "Expand tasks and workspaces",

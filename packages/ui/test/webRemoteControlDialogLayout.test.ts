@@ -243,6 +243,10 @@ describe("WebRemoteControlDialog layout", () => {
       }),
     );
 
+    // 打开只读状态，不自动开启；用户点"开启"后 main 返回 cancelled 时保持 idle。
+    const start = await view.findByTestId("web-remote-control-start");
+    expect(platformMock.startWebRemoteControl).not.toHaveBeenCalled();
+    fireEvent.click(start);
     await waitFor(() => expect(platformMock.startWebRemoteControl).toHaveBeenCalledOnce());
     expect(view.container.textContent).toContain("webRemoteControl.statusDetail.idle");
     expect(feedbackMocks.toast).not.toHaveBeenCalled();

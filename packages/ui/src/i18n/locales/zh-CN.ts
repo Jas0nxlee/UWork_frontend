@@ -2408,6 +2408,8 @@ const zhCN: Record<string, string> = {
     "刷新后，之前复制或扫码得到的远程控制链接将失效，已连接的手机需要重新扫码。",
   "webRemoteControl.refreshQr.success": "已刷新远程控制二维码",
   "webRemoteControl.refreshQr.failed": "刷新远程控制二维码失败：{error}",
+  "webRemoteControl.start": "开启",
+  "webRemoteControl.loadingStatus": "正在读取远程控制状态…",
   "webRemoteControl.stop": "停止",
   "webRemoteControl.switchWorkspace": "切换工作区",
   "webRemoteControl.expandNavigation": "展开任务和工作区",
