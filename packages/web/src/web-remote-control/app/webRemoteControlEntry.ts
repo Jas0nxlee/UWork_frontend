@@ -105,6 +105,17 @@ export class WebRemoteControlEntry {
     }
   }
 
+  /** 忘记"上次设备"：下次进来重新停在设备列表（用户想从头开始时用）。 */
+  forgetRememberedDevice(): void {
+    this.clearResumeTarget();
+    try {
+      this.options.storage.setItem(LAST_DEVICE_KEY, "");
+      this.options.storage.setItem(LAST_DEVICE_MID_KEY, "");
+    } catch {
+      // 存储不可用就只当本次没清成功。
+    }
+  }
+
   private clearResumeTarget(): void {
     try {
       this.options.sessionStorage?.removeItem(RESUME_KEY);
@@ -382,7 +393,7 @@ export class WebRemoteControlEntry {
       if (context) {
         this.reset();
         this.clearResumeTarget();
-        await this.openRemoteDevices(context);
+        await this.openRemoteDevices(context, { skipAutoConnect: true });
         return;
       }
       this.reset();
@@ -493,11 +504,14 @@ export class WebRemoteControlEntry {
   }
 
   /** 免扫码：打开"我的设备"列表（复用设备页视图与分组）。 */
-  private async openRemoteDevices(context: EnterpriseAuthContext): Promise<void> {
+  private async openRemoteDevices(
+    context: EnterpriseAuthContext,
+    options: { skipAutoConnect?: boolean } = {},
+  ): Promise<void> {
     this.remoteContext = context;
     // 落点顺序：本次会话刚连过的设备（版本号重载续连）→ 持久记住的上次设备（下次进来自动接回）。
-    // 两者都没有（第一次用）就停在列表让用户选。
-    const resume = this.resumeTarget();
+    // 两者都没有（第一次用）就停在列表让用户选。用户主动"切换设备"时这次不自动落点。
+    const resume = options.skipAutoConnect ? null : this.resumeTarget();
     let persistedSid: string | null = null;
     let persistedMid: string | null = null;
     try {
@@ -506,8 +520,8 @@ export class WebRemoteControlEntry {
     } catch {
       // 存储不可用只影响"上次设备"，不影响列表。
     }
-    const lastSid: string | null = resume?.sid ?? persistedSid;
-    const lastMid: string | null = resume?.mid ?? persistedMid;
+    const lastSid: string | null = options.skipAutoConnect ? null : (resume?.sid ?? persistedSid);
+    const lastMid: string | null = options.skipAutoConnect ? null : (resume?.mid ?? persistedMid);
     this.list = {
       view: { kind: "devices", devices: [], loading: true, error: false },
       unsubscribe: this.options.subscribeVisible(() => {

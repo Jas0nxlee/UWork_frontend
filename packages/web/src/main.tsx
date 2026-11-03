@@ -513,6 +513,7 @@ const remoteEntry = new WebRemoteControlEntry({
           onSwitchAccount={() => {
             void remoteEntry.switchAccount();
           }}
+          onForgetDevice={() => remoteEntry.forgetRememberedDevice()}
           locale={resolveWebRemoteControlScreenLocale(navigator.language)}
         />,
       );

@@ -31,6 +31,7 @@ const copyByLocale = {
     emptyTitle: "暂无设备",
     emptyDescription: "在电脑端登录同一账号并开启 Web 远程控制，然后刷新列表。",
     error: "无法加载设备，请检查网络后刷新。",
+    forgetDevice: "不再自动连接上次的设备",
   },
   "en-US": {
     title: "Choose a computer",
@@ -48,6 +49,7 @@ const copyByLocale = {
     emptyDescription:
       "Sign in with the same account on your computer, enable Web remote control, then refresh this list.",
     error: "Could not load devices. Check your connection and refresh.",
+    forgetDevice: "Stop auto-connecting to the last device",
   },
 };
 
@@ -64,6 +66,8 @@ interface WebRemoteControlDeviceListPageProps {
   onSelect(sid: string): void;
   onRefresh(): void;
   onSwitchAccount(): void;
+  /** 清除"上次设备"记忆：下次进来重新选（测试/换机用）。 */
+  onForgetDevice?(): void;
   /** 多连接弹层的“启动于”相对时间基准，测试注入。 */
   now?: () => number;
 }
@@ -233,6 +237,7 @@ export function WebRemoteControlDeviceListPage({
   onSelect,
   onRefresh,
   onSwitchAccount,
+  onForgetDevice,
   now = () => Date.now(),
 }: WebRemoteControlDeviceListPageProps) {
   const copy = copyByLocale[locale];
@@ -278,6 +283,20 @@ export function WebRemoteControlDeviceListPage({
           onSwitchAccount={onSwitchAccount}
         />
 
+        {onForgetDevice && view.devices.length > 0 ? (
+          <div className="mt-3 px-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-testid="web-remote-control-forget-device"
+              className="h-7 px-1 text-ui-sm text-foreground-subtle"
+              onClick={onForgetDevice}
+            >
+              {copy.forgetDevice}
+            </Button>
+          </div>
+        ) : null}
         {view.error ? (
           <p role="alert" className="mt-5 px-1 text-ui-sm text-destructive">
             {copy.error}
