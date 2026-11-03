@@ -2422,6 +2422,7 @@ const zhCN: Record<string, string> = {
   "webRemoteControl.taskStatus.error": "错误",
   "webRemoteControl.switchDevice": "切换设备",
   "webRemoteControl.unnamedDevice": "未命名设备",
+  "webRemoteControl.mobileShell.backToChat": "返回任务会话",
   "webRemoteControl.mobileShell.backHome": "返回任务首页",
   "webRemoteControl.mobileShell.chatTitle": "任务会话",
   "webRemoteControl.mobileShell.reconnecting": "正在自动重连...",

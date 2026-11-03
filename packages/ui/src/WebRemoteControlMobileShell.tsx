@@ -70,6 +70,7 @@ export function WebRemoteControlMobileShell({
   onCloseSidePane,
   renderTaskHome,
   renderChatHeader,
+  onExitMainView,
   sidePaneContent,
   switcher,
   mainView,
@@ -90,6 +91,8 @@ export function WebRemoteControlMobileShell({
     setSwitching(switching: boolean): void;
   }) => ReactNode;
   renderChatHeader: (options: { onBackHome: () => void }) => ReactNode;
+  /** 退出非 chat 主视图（插件市场/自动化）回到任务会话；缺省时按返回首页处理。 */
+  onExitMainView?: () => void;
   chatContent: ReactNode;
   chatOverlay?: ReactNode;
   sidePaneContent?: ReactNode;
@@ -110,8 +113,12 @@ export function WebRemoteControlMobileShell({
   );
   const shouldInertChatSurface = Boolean(sidePaneContent) && isSidePaneOpen;
   // 主视图接管时强制停在承载页：plugin-store/automations 都渲染在 chatContent 里。
-  const effectivePage: WebRemoteControlMobilePage =
-    mainView && mainView !== "chat" ? "chat" : currentPage;
+  const mainViewTakesSurface = Boolean(mainView && mainView !== "chat");
+  const effectivePage: WebRemoteControlMobilePage = mainViewTakesSurface ? "chat" : currentPage;
+  // 主视图接管时把底层页面也落到 chat：退出主视图那一下应当回到任务会话，不是任务首页。
+  useEffect(() => {
+    if (mainViewTakesSurface && currentPage !== "chat") setCurrentPage("chat");
+  }, [mainViewTakesSurface, currentPage]);
 
   const navigateToChat = useCallback(() => {
     setCurrentPage("chat");
@@ -188,9 +195,11 @@ export function WebRemoteControlMobileShell({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={intl.formatMessage({
-                    id: "webRemoteControl.mobileShell.backHome",
+                    id: mainViewTakesSurface
+                      ? "webRemoteControl.mobileShell.backToChat"
+                      : "webRemoteControl.mobileShell.backHome",
                   })}
-                  onClick={navigateHome}
+                  onClick={mainViewTakesSurface ? () => onExitMainView?.() : navigateHome}
                 >
                   <ArrowLeft className="size-4" />
                 </Button>

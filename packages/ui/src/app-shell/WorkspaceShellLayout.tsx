@@ -2027,6 +2027,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
         renderTaskHome={renderWorkspaceSidebar}
         switcher={webRemoteControlWorkspaceSwitcher}
         mainView={workspaceMainView}
+        onExitMainView={showChatMainView}
         renderChatHeader={() =>
           shouldRenderWorkspaceHeader ? (
             <ScopedErrorBoundary
