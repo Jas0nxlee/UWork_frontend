@@ -123,6 +123,8 @@ describe("WeCom workbench entry (backend=uwork)", () => {
     expect(params.passHash).toBe("hash-abcdefghijklmnop");
     expect(params.enterpriseAuth).toBe(BACKEND);
     expect(params.enterpriseOrg).toBe(ORG);
+    // 连接后手机顶部显示的是设备名，缺了就会退化成"未命名设备"。
+    expect(params.deviceName).toBe("办公室 Mac");
   });
 
   it("works from a clean workbench URL by resolving the backend on the same origin", async () => {
@@ -253,6 +255,25 @@ describe("WeCom workbench entry (backend=uwork)", () => {
     const kinds = f.onView.mock.calls.map(([view]) => (view as { kind: string }).kind);
     expect(kinds).toContain("authorizing");
     expect(kinds).not.toContain("login");
+  });
+
+  it("曾经是免扫码入口的来源探测失败时不退化成扫码页，给可重试的失败卡片", async () => {
+    const fetchImpl = vi.fn(async () => json({ error: { code: "INTERNAL" } }, 500));
+    const f = setup(
+      "https://pivot.example.test:23090/remote/v4",
+      WE_COM_UA,
+      fetchImpl as unknown as typeof fetch,
+    );
+    // 之前成功探测过（marker 在），这次失败了。
+    f.storage.set("uwork.remote-enterprise-entry:https://pivot.example.test:23090", "1");
+    await f.entry.start();
+    const views = f.onView.mock.calls.map(
+      ([view]) => view as { kind: string; failure?: { reason: string } },
+    );
+    expect(
+      views.some((view) => view.kind === "failure" && view.failure?.reason === "unexpected-error"),
+    ).toBe(true);
+    expect(views.some((view) => view.kind === "scan")).toBe(false);
   });
 
   it("still refuses a plain browser on a clean workbench URL", async () => {

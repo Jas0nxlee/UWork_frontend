@@ -298,7 +298,7 @@ function renderWebRemoteControlFailure(failure: WebRemoteControlFailure): void {
 
 /** 免扫码入口的过渡页：正在跳企业微信授权（不放 ZCode 官方登录入口）。 */
 function renderWebAuthorizingPage(): void {
-  document.title = "ZCode - Web Remote Control";
+  document.title = "UWork - 远程控制";
   root.render(
     <main className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="flex max-w-sm flex-col items-center gap-3 text-center">
@@ -327,7 +327,7 @@ function isWebOAuthCallback(params: URLSearchParams): boolean {
 }
 
 function renderWebAuthCallbackPage(): void {
-  document.title = "ZCode - Web Remote Control Sign In";
+  document.title = "UWork - 远程控制";
   const callbackState = parseOAuthState(
     new URLSearchParams(window.location.search).get("state") ?? "",
   );
@@ -419,7 +419,7 @@ async function renderConversationSharePage(): Promise<void> {
 }
 
 function renderWebLoginPage(): void {
-  document.title = "ZCode - Web Remote Control Sign In";
+  document.title = "UWork - 远程控制";
   root.render(<WebLoginPage onLogin={(provider) => remoteEntry.startLogin(provider)} />);
 }
 
@@ -461,7 +461,7 @@ const remoteEntry = new WebRemoteControlEntry({
     else if (view.kind === "login") renderWebLoginPage();
     else if (view.kind === "authorizing") renderWebAuthorizingPage();
     else if (view.kind === "devices") {
-      document.title = "ZCode - Web Remote Control";
+      document.title = "UWork - 远程控制";
       root.render(
         <WebRemoteControlDeviceListPage
           view={view}
@@ -1096,7 +1096,7 @@ function renderWebRemoteControlLoading(
   state: WebRemoteControlTerminalTransportState,
   device: WebRemoteControlConnectingDevice,
 ): void {
-  document.title = "ZCode - Web Remote Control";
+  document.title = "UWork - 远程控制";
   root.render(
     <WebRemoteControlLoadingScreen
       state={state}
@@ -1831,7 +1831,7 @@ async function bootstrapExternalRelayWebRemoteControl(
   ) => {
     if (terminated || versionGuard.isBlocked()) return;
     ready = true;
-    document.title = "ZCode - Web Remote Control";
+    document.title = "UWork - 远程控制";
     root.render(
       <AppErrorBoundary key={bridge.bridgeSessionId}>
         <ZCodeIntlProvider
@@ -1957,7 +1957,7 @@ async function bootstrapExternalRelayWebRemoteControl(
     currentWorkspaceKey = workspaceKey;
     currentTaskId = taskId;
     await updateMobileViewState(workspaceKey, taskId);
-    document.title = "ZCode - Web Remote Control";
+    document.title = "UWork - 远程控制";
     if (terminated || versionGuard.isBlocked()) return;
     // Bug 原因：staging 合并 a861a83cbc 丢了这里的 ready 标记，home-only 挂载后每次配对状态抖动
     // 都会被 onStateChange 当成首屏重渲染加载页，配对恢复后再整页重挂，引导与本地状态全部丢失。

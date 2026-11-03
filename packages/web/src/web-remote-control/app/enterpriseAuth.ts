@@ -34,6 +34,31 @@ export interface EnterpriseAuthStorageLike {
   removeItem?(key: string): void;
 }
 
+const ENTRY_MARKER_PREFIX = "uwork.remote-enterprise-entry:";
+
+/** 探测成功时记下"这个来源是免扫码入口"，供后续探测失败时区分扫码页。 */
+export function markEnterpriseEntryOrigin(
+  storage: EnterpriseAuthStorageLike,
+  origin: string,
+): void {
+  try {
+    storage.setItem(`${ENTRY_MARKER_PREFIX}${origin}`, "1");
+  } catch {
+    // 存储不可用只是少了这层判断，不影响入口本身。
+  }
+}
+
+export function isEnterpriseEntryOrigin(
+  storage: EnterpriseAuthStorageLike,
+  origin: string,
+): boolean {
+  try {
+    return storage.getItem(`${ENTRY_MARKER_PREFIX}${origin}`) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function readEnterpriseAuthToken(
   storage: EnterpriseAuthStorageLike,
   context: EnterpriseAuthContext,

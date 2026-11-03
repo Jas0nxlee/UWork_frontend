@@ -21,6 +21,8 @@ import {
   clearUworkWebAttempt,
   exchangeEnterpriseAuthCode,
   exchangeUworkWebCode,
+  isEnterpriseEntryOrigin,
+  markEnterpriseEntryOrigin,
   readEnterpriseAuthToken,
   readUworkWebAttempt,
   resolveEnterpriseAuthorizeUrl,
@@ -143,6 +145,7 @@ export class WebRemoteControlEntry {
           authBase = url.origin;
           orgId = sameOrigin.tenantId;
           pivotLoginBase = sameOrigin.pivotApiBaseUrl;
+          markEnterpriseEntryOrigin(this.options.storage, url.origin);
         }
       }
       this.backend = backend ?? "ucas";
@@ -164,6 +167,18 @@ export class WebRemoteControlEntry {
           const authorized = await this.ensureEnterpriseIdentity(context, url, "uwork");
           if (!authorized) return;
           await this.openRemoteDevices(context);
+          return;
+        }
+        // 探测失败：这个来源此前明确是免扫码入口（手机页），不能退化成"请扫描二维码"，
+        // 那会让人以为整条链路没生效；给可重试的失败卡片。
+        if (isEnterpriseEntryOrigin(this.options.storage, url.origin)) {
+          this.options.onView({
+            kind: "failure",
+            failure: {
+              reason: "unexpected-error",
+              message: "暂时连不上企业后台，请检查网络后重试。",
+            },
+          });
           return;
         }
         this.options.onView({ kind: "scan" });
@@ -535,6 +550,8 @@ export class WebRemoteControlEntry {
       this.connect({
         deviceSid: material.sid,
         ...(device?.device_mid ? { deviceMid: device.device_mid } : {}),
+        ...(device?.meta.name?.trim() ? { deviceName: device.meta.name.trim() } : {}),
+        ...(device?.meta.version ? { appVersion: device.meta.version } : {}),
         passHash: material.hash,
         enterpriseAuth: context.apiBaseUrl,
         enterpriseOrg: context.orgId,
