@@ -3337,13 +3337,16 @@ const enUS: Record<string, string> = {
   "settings.dataBaseDirBrowse": "Choose folder",
   "settings.dataBaseDirSave": "Save",
   "settings.dataBaseDirCopying": "Saving the migration request…",
-  "settings.dataBaseDirCopyFailed": "The migration request was not saved. The active directory is unchanged.",
+  "settings.dataBaseDirCopyFailed":
+    "The migration request was not saved. The active directory is unchanged.",
   "settings.dataBaseDirForbiddenInstallDir":
     "The data directory cannot be the UWork installation folder on Windows. Choose a folder outside the app install location.",
   "settings.dataBaseDirRestartRequired": "Migration scheduled. Restart the app to move your data.",
   "settings.dataBaseDirPendingTarget": "Active: {active}; destination after restart: {target}",
-  "settings.dataBaseDirMigrationCancelled": "The pending migration was cancelled. The active directory is unchanged.",
-  "settings.dataBaseDirInfoUnavailable": "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
+  "settings.dataBaseDirMigrationCancelled":
+    "The pending migration was cancelled. The active directory is unchanged.",
+  "settings.dataBaseDirInfoUnavailable":
+    "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
   "settings.locale.system": "System default",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",
@@ -4822,7 +4825,7 @@ const enUS: Record<string, string> = {
   "settings.skills.delete.title": "Delete skill",
   "settings.skills.delete.description":
     'Delete "{name}"? This removes the skill folder from disk and cannot be undone.',
-  "settings.skills.agent.glm": "ZCode Agent",
+  "settings.skills.agent.glm": "UWork Agent",
   "settings.skills.agent.unknown": "Unknown source",
   "settings.skills.create.open": "New skill",
   "settings.skills.create.taskCreateFailed":
@@ -5476,7 +5479,7 @@ const enUS: Record<string, string> = {
   "settings.hooks.customJson": "Custom fields JSON",
   "settings.hooks.customJsonObjectError": "Custom fields must be a JSON object.",
   "settings.hooks.customJsonParseError": "Custom fields JSON parsing failed.",
-  "settings.plugins.zcodeOnly": "ZCode Agent only",
+  "settings.plugins.zcodeOnly": "UWork Agent only",
   "settingsSync.dialog.title": "Import Settings",
   "settingsSync.dialog.description":
     "Only missing items will be imported. Existing settings will be skipped automatically.",

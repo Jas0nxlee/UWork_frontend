@@ -444,7 +444,6 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     );
   });
 
-
   it("backend=uwork 且登录在 pivot 时：身份证校验打 pivot，设备登记仍打自建后台", async () => {
     const refresh = vi.fn(async () => ({
       ok: true,
@@ -508,7 +507,9 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-1" });
     await vi.waitFor(() =>
-      expect(received.filter((payload) => payload.zcode_type === "bootstrap-response")).toHaveLength(1),
+      expect(
+        received.filter((payload) => payload.zcode_type === "bootstrap-response"),
+      ).toHaveLength(1),
     );
   });
 

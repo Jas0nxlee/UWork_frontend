@@ -948,7 +948,7 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       initialize: async (params: { workspacePath: string; workspaceIdentity?: string }) => ({
         available: false,
         workspaceKey: params.workspaceIdentity?.trim() || params.workspacePath,
-        reason: "ZCode agent service is not available before workspace bridge is connected.",
+        reason: "UWork agent service is not available before workspace bridge is connected.",
       }),
       disposeAll: () => {},
     }),
@@ -959,7 +959,7 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       }) => ({
         available: false,
         workspaceKey: params.workspaceIdentity?.trim() || params.workspacePath,
-        reason: "ZCode session service is not available before workspace bridge is connected.",
+        reason: "UWork session service is not available before workspace bridge is connected.",
       }),
     }),
     // 分享发布首期只属于 desktop local host；Web 首页和 /remote 不建立独立发布权威。

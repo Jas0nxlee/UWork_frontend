@@ -1,5 +1,8 @@
 import type { RendererTelemetryEventPayload } from "@zcode/shared";
-import { startRemotePairingChannel, type RemotePairingChannel } from "./webRemoteControlRemotePairing.js";
+import {
+  startRemotePairingChannel,
+  type RemotePairingChannel,
+} from "./webRemoteControlRemotePairing.js";
 /* eslint-disable max-lines -- Web 远程控制 manager 承担外部 relay app payload 路由与 workspace bridge 编排。 */
 import type { MessagePortMain, UtilityProcess as ElectronUtilityProcess } from "electron";
 import { randomUUID } from "node:crypto";
@@ -1398,8 +1401,8 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       const timer = setTimeout(() => controller.abort(), ENTERPRISE_IDENTITY_TIMEOUT_MS);
       try {
         // 手机令牌的归属方：backend=uwork 且手机页登录走 pivot 时是 pivot，否则就是 apiBaseUrl 本身。
-    const identityBase = enterprise.identityApiBaseUrl ?? enterprise.apiBaseUrl;
-    const response = await fetch(`${identityBase}/api/auth/refresh`, {
+        const identityBase = enterprise.identityApiBaseUrl ?? enterprise.apiBaseUrl;
+        const response = await fetch(`${identityBase}/api/auth/refresh`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           signal: controller.signal,
@@ -1800,7 +1803,11 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         ...enterpriseQr,
       });
       // 自有后台（backend=uwork）：登记设备并等待手机页的免扫码配对请求。
-      if (enterprise?.backend === "uwork" && enterpriseSubject && enterprise.resolveLocalSessionToken) {
+      if (
+        enterprise?.backend === "uwork" &&
+        enterpriseSubject &&
+        enterprise.resolveLocalSessionToken
+      ) {
         const token = await enterprise.resolveLocalSessionToken().catch(() => null);
         if (!token)
           dependencies.logger.warn(
