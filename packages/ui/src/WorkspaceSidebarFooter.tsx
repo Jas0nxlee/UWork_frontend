@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -165,6 +166,16 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
             className="w-max min-w-50 max-w-[calc(100vw-2rem)]"
             forceMount
           >
+            {/* 全部设置在设置页；这里给一个直达入口，避免左下角只看得到界面相关的几项。 */}
+            <DropdownMenuItem
+              data-testid="preferences-menu-app-settings"
+              disabled={!onSettingsButtonClick}
+              onSelect={() => onSettingsButtonClick?.()}
+            >
+              <Settings className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.appSettings" })}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Globe className="size-4" />

@@ -3056,6 +3056,7 @@ const enUS: Record<string, string> = {
   "sidebar.newTask": "New task",
 
   // Settings
+  "sidebar.settings.appSettings": "App settings",
   "settings.title": "Settings",
   "settings.breadcrumbLabel": "Settings path",
   "settings.subtitle":

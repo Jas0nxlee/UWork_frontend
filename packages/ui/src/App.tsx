@@ -878,10 +878,17 @@ export function App({
     setWorkspaceMainView("automations");
   }, []);
   const handleNavigateToPluginStoreMain = useCallback(() => {
+    // 远控 shell 不渲染独立的插件市场主视图（上游按桌面能力排除），这里落到 设置 → 插件，
+    // 否则侧栏那一行点了没有任何反应。
+    if (webRemoteControlWorkspaceSwitcher) {
+      setPendingSettingsPluginIntent("plugins");
+      handleOpenSettingsSection("plugin");
+      return;
+    }
     setPluginStoreOpenVersion((version) => version + 1);
     preserveNextSettingsExit();
     setWorkspaceMainView("plugin-store");
-  }, [preserveNextSettingsExit]);
+  }, [preserveNextSettingsExit, webRemoteControlWorkspaceSwitcher, handleOpenSettingsSection]);
   const handleOpenAutomationConsumed = useCallback(() => {
     setOpenAutomationId(null);
     setOpenAutomationTab(null);

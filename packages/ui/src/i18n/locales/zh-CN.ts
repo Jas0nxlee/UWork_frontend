@@ -2859,6 +2859,7 @@ const zhCN: Record<string, string> = {
   "sidebar.newTask": "新建任务",
 
   // 设置页
+  "sidebar.settings.appSettings": "应用设置",
   "settings.title": "设置",
   "settings.breadcrumbLabel": "设置路径",
   "settings.subtitle": "从左侧切换主要设置项，右侧查看详细配置。",
@@ -3131,7 +3132,8 @@ const zhCN: Record<string, string> = {
   "settings.dataBaseDirRestartRequired": "已记录待迁移目录，请重启应用完成迁移。",
   "settings.dataBaseDirPendingTarget": "当前使用：{active}；重启后迁移到：{target}",
   "settings.dataBaseDirMigrationCancelled": "已取消待执行迁移，当前目录未更改。",
-  "settings.dataBaseDirInfoUnavailable": "无法读取默认数据目录，暂时不能恢复默认。仍可选择明确的新目录，由服务校验。",
+  "settings.dataBaseDirInfoUnavailable":
+    "无法读取默认数据目录，暂时不能恢复默认。仍可选择明确的新目录，由服务校验。",
   "settings.locale.system": "系统默认",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",
