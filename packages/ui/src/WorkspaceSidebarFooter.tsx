@@ -30,6 +30,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { useEnterpriseIdentity } from "@/hooks/useEnterpriseIdentity.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useImNotifications } from "@/im/useImNotifications.js";
@@ -107,6 +108,16 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   useEffect(() => {
     void platform.setImBadgeCount?.({ count: imUnread });
   }, [platform, imUnread]);
+  // 退出登录与右上角身份徽标保持同一实现：identity.logout()（企业身份服务统一处理
+  // 会话清理与重启）；上下文里没有可登录身份时（如手机只读端）回落到传入的回调。
+  const identity = useEnterpriseIdentity();
+  const canIdentityLogout = Boolean(identity?.allowLogin);
+  const logoutAvailable = canIdentityLogout || Boolean(onLogout);
+  const runLogout = () => {
+    if (canIdentityLogout) void identity?.logout();
+    else onLogout?.();
+  };
+
   const messagesLabel =
     imUnread > 0
       ? `${intl.formatMessage({ id: "im.title" })} (${imUnread})`
@@ -299,8 +310,8 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
             <DropdownMenuSeparator />
             <DropdownMenuItem
               data-testid="preferences-menu-logout"
-              disabled={!onLogout}
-              onSelect={() => onLogout?.()}
+              disabled={!logoutAvailable}
+              onSelect={runLogout}
             >
               <LogOut className="size-4" />
               {intl.formatMessage({ id: "sidebar.settings.logout" })}

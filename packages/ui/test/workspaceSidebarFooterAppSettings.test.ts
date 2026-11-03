@@ -35,6 +35,13 @@ vi.mock("@/store/StoreProvider.js", () => ({
     selector({ isRestoringOAuthSession: false }),
 }));
 
+const identityMock = vi.hoisted(() => ({
+  value: null as null | { allowLogin: boolean; logout: () => Promise<void> },
+}));
+vi.mock("@/hooks/useEnterpriseIdentity.js", () => ({
+  useEnterpriseIdentity: () => identityMock.value,
+}));
+
 vi.mock("@/hooks/useSettingService.js", () => ({
   useSettings: () => ({ settings: {}, update: vi.fn() }),
 }));
@@ -70,11 +77,13 @@ vi.mock("@/components/ui/dropdown-menu.js", () => ({
 
 afterEach(cleanup);
 
-function renderFooter(options: {
-  onSettingsButtonClick?: () => void;
-  onOpenUsageStats?: () => void;
-  onLogout?: () => void;
-} = {}): void {
+function renderFooter(
+  options: {
+    onSettingsButtonClick?: () => void;
+    onOpenUsageStats?: () => void;
+    onLogout?: () => void;
+  } = {},
+): void {
   render(
     createElement(WorkspaceSidebarFooter, {
       theme: "dark",
@@ -114,7 +123,11 @@ describe("左下角偏好菜单里的「应用设置」", () => {
   });
 
   it("菜单顺序：界面项在上，应用设置/使用统计/退出登录在下面，退出登录在最后", () => {
-    renderFooter({ onSettingsButtonClick: () => {}, onOpenUsageStats: () => {}, onLogout: () => {} });
+    renderFooter({
+      onSettingsButtonClick: () => {},
+      onOpenUsageStats: () => {},
+      onLogout: () => {},
+    });
     const menu = screen.getByRole("menu");
     const text = menu.textContent ?? "";
     const localeIndex = text.indexOf("settings.locale");
@@ -125,5 +138,16 @@ describe("左下角偏好菜单里的「应用设置」", () => {
     expect(appIndex).toBeGreaterThan(localeIndex);
     expect(usageIndex).toBeGreaterThan(appIndex);
     expect(logoutIndex).toBeGreaterThan(usageIndex);
+  });
+
+  it("有企业身份时与右上角徽标同一实现：调 identity.logout()", () => {
+    const logout = vi.fn(async () => {});
+    identityMock.value = { allowLogin: true, logout };
+    const fallback = vi.fn();
+    renderFooter({ onSettingsButtonClick: () => {}, onLogout: fallback });
+    fireEvent.click(screen.getByTestId("preferences-menu-logout"));
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    identityMock.value = null;
   });
 });
