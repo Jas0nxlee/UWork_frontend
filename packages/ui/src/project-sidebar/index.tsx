@@ -49,6 +49,7 @@ import { ProjectSidebarListHeader } from "@/project-sidebar/ProjectSidebarListHe
 import { ProjectSidebarNavigation } from "@/project-sidebar/ProjectSidebarNavigation.js";
 import { HomeOnlyWorkspaceRows } from "@/project-sidebar/HomeOnlyWorkspaceRows.js";
 import { WorkspaceSidebarFooter } from "@/WorkspaceSidebarFooter.js";
+import { setPendingSettingsSection } from "@/lib/settingsNavigation.js";
 import { WorkspaceModeHeader } from "@/WorkspaceModeHeader.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useTabStoreApi } from "@/store/TabStoreProvider.js";
@@ -198,6 +199,11 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
   const openSettings = useCallback(() => {
     tabStore.getState().openSettingsTab();
   }, [tabStore]);
+  const openUsageStats = useCallback(() => {
+    // 与设置页同一个分区入口：先记一 次意图，再打开设置 tab。
+    setPendingSettingsSection("usage");
+    tabStore.getState().openSettingsTab();
+  }, [tabStore]);
   const changeLocale = useCallback(
     (value: string) => setLocalePreference(value as Locale | "system"),
     [setLocalePreference],
@@ -328,6 +334,8 @@ export const ProjectSidebar = memo(function ProjectSidebar(props: ProjectSidebar
                 onLocaleChange={changeLocale}
                 onThemeChange={changeTheme}
                 onSettingsButtonClick={openSettings}
+                onOpenUsageStats={openUsageStats}
+                onLogout={props.onLogout}
                 onMessagesButtonClick={props.onOpenMessages}
                 workspacePath={props.workspacePath}
                 // 项目侧栏不再从 tab 反推身份；远控入口必须沿用当前 attachment 的精确 scope。

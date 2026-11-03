@@ -2859,6 +2859,8 @@ const zhCN: Record<string, string> = {
   "sidebar.newTask": "新建任务",
 
   // 设置页
+  "sidebar.settings.usageStats": "使用统计",
+  "sidebar.settings.logout": "退出登录",
   "sidebar.settings.appSettings": "应用设置",
   "settings.title": "设置",
   "settings.breadcrumbLabel": "设置路径",

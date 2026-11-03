@@ -304,6 +304,7 @@ export function SettingsPage({
   onCreateTask,
   onOpenWorkspace,
   onOpenRemoteWorkspace,
+  onLogout,
   allowOpenWorkspace = true,
 }: {
   isDesktop?: boolean;
@@ -780,8 +781,11 @@ export function SettingsPage({
     sharedSettings?.askUserQuestionAutoResolutionEnabled !== false;
   const modelIoFullRetentionEnabled = sharedSettings?.modelIoFullRetentionEnabled === true;
   const [dataBaseDir, setDataBaseDir] = useState("");
-  const [pendingDataDirectoryMigration,setPendingDataDirectoryMigration]=useState<AppSettings["pendingDataDirectoryMigration"]>();
-  useEffect(()=>{setPendingDataDirectoryMigration(sharedSettings?.pendingDataDirectoryMigration);},[sharedSettings?.pendingDataDirectoryMigration]);
+  const [pendingDataDirectoryMigration, setPendingDataDirectoryMigration] =
+    useState<AppSettings["pendingDataDirectoryMigration"]>();
+  useEffect(() => {
+    setPendingDataDirectoryMigration(sharedSettings?.pendingDataDirectoryMigration);
+  }, [sharedSettings?.pendingDataDirectoryMigration]);
   const [terminalInheritSystemProfile, setTerminalInheritSystemProfile] = useState(true);
   const [terminalFontFamily, setTerminalFontFamily] = useState("");
   const [integratedTerminalShell, setIntegratedTerminalShell] =
@@ -811,7 +815,7 @@ export function SettingsPage({
   const [zcodeInteractionBehavior, setZCodeInteractionBehavior] =
     useState<ZCodeInteractionBehavior>("queue");
   const [defaultHomeDir, setDefaultHomeDir] = useState("");
-  const [dataDirectoryInfoUnavailable,setDataDirectoryInfoUnavailable]=useState(false);
+  const [dataDirectoryInfoUnavailable, setDataDirectoryInfoUnavailable] = useState(false);
   const [hostPlatform, setHostPlatform] = useState("");
 
   useEffect(() => {
@@ -895,10 +899,20 @@ export function SettingsPage({
         );
       })
       .catch(() => {});
-    localHostServices.settingService.getDataDirectoryInfo().then((info)=>{
-      if(!active)return;
-      setDataBaseDir(info.activeBaseDir);setDefaultHomeDir(info.defaultBaseDir);setDataDirectoryInfoUnavailable(false);
-    }).catch(()=>{if(active){setDefaultHomeDir("");setDataDirectoryInfoUnavailable(true);}});
+    localHostServices.settingService
+      .getDataDirectoryInfo()
+      .then((info) => {
+        if (!active) return;
+        setDataBaseDir(info.activeBaseDir);
+        setDefaultHomeDir(info.defaultBaseDir);
+        setDataDirectoryInfoUnavailable(false);
+      })
+      .catch(() => {
+        if (active) {
+          setDefaultHomeDir("");
+          setDataDirectoryInfoUnavailable(true);
+        }
+      });
     localHostServices.systemService
       .info()
       .then((info) => {
@@ -1162,11 +1176,13 @@ export function SettingsPage({
         failureStage: "data_directory_update",
       });
       // Bugfix: 迁移失败时不能先把本地状态改成失败路径，否则设置页会误显示为已切换。
-      const saved=await localHostServices.settingService.get();
+      const saved = await localHostServices.settingService.get();
       setPendingDataDirectoryMigration(saved.pendingDataDirectoryMigration);
-      platform.syncAppSettings?.({pendingDataDirectoryMigration:saved.pendingDataDirectoryMigration});
+      platform.syncAppSettings?.({
+        pendingDataDirectoryMigration: saved.pendingDataDirectoryMigration,
+      });
     },
-    [localHostServices.settingService,platform],
+    [localHostServices.settingService, platform],
   );
   const handleTaskAutoArchiveEnabledChange = useCallback(
     async (enabled: boolean) => {
@@ -1691,6 +1707,8 @@ export function SettingsPage({
                   onLocaleChange={handleFooterLocaleChange}
                   onThemeChange={handleFooterThemeChange}
                   onSettingsButtonClick={onBack}
+                  onOpenUsageStats={() => setActiveSection("usage")}
+                  onLogout={onLogout}
                   settingsButtonMode="back"
                   // 头像菜单是 WorkspaceSidebarFooter 的共享菜单，Settings 场景不能丢失桌面平台能力。
                   // 之前这里没透传 isDesktop，导致同一个头像菜单在设置页缺少界面缩放入口。

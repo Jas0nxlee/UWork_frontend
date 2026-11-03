@@ -40,6 +40,9 @@ export const REMOTE_WORKSPACE_RPC_CHANNELS = [
   "outputStyleService",
   "settingsSyncService",
   "promptAttachmentTransferService",
+  // 企业网关（账号/套餐/用量）：远控客户端要看到被控电脑上的真实状态，
+  // 服务在 Host 上无条件创建（未配置时是空态），因此可以进合同。
+  "ucasGatewayService",
 ] as const satisfies readonly (keyof IServiceAccessor)[];
 
 /**

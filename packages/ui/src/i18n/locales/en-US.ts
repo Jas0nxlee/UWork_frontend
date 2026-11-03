@@ -3056,6 +3056,8 @@ const enUS: Record<string, string> = {
   "sidebar.newTask": "New task",
 
   // Settings
+  "sidebar.settings.usageStats": "Usage stats",
+  "sidebar.settings.logout": "Sign out",
   "sidebar.settings.appSettings": "App settings",
   "settings.title": "Settings",
   "settings.breadcrumbLabel": "Settings path",

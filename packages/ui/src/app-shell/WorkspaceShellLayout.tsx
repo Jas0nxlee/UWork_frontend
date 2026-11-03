@@ -2142,7 +2142,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                 </div>
               </AutomationsMainBreadcrumbFrame>
             </main>
-          ) : workspaceMainView === "plugin-store" && !isWebRemoteControlShell ? (
+          ) : workspaceMainView === "plugin-store" ? (
             <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
               <AutomationsMainBreadcrumbFrame
                 isDesktop={Boolean(isDesktop)}
@@ -2587,7 +2587,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                               </div>
                             </AutomationsMainBreadcrumbFrame>
                           </main>
-                        ) : workspaceMainView === "plugin-store" && !isWebRemoteControlShell ? (
+                        ) : workspaceMainView === "plugin-store" ? (
                           <main className="flex h-full min-h-0 flex-1 flex-col bg-background">
                             <AutomationsMainBreadcrumbFrame
                               isDesktop={Boolean(isDesktop)}

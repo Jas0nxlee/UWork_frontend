@@ -70,14 +70,18 @@ vi.mock("@/components/ui/dropdown-menu.js", () => ({
 
 afterEach(cleanup);
 
-function renderFooter(onSettingsButtonClick?: () => void): void {
+function renderFooter(options: {
+  onSettingsButtonClick?: () => void;
+  onOpenUsageStats?: () => void;
+  onLogout?: () => void;
+} = {}): void {
   render(
     createElement(WorkspaceSidebarFooter, {
       theme: "dark",
       localeMenuValue: "zh-CN",
       onLocaleChange: () => {},
       onThemeChange: () => {},
-      onSettingsButtonClick,
+      ...options,
     } as never),
   );
 }
@@ -85,7 +89,7 @@ function renderFooter(onSettingsButtonClick?: () => void): void {
 describe("左下角偏好菜单里的「应用设置」", () => {
   it("点它直接进全部设置（与右侧齿轮同一个动作）", () => {
     const openSettings = vi.fn();
-    renderFooter(openSettings);
+    renderFooter({ onSettingsButtonClick: openSettings });
     const item = screen.getByTestId("preferences-menu-app-settings");
     expect(item.textContent).toContain("sidebar.settings.appSettings");
     fireEvent.click(item);
@@ -93,9 +97,19 @@ describe("左下角偏好菜单里的「应用设置」", () => {
   });
 
   it("没有设置入口时禁用，避免点了没反应", () => {
-    renderFooter(undefined);
+    renderFooter();
     expect(
       screen.getByTestId("preferences-menu-app-settings").getAttribute("disabled"),
     ).not.toBeNull();
+  });
+
+  it("同样提供「使用统计」与「退出登录」两个原生入口", () => {
+    const usage = vi.fn();
+    const logout = vi.fn();
+    renderFooter({ onSettingsButtonClick: () => {}, onOpenUsageStats: usage, onLogout: logout });
+    fireEvent.click(screen.getByTestId("preferences-menu-usage-stats"));
+    fireEvent.click(screen.getByTestId("preferences-menu-logout"));
+    expect(usage).toHaveBeenCalledTimes(1);
+    expect(logout).toHaveBeenCalledTimes(1);
   });
 });

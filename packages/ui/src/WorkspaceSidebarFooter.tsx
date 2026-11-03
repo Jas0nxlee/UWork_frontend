@@ -19,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import {
+  ChartNoAxesColumn,
+  LogOut,
   PencilRuler,
   Globe,
   Maximize,
@@ -48,6 +50,8 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange,
   onThemeChange,
   onSettingsButtonClick,
+  onOpenUsageStats,
+  onLogout,
   onMessagesButtonClick,
   settingsButtonMode = "settings",
   isDesktop = false,
@@ -62,6 +66,10 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange: (value: string) => void;
   onThemeChange: (value: string) => void;
   onSettingsButtonClick?: () => void;
+  /** 左下角菜单直达"使用统计"（设置页的用量分区）。 */
+  onOpenUsageStats?: () => void;
+  /** 左下角菜单的退出登录；缺省不显示可用项。 */
+  onLogout?: () => void;
   /** 打开 IM 侧边面板；Host 没注册消息服务时由外层不传（按钮自动隐藏）。 */
   onMessagesButtonClick?: () => void;
   settingsButtonMode?: "settings" | "back";
@@ -174,6 +182,22 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
             >
               <Settings className="size-4" />
               {intl.formatMessage({ id: "sidebar.settings.appSettings" })}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="preferences-menu-usage-stats"
+              disabled={!onOpenUsageStats}
+              onSelect={() => onOpenUsageStats?.()}
+            >
+              <ChartNoAxesColumn className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.usageStats" })}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="preferences-menu-logout"
+              disabled={!onLogout}
+              onSelect={() => onLogout?.()}
+            >
+              <LogOut className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.logout" })}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
