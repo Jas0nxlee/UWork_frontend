@@ -260,7 +260,9 @@ export function WebRemoteControlMobileShell({
                       ].join(" ")}
                     >
                       {isMobileViewport ? (
-                        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-header px-2">
+                        // 必须压住消息/预览自己的浮层（IM 列表背板是 absolute inset-0 z-20），
+                        // 否则第一次点"返回任务"会先被内层背板吃掉。
+                        <div className="relative z-40 flex h-11 shrink-0 items-center gap-2 border-b border-border bg-header px-2">
                           <Button
                             type="button"
                             variant="ghost"
