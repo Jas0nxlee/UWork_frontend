@@ -174,32 +174,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
             className="w-max min-w-50 max-w-[calc(100vw-2rem)]"
             forceMount
           >
-            {/* 全部设置在设置页；这里给一个直达入口，避免左下角只看得到界面相关的几项。 */}
-            <DropdownMenuItem
-              data-testid="preferences-menu-app-settings"
-              disabled={!onSettingsButtonClick}
-              onSelect={() => onSettingsButtonClick?.()}
-            >
-              <Settings className="size-4" />
-              {intl.formatMessage({ id: "sidebar.settings.appSettings" })}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              data-testid="preferences-menu-usage-stats"
-              disabled={!onOpenUsageStats}
-              onSelect={() => onOpenUsageStats?.()}
-            >
-              <ChartNoAxesColumn className="size-4" />
-              {intl.formatMessage({ id: "sidebar.settings.usageStats" })}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              data-testid="preferences-menu-logout"
-              disabled={!onLogout}
-              onSelect={() => onLogout?.()}
-            >
-              <LogOut className="size-4" />
-              {intl.formatMessage({ id: "sidebar.settings.logout" })}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <Globe className="size-4" />
@@ -304,6 +278,33 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             ) : null}
+            {/* 界面相关在上，应用级动作在下：全部设置 / 使用统计 /（最后）退出登录。 */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="preferences-menu-app-settings"
+              disabled={!onSettingsButtonClick}
+              onSelect={() => onSettingsButtonClick?.()}
+            >
+              <Settings className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.appSettings" })}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="preferences-menu-usage-stats"
+              disabled={!onOpenUsageStats}
+              onSelect={() => onOpenUsageStats?.()}
+            >
+              <ChartNoAxesColumn className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.usageStats" })}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="preferences-menu-logout"
+              disabled={!onLogout}
+              onSelect={() => onLogout?.()}
+            >
+              <LogOut className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.logout" })}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">

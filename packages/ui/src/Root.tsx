@@ -585,6 +585,7 @@ function RootInner({
     handleOpenFolderFromWorkspaceMenu,
     handleCreateTask,
     handleBackFromSettings,
+    handleLogout,
   } = useRootWorkspaceActions({
     intl,
     platform,
@@ -1327,6 +1328,7 @@ function RootInner({
     onCreateTask: handleCreateTask,
     onOpenWorkspace: handleOpenWorkspace,
     allowOpenWorkspace,
+    onLogout: handleLogout,
     user,
   };
 
@@ -1443,6 +1445,7 @@ function RootInner({
               remoteWorkspaceSessions={remoteWorkspaceSessions}
               allowRemoteWorkspace={allowRemoteWorkspace}
               handleBackFromSettings={handleBackFromSettings}
+              handleLogout={handleLogout}
               user={user}
               reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
               remoteWorkspaceRecoveryByWorkspaceKey={remoteWorkspaceRecoveryByWorkspaceKey}

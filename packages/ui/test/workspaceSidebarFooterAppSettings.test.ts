@@ -112,4 +112,18 @@ describe("左下角偏好菜单里的「应用设置」", () => {
     expect(usage).toHaveBeenCalledTimes(1);
     expect(logout).toHaveBeenCalledTimes(1);
   });
+
+  it("菜单顺序：界面项在上，应用设置/使用统计/退出登录在下面，退出登录在最后", () => {
+    renderFooter({ onSettingsButtonClick: () => {}, onOpenUsageStats: () => {}, onLogout: () => {} });
+    const menu = screen.getByRole("menu");
+    const text = menu.textContent ?? "";
+    const localeIndex = text.indexOf("settings.locale");
+    const appIndex = text.indexOf("sidebar.settings.appSettings");
+    const usageIndex = text.indexOf("sidebar.settings.usageStats");
+    const logoutIndex = text.indexOf("sidebar.settings.logout");
+    expect(localeIndex).toBeGreaterThanOrEqual(0);
+    expect(appIndex).toBeGreaterThan(localeIndex);
+    expect(usageIndex).toBeGreaterThan(appIndex);
+    expect(logoutIndex).toBeGreaterThan(usageIndex);
+  });
 });
