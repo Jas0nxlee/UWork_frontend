@@ -190,26 +190,24 @@ describe("仓库内随包默认配置", () => {
     });
 
     expect(config).toEqual({
-      remotePageBaseUrl: "https://aihub.ucas.com.cn/remote/v4",
-      relayWsUrl: "wss://aihub.ucas.com.cn/remote/ws",
+      remotePageBaseUrl: "https://pivot.ucas.com.cn:23090/remote/v4",
+      relayWsUrl: "wss://pivot.ucas.com.cn:23090/remote/ws",
       enterpriseAuth: {
-        apiBaseUrl: "https://aihub.ucas.com.cn",
-        identityApiBaseUrl: "https://pivot.ucas.com.cn:23090",
+        apiBaseUrl: "https://pivot.ucas.com.cn:23090",
         allowSameOrgAnyUser: false,
         backend: "uwork",
       },
     });
   });
 
-  it("随包配置的企业身份：设备接口在自建后台、身份校验走 pivot", () => {
+  it("随包配置的企业身份：页面、设备接口、身份校验同源走 pivot（后台经代理）", () => {
     const config = readMobileRemoteControlConfigSync({
       isPackaged: false,
       resourcesPath: "/unused",
       appPath: join(process.cwd(), "packages", "desktop"),
     });
     expect(config.enterpriseAuth).toEqual({
-      apiBaseUrl: "https://aihub.ucas.com.cn",
-      identityApiBaseUrl: "https://pivot.ucas.com.cn:23090",
+      apiBaseUrl: "https://pivot.ucas.com.cn:23090",
       allowSameOrgAnyUser: false,
       backend: "uwork",
     });
