@@ -537,11 +537,12 @@ export class WebRemoteControlEntry {
         const views = devices.map(toRelayDeviceView);
         const groups = groupWebRemoteControlDevices(views, this.options.locale, knownDevices);
         rememberKnownDevices(this.options.storage, knownDevices, groups);
-        list.view = { ...list.view, devices: groups, loading: false, error: false };
         const autoSid = resolveAutoConnectSid(views, groups, list.lastSid, list.lastMid);
         list.lastSid = null;
         list.lastMid = null;
-        if (autoSid) void this.pairRemoteDevice(autoSid);
+        list.view = { ...list.view, devices: groups, loading: false, error: false };
+        // 续连时把列表藏起来直接配对，避免"闪一次设备选择"。
+        if (autoSid) void this.pairRemoteDevice(autoSid, { whilePairing: "hideList" });
         else this.options.onView(list.view);
       } catch {
         if (signal.aborted) return;
@@ -555,7 +556,10 @@ export class WebRemoteControlEntry {
   }
 
   /** 选中设备 → 后台建配对请求 → 等桌面应答 → 用材料走既有 HMAC 连接。 */
-  private async pairRemoteDevice(sid: string): Promise<void> {
+  private async pairRemoteDevice(
+    sid: string,
+    options: { whilePairing?: "hideList" } = {},
+  ): Promise<void> {
     const context = this.remoteContext;
     const list = this.list;
     if (!context || !list || list.view.loading || list.view.error) return;
@@ -567,7 +571,12 @@ export class WebRemoteControlEntry {
       void this.start();
       return;
     }
-    list.view = { ...list.view, loading: true, error: false };
+    list.view = {
+      ...list.view,
+      devices: options.whilePairing === "hideList" ? [] : list.view.devices,
+      loading: true,
+      error: false,
+    };
     this.options.onView(list.view);
     try {
       const pairing = await requestRemotePairing({

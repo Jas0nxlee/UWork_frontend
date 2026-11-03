@@ -1823,6 +1823,15 @@ async function bootstrapExternalRelayWebRemoteControl(
     return { bridge: response.bridge, services, relayProtocol };
   };
 
+  /** 连接后的版本号重载：本次标签页有续连标记时，Root 直接落在任务会话而不是首页。 */
+  const resumeChatIntent = (): WebRemoteControlMobileNavigationIntent | undefined => {
+    try {
+      return window.sessionStorage.getItem("zcode-web-remote-resume") ? "chat" : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
   const renderExternalRelayRoot = (
     services: Awaited<ReturnType<typeof connectViaProtocol>>,
     bridge: WebRemoteControlExternalWorkspaceBridge,
@@ -2080,7 +2089,7 @@ async function bootstrapExternalRelayWebRemoteControl(
     const result = await openWorkspaceBridge(selectedWorkspace.workspaceKey, {
       taskId: selectedWorkspace.taskId,
     });
-    renderExternalRelayRoot(result.services, result.bridge);
+    renderExternalRelayRoot(result.services, result.bridge, resumeChatIntent());
   };
 
   const lifecycle = createWebRemoteControlLifecycleRecovery({
