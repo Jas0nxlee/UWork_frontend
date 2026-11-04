@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSharedIdentitySessionStore } from "../src/enterprise-identity/identitySessionStore.js";
+import {
+  createSharedIdentitySessionStore,
+  readEnterpriseIdentitySubject,
+} from "../src/enterprise-identity/identitySessionStore.js";
 import { Emitter } from "@zcode/rpc";
 import { createEnterpriseIdentityService } from "../src/enterprise-identity/enterpriseIdentityService.js";
 import type { BroadcastMessage } from "../src/broadcast/broadcast.js";
@@ -55,6 +58,81 @@ test("global logout advances tombstone revision and rejects old callbacks", asyn
   await a.write(null, undefined, () => true);
   assert.equal((await b.write(session, 0, () => true)).accepted, false);
   assert.deepEqual(await b.read(), { revision: 1, session: null });
+});
+
+test("session expiry notifies readers again after the shared tombstone is committed", async () => {
+  const stores = setup();
+  let clock = 1000;
+  await stores.a.write(session, 0, () => true);
+  const service = createEnterpriseIdentityService({
+    credentials: stores.credentials,
+    sessionStore: stores.a,
+    now: () => clock,
+    adapter: {
+      start: async () => {
+        throw new Error("Login is outside this regression");
+      },
+      restore: async () => session,
+    },
+  });
+  await service.restoreSession();
+  const reads: Array<ReturnType<typeof readEnterpriseIdentitySubject>> = [];
+  const listener = service.onDidChange(() => {
+    reads.push(readEnterpriseIdentitySubject(stores.credentials));
+  });
+  clock = 2001;
+  assert.equal((await service.getView()).status, "signed-out");
+  const observed = await Promise.all(reads);
+  assert.equal(observed[0]?.userId, profile.id, "UI 清空时共享清理仍在途");
+  assert.equal(observed.at(-1), null, "共享清理提交后必须再提示 owner 读者");
+  listener.dispose();
+});
+
+test("late logout broadcast cannot replace a newer authenticated owner view", async () => {
+  const stores = setup();
+  await stores.a.write(session, 0, () => true);
+  let releaseLogout!: () => void;
+  let broadcastStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    broadcastStarted = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    releaseLogout = resolve;
+  });
+  let holdBroadcast = true;
+  const nextSession = { ...session, profile: { ...profile, id: "new-user" } };
+  const service = createEnterpriseIdentityService({
+    credentials: stores.credentials,
+    sessionStore: stores.a,
+    now: () => 1000,
+    adapter: {
+      start: async () => ({
+        id: "new-login",
+        authorizationUrl: "https://example.com/login",
+        expiresAt: 1500,
+      }),
+      restore: async () => session,
+      poll: async () => ({ status: "authenticated", session: nextSession }),
+    },
+    broadcast: {
+      onMessage: () => ({ dispose() {} }),
+      send: async () => {
+        if (!holdBroadcast) return;
+        holdBroadcast = false;
+        broadcastStarted();
+        await gate;
+      },
+    },
+  });
+  await service.restoreSession();
+  const logout = service.logout();
+  await started;
+  await service.beginLogin();
+  await service.pollLogin("new-login");
+  releaseLogout();
+  await logout;
+  assert.equal((await service.getView()).profile?.id, "new-user");
+  assert.equal((await stores.a.read()).session?.profile.id, "new-user");
 });
 test("stale token renewal cannot overwrite a newer renewal or another login", async () => {
   const { a, b } = setup();

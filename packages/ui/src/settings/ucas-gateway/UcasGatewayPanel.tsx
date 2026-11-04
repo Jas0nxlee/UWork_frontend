@@ -19,7 +19,7 @@ export function UcasGatewayPanel() {
   const t: Translate = (id, values) =>
     intl.formatMessage({ id: `settings.usage.gateway.${id}` }, values);
 
-  if (!gateway.available) {
+  if (!gateway.available || gateway.loadFailed) {
     return (
       <UsageEmptyState title={t("unavailable.title")} description={t("unavailable.description")} />
     );

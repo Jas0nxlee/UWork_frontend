@@ -12,6 +12,23 @@ const repositoryRoot = resolve(import.meta.dirname, "../..");
 const exec = promisify(execFile);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+test("copied Material Icon roots are available from a checkout without generated mirrors", async () => {
+  const copied = JSON.parse(
+    await readFile(resolve(repositoryRoot, "third-party/copied-components.json"), "utf8"),
+  );
+  const icons = copied.find((component) => component.id === "Material Icon Theme");
+  assert.ok(icons, "Material Icon Theme must retain its copied-source declaration");
+  for (const root of icons.roots) {
+    // 合并后 Share 已复用 Web 图标；登记生成镜像会让本地副本掩盖干净检出的 ENOENT。
+    const { stdout } = await exec("git", ["ls-files", "-z", "--", root], {
+      cwd: repositoryRoot,
+    });
+    const files = stdout.split("\0").filter(Boolean);
+    assert.ok(files.length > 0, `Copied icon root has no tracked sources: ${root}`);
+    for (const file of files) await readFile(resolve(repositoryRoot, file));
+  }
+});
+
 test("generated notices retain workspace patches and reject changed patch files", async (t) => {
   const root = await mkdtemp(resolve(tmpdir(), "uwork-notice-patches-"));
   t.after(() => rm(root, { recursive: true, force: true }));

@@ -60,6 +60,16 @@ jobs:
           packages/desktop/test/packagedDesktopCdp.test.ts
           packages/desktop/test/enterpriseLoginIpcBindings.test.ts
           packages/ui/test/v4ConversationDraftEmptyStateLogo.test.ts
+      - name: Validate remote control and enterprise workbench regressions
+        run: >-
+          pnpm exec vitest run
+          packages/desktop/test/webRemoteControl
+          packages/desktop/test/windowHostAttachmentRpcPolicy.test.ts
+          packages/desktop/test/remoteWorkspaceRpcContract.test.ts
+          packages/ui/test/webRemoteControlDialogLayout.test.ts
+          packages/ui/test/workspaceSidebarFooterAppSettings.test.ts
+          packages/web/test/webRemoteControlWecomEntry.test.ts
+          packages/web/test/webRemoteControlRemoteDevices.test.ts
       - name: Validate complete desktop Agent and shared runtime build
         run: node scripts/build-desktop-agent-cli.mjs
       - name: Validate CLI session database upgrade safety
@@ -97,6 +107,7 @@ jobs:
           scripts/test/wecom-release-*.test.mjs
           scripts/test/desktop-asar-runtime.test.mjs
           scripts/test/desktop-packaging-config.test.mjs
+          scripts/test/web-remote-uwork-integration.test.mjs
           scripts/test/arms-patch-install-contract.test.mjs
           scripts/test/generate-third-party-notices.test.mjs
           scripts/third-party-notices.test.mjs

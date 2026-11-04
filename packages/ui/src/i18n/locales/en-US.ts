@@ -526,7 +526,6 @@ const enUS: Record<string, string> = {
     "Resends the full reply as text. Content already received may be duplicated.",
   "bots.privateDelivery.retryFailed": "Sending failed. Check the error details before retrying.",
   "bots.boundGroups.title": "Bound groups",
-  "bots.manage.open": "Bot channels",
   "bots.boundGroups.count": "{count} topics",
   "bots.boundGroups.countOne": "{count} topic",
   "bots.boundGroups.toggle": "Enable group: {name}",
@@ -2569,8 +2568,17 @@ const enUS: Record<string, string> = {
     "The external relay connection is unavailable. Make sure desktop is online, then try again.",
   "webRemoteControl.failure.unsupportedAction":
     "Web remote control mode can only open workspaces that are already open in the current desktop window.",
+  "webRemoteControl.failure.enterpriseIdentityRequired":
+    "This device only accepts employees of the same company. Sign in with WeCom first.",
+  "webRemoteControl.failure.enterpriseIdentityRejected":
+    "The signed-in company identity does not match this device, so desktop rejected the connection.",
+  "webRemoteControl.failure.wecomAppRequired":
+    "This entry only works from the WeCom workbench; open it in WeCom and retry.",
   "webRemoteControl.failure.unexpectedError":
     "Could not start mobile remote control. Try again from desktop.",
+  "webRemoteControl.workbench.title": "Available in WeCom",
+  "webRemoteControl.workbench.description":
+    "Open WeCom → Workbench → UWork remote control to connect to this computer directly, no QR scan needed.",
   "webRemoteControl.copyLink": "Copy link",
   "webRemoteControl.copyLink.copied": "Remote control link copied",
   "webRemoteControl.copyLinkFailed": "Could not copy remote control link: {error}",
@@ -2580,6 +2588,8 @@ const enUS: Record<string, string> = {
     "Refreshing will invalidate any remote control links that were copied or scanned before. Connected phones will need to scan the new QR code.",
   "webRemoteControl.refreshQr.success": "Remote control QR refreshed",
   "webRemoteControl.refreshQr.failed": "Could not refresh remote control QR: {error}",
+  "webRemoteControl.start": "Start",
+  "webRemoteControl.loadingStatus": "Reading remote control status…",
   "webRemoteControl.stop": "Stop",
   "webRemoteControl.switchWorkspace": "Switch workspace",
   "webRemoteControl.expandNavigation": "Expand tasks and workspaces",
@@ -2594,6 +2604,8 @@ const enUS: Record<string, string> = {
   "webRemoteControl.taskStatus.error": "Error",
   "webRemoteControl.switchDevice": "Switch device",
   "webRemoteControl.unnamedDevice": "Unnamed device",
+  "webRemoteControl.mobileShell.backToTask": "Back to task",
+  "webRemoteControl.mobileShell.backToChat": "Back to task",
   "webRemoteControl.mobileShell.backHome": "Back to task home",
   "webRemoteControl.mobileShell.chatTitle": "Task chat",
   "webRemoteControl.mobileShell.reconnecting": "Reconnecting automatically...",
@@ -3048,6 +3060,9 @@ const enUS: Record<string, string> = {
   "sidebar.newTask": "New task",
 
   // Settings
+  "sidebar.settings.usageStats": "Usage stats",
+  "sidebar.settings.logout": "Sign out",
+  "sidebar.settings.appSettings": "App settings",
   "settings.title": "Settings",
   "settings.breadcrumbLabel": "Settings path",
   "settings.subtitle":
@@ -4835,7 +4850,7 @@ const enUS: Record<string, string> = {
   "settings.skills.delete.title": "Delete skill",
   "settings.skills.delete.description":
     'Delete "{name}"? This removes the skill folder from disk and cannot be undone.',
-  "settings.skills.agent.glm": "ZCode Agent",
+  "settings.skills.agent.glm": "UWork Agent",
   "settings.skills.agent.unknown": "Unknown source",
   "settings.skills.create.open": "New skill",
   "settings.skills.create.taskCreateFailed":
@@ -5489,7 +5504,7 @@ const enUS: Record<string, string> = {
   "settings.hooks.customJson": "Custom fields JSON",
   "settings.hooks.customJsonObjectError": "Custom fields must be a JSON object.",
   "settings.hooks.customJsonParseError": "Custom fields JSON parsing failed.",
-  "settings.plugins.zcodeOnly": "ZCode Agent only",
+  "settings.plugins.zcodeOnly": "UWork Agent only",
   "settingsSync.dialog.title": "Import Settings",
   "settingsSync.dialog.description":
     "Only missing items will be imported. Existing settings will be skipped automatically.",

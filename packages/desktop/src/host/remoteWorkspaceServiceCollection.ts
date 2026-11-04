@@ -43,6 +43,7 @@ import {
   ITaskGroupService,
   IRemoteProjectService,
   IPromptAttachmentTransferService,
+  IUcasGatewayService,
   type ServiceDescriptor,
   type IServiceAccessor,
 } from "@zcode/services";
@@ -104,6 +105,7 @@ export const REMOTE_WORKSPACE_RPC_REGISTRATIONS = [
   ["outputStyleService", IOutputStyleService],
   ["settingsSyncService", ISettingsSyncService],
   ["promptAttachmentTransferService", IPromptAttachmentTransferService],
+  ["ucasGatewayService", IUcasGatewayService],
 ] as const satisfies readonly [keyof IServiceAccessor, ServiceDescriptor<unknown>][];
 
 const conversationShareLog = createServiceLogger("conversation-share");
@@ -247,6 +249,7 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     .register(IMemoryService, params.connectionServices.memoryService)
     .register(IOutputStyleService, params.connectionServices.outputStyleService)
     .register(ISettingsSyncService, params.connectionServices.settingsSyncService)
+    .register(IUcasGatewayService, params.connectionServices.ucasGatewayService)
     .register(
       IPromptAttachmentTransferService,
       params.connectionServices.promptAttachmentTransferService,

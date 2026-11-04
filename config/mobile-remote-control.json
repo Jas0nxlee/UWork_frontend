@@ -1,0 +1,9 @@
+{
+  "remotePageBaseUrl": "https://pivot.ucas.com.cn:23090/remote/v4",
+  "relayWsUrl": "wss://pivot.ucas.com.cn:23090/remote/ws",
+  "enterpriseAuth": {
+    "apiBaseUrl": "https://pivot.ucas.com.cn:23090",
+    "allowSameOrgAnyUser": false,
+    "backend": "uwork"
+  }
+}

@@ -139,6 +139,7 @@ Test entry points and environment dependencies are defined by each package’s `
 | `packages/ui`                                        | Shared React UI, hooks, and state                    |
 | `packages/services`                                  | Business services and persistence                    |
 | `packages/provider`, `packages/provider-node`        | Provider configuration and model registry            |
+| `packages/web`                                       | Mobile web client (remote control page)              |
 | `packages/server`                                    | HTTP / WebSocket services                            |
 | `packages/shared`, `packages/rpc`, `packages/client` | Protocols, RPC, and client                           |
 

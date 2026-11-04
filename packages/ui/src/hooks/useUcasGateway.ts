@@ -13,6 +13,8 @@ import { logger } from "@/logger.js";
 export interface UcasGatewayController {
   /** 当前 Host 是否注册了企业网关服务。 */
   available: boolean;
+  /** 视图读取失败（例如远控通道未注册）：面板给明确失败态，不能一直转圈。 */
+  loadFailed: boolean;
   view: UcasGatewayView | null;
   busy: boolean;
   period: UcasGatewayUsagePeriod;
@@ -36,6 +38,7 @@ export function useUcasGateway(): UcasGatewayController {
   const services = useOptionalBaseWorkspaceServices();
   const service: IUcasGatewayService | null = services?.ucasGatewayService ?? null;
   const [view, setView] = useState<UcasGatewayView | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   // 周期/指标以服务端视图回显为唯一事实，本地只保存"刚点下、还没拿到结果"的选择：
   // 面板切分区或重挂载时不会被重置回默认值再回查一次（那会让数字在周期之间跳）。
@@ -58,10 +61,14 @@ export function useUcasGateway(): UcasGatewayController {
       else logger.warn("UCAS gateway view projection rejected an invalid payload");
     };
     const subscription = service.onDidChange(apply);
+    setLoadFailed(false);
     void service
       .getView()
       .then(apply)
-      .catch(() => logger.warn("UCAS gateway view could not be loaded"));
+      .catch(() => {
+        logger.warn("UCAS gateway view could not be loaded");
+        if (active) setLoadFailed(true);
+      });
     return () => {
       active = false;
       generation.current++;
@@ -127,6 +134,7 @@ export function useUcasGateway(): UcasGatewayController {
 
   return {
     available: service !== null,
+    loadFailed,
     view,
     busy,
     period,

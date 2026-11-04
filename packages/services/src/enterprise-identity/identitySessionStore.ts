@@ -105,6 +105,48 @@ export function createSharedIdentitySessionStore(
   };
 }
 
+/**
+ * 只读地取一次"本机是谁"（组织 + 人 + 显示名），给 Main 侧的准入比对用
+ * （手机远控要判断"是不是同一家公司的同一个人"）。
+ *
+ * 为什么由这里提供：会话的存储键与 schema 是这一层的事实，Main 不该自己拼 key。
+ * 省略 transaction 时按单次读处理——读失败/并发写导致的解析失败一律返回 null，
+ * 调用方据此把准入当作不可用，而不是拿半截身份去放行。
+ */
+/** 与 readEnterpriseIdentitySubject 同一份共享会话；额外给出 opaque token（仅 Host 内部使用）。 */
+export async function readEnterpriseIdentitySession(
+  credentials: ICredentialService,
+  transaction: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation(),
+): Promise<{ orgId: string; userId: string; displayName: string; token: string } | null> {
+  try {
+    const record = await createSharedIdentitySessionStore(credentials, transaction).read();
+    const session = record.session;
+    if (!session) return null;
+    return {
+      orgId: session.profile.tenantId,
+      userId: session.profile.id,
+      displayName: session.profile.displayName,
+      token: session.token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function readEnterpriseIdentitySubject(
+  credentials: ICredentialService,
+  transaction: <T>(operation: () => Promise<T>) => Promise<T> = (operation) => operation(),
+): Promise<{ orgId: string; userId: string; displayName: string } | null> {
+  try {
+    const record = await createSharedIdentitySessionStore(credentials, transaction).read();
+    const profile = record.session?.profile;
+    if (!profile) return null;
+    return { orgId: profile.tenantId, userId: profile.id, displayName: profile.displayName };
+  } catch {
+    return null;
+  }
+}
+
 /** 注入测试/单 Host 的兼容端口，保持历史独立客户端增量的凭据格式。 */
 export function createLocalIdentitySessionStore(
   credentials: ICredentialService,

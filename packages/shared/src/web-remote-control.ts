@@ -69,6 +69,10 @@ export type WebRemoteControlFailureReason =
   | "connection-recovery-timeout"
   | "relay-unavailable"
   | "unsupported-action"
+  | "enterprise-identity-required"
+  | "enterprise-identity-rejected"
+  /** 企微内置浏览器专属入口：普通浏览器打开时直接拒绝。 */
+  | "wecom-app-required"
   | "unexpected-error";
 
 export interface WebRemoteControlFailure {
@@ -244,6 +248,13 @@ export interface WebRemoteControlHmacQrParams {
   deviceName?: string;
   appVersion?: string;
   theme?: WebRemoteControlThemeSeed;
+  /**
+   * 企业身份准入（方案 A，见 specs/remote-control-enterprise-auth.md）：
+   * `enterpriseAuth` 是 ucas-proxy control-plane 基址，`org` 是桌面当前选中的组织 id。
+   * 两者必须同时存在才生效——半配置宁可当作未启用，也不生成一张必然失败的码。
+   */
+  enterpriseAuth?: string;
+  enterpriseOrg?: string;
 }
 
 export interface BuildWebRemoteControlHmacQrUrlOptions extends WebRemoteControlHmacQrParams {
@@ -342,6 +353,25 @@ export function parseWebRemoteControlExternalQrParams(
   return result;
 }
 
+/**
+ * 企业准入基址：必须是可公网访问的 https（本机调试允许 http://localhost / 127.0.0.1），
+ * 不允许 query/hash——手机页会自己拼 `/api/auth/*` 路径。不合法返回 null（视为未启用）。
+ */
+export function parseWebRemoteControlEnterpriseAuthBase(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  const local =
+    url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  if (!(url.protocol === "https:" || (url.protocol === "http:" && local))) return null;
+  if (url.search || url.hash) return null;
+  return `${url.origin}${url.pathname.replace(/\/+$/u, "")}`;
+}
+
 export function buildWebRemoteControlHmacQrUrl({
   baseUrl,
   deviceSid,
@@ -351,6 +381,8 @@ export function buildWebRemoteControlHmacQrUrl({
   deviceName,
   appVersion,
   theme,
+  enterpriseAuth,
+  enterpriseOrg,
 }: BuildWebRemoteControlHmacQrUrlOptions): string {
   const url = new URL(baseUrl);
   url.searchParams.set("sid", deviceSid);
@@ -365,6 +397,13 @@ export function buildWebRemoteControlHmacQrUrl({
   }
   if (appVersion?.trim()) {
     url.searchParams.set("app_version", appVersion);
+  }
+  // 企业身份准入的两个参数必须成对出现；单给一个等于半配置，宁可不写。
+  const enterpriseAuthBase = parseWebRemoteControlEnterpriseAuthBase(enterpriseAuth);
+  const enterpriseOrgId = typeof enterpriseOrg === "string" ? enterpriseOrg.trim() : "";
+  if (enterpriseAuthBase && enterpriseOrgId && enterpriseOrgId.length <= 256) {
+    url.searchParams.set("enterprise_auth", enterpriseAuthBase);
+    url.searchParams.set("org", enterpriseOrgId);
   }
   void theme;
   // Bugfix: 手机端主题现在固定走本地默认 dark，不再通过二维码 URL 透传 theme。
@@ -382,6 +421,10 @@ export function parseWebRemoteControlHmacQrParams(
   const rawTimestamp = readNonEmptySearchParam(params, "t");
   const timestamp = rawTimestamp ? Number(rawTimestamp) : Number.NaN;
   const theme = readNonEmptySearchParam(params, "theme");
+  const enterpriseAuth = parseWebRemoteControlEnterpriseAuthBase(
+    readNonEmptySearchParam(params, "enterprise_auth"),
+  );
+  const enterpriseOrg = readNonEmptySearchParam(params, "org");
 
   if (
     !deviceSid ||
@@ -407,6 +450,9 @@ export function parseWebRemoteControlHmacQrParams(
       ? { appVersion: readNonEmptySearchParam(params, "app_version") }
       : {}),
     ...(isWebRemoteControlThemeSeed(theme) ? { theme } : {}),
+    ...(enterpriseAuth && enterpriseOrg && enterpriseOrg.length <= 256
+      ? { enterpriseAuth, enterpriseOrg }
+      : {}),
   };
 }
 
@@ -448,6 +494,11 @@ export interface WebRemoteControlStartResult {
   status: Extract<WebRemoteControlStatusKind, "running" | "connecting" | "active">;
   sessionId: string;
   windowControlSessionId?: string;
+  /**
+   * 入口形态：启动结果也要带，否则 UI 拿到 start 的返回值时不知道是企微工作台入口，
+   * 会先按二维码入口画一帧（"点开启先闪二维码"就是这样来的）。
+   */
+  entry?: WebRemoteControlStatus["entry"];
   deviceToken?: string;
   tokenKind?: WebRemoteControlTokenKind;
   expiresAt?: number;
@@ -480,6 +531,11 @@ export interface WebRemoteControlStatus {
   /** Main 校验后的瞬时可见任务；remoteSessionId 仅由所属 bridge 注入，不接受 Web 自报。 */
   mobileTaskView?: (WebRemoteControlMobileTaskView & { remoteSessionId?: string }) | null;
   mobileDeviceInfo?: WebRemoteControlMobileDeviceInfo;
+  /**
+   * 手机侧的进入方式：`qr` = 扫桌面二维码（ucas 老路径）；
+   * `wecom-workbench` = 桌面只做"开启并注册"，员工从企微工作台直接进来（uwork 后台）。
+   */
+  entry?: "qr" | "wecom-workbench";
   qrUrl?: string;
   connectUrl?: string;
   workspacePath?: string;
@@ -806,6 +862,14 @@ export interface WebRemoteControlMobileDiagnosticPayload {
 }
 
 export type WebRemoteControlAppPayload =
+  | {
+      /**
+       * 手机端企业身份准入（specs/remote-control-enterprise-auth.md）：配对后先发这一帧，
+       * 桌面校验通过前不处理该终端的其它 payload。未启用准入时不出现。
+       */
+      zcode_type: "enterprise-identity";
+      token: string;
+    }
   | {
       zcode_type: "telemetry-report";
       event: MobileSessionCreateTelemetry | MobilePluginDiscoveryTelemetry;

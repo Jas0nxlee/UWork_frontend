@@ -182,7 +182,7 @@
     "id": "Material Icon Theme",
     "roots": [
       "packages/desktop/src/renderer/public/material-icons",
-      "packages/web-share/public/material-icons"
+      "packages/web/public/material-icons"
     ],
     "license": "MIT",
     "source": "https://raw.githubusercontent.com/material-extensions/vscode-material-icon-theme/cb1dfb6d9cb73b15681a93939983d75dbba7bf5b/LICENSE",

@@ -136,6 +136,10 @@ function createManager(
     resolveWslTarget?: (
       target: Extract<RemoteTarget, { kind: "wsl" }>,
     ) => Promise<Extract<RemoteTarget, { kind: "wsl" }>>;
+    webRemoteControlManager?: {
+      failRemoteSession: ReturnType<typeof vi.fn>;
+      replaceRemoteSession: ReturnType<typeof vi.fn>;
+    };
     logger?: {
       info: ReturnType<typeof vi.fn>;
       warn: ReturnType<typeof vi.fn>;
@@ -153,6 +157,7 @@ function createManager(
     reportRemoteConnectionStateChanged: options?.reportRemoteConnectionStateChanged,
     reportRemoteDisconnect: options?.reportRemoteDisconnect,
     monotonicNowMs: options?.monotonicNowMs,
+    webRemoteControlManagerRef: { current: options?.webRemoteControlManager ?? null },
   });
 }
 
@@ -1565,10 +1570,16 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
     );
   });
 
-  it("Source 自动重连后先恢复 Desktop 且不遗留旧 session", async () => {
+  it("Source 自动重连后先恢复 Desktop，手机 bridge 失败不回滚新 session", async () => {
     const child = new MockUtilityProcess(1001);
     const win = createWindow(1, 101);
-    const manager = createManager(new Map([[101, child]]));
+    const webRemoteControlManager = {
+      failRemoteSession: vi.fn(),
+      replaceRemoteSession: vi.fn(async () => {
+        throw new Error("mobile bridge unavailable");
+      }),
+    };
+    const manager = createManager(new Map([[101, child]]), { webRemoteControlManager });
     const workspacePath = "/work/demo";
     const workspaceIdentity = "remote:ssh:dev.internal:22:developer:/work/demo";
     const connecting = manager.createRemoteWorkspaceSession(win as never, sshTarget, "connect-1", {
@@ -1594,6 +1605,7 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
       recoveryAttempt: 2,
       recoveryLimit: 3,
     });
+    expect(webRemoteControlManager.failRemoteSession).not.toHaveBeenCalled();
     expect(win.webContents.send).toHaveBeenCalledWith(PlatformChannels.RemoteSessionClosed, {
       sessionId: "remote-session-1",
       reason: "host-exit",
@@ -1626,6 +1638,12 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
         workspaceIdentity,
       }),
     );
+    expect(webRemoteControlManager.replaceRemoteSession).toHaveBeenCalledWith({
+      previousSessionId: "remote-session-1",
+      sessionId: "remote-session-2",
+      workspacePath,
+      workspaceIdentity,
+    });
     expect(child.postMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: HostMessageTypes.DisposeRemoteWorkspaceSession,
@@ -1641,6 +1659,11 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
       signal: null,
       recoverable: false,
     });
+    expect(webRemoteControlManager.failRemoteSession).toHaveBeenCalledWith(
+      "remote-session-2",
+      "window-host:connection-offline",
+      expect.objectContaining({ reason: "workspace-closed" }),
+    );
   });
 
   async function reconnectSourceSession(params: {
@@ -1775,7 +1798,13 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
   it("手机项目准备只转交 Host descriptor，不创建桌面 tab/continuous attachment", async () => {
     const child = new MockUtilityProcess(1001);
     const win = createWindow(1, 101);
-    const manager = createManager(new Map([[101, child]]));
+    const remoteControl = {
+      failRemoteSession: vi.fn(),
+      replaceRemoteSession: vi.fn(async () => undefined),
+    };
+    const manager = createManager(new Map([[101, child]]), {
+      webRemoteControlManager: remoteControl,
+    });
     const pending = manager.prepareProjectWorkspace(
       win as never,
       { projectId: "p", hostId: "remote:server:s" },
@@ -1828,6 +1857,11 @@ describe("desktopRemoteSessions R1 window Host forwarding", () => {
       previousRemoteSessionId: "mobile-scope",
       descriptor: { ...remote, remoteSessionId: "mobile-reconnected", generation: 2 },
     });
+    await vi.waitFor(() =>
+      expect(remoteControl.replaceRemoteSession).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: "mobile-reconnected" }),
+      ),
+    );
     expect(win.webContents.postMessage).not.toHaveBeenCalled();
     manager.disposeRemoteWorkspaceSessionsForWindow(101);
   });

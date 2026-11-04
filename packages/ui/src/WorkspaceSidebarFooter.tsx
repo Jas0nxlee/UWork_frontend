@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -18,7 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import {
-  Bot,
+  ChartNoAxesColumn,
+  LogOut,
   PencilRuler,
   Globe,
   Maximize,
@@ -28,7 +30,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { BotsDialog } from "@/BotsDialog.js";
+import { useEnterpriseIdentity } from "@/hooks/useEnterpriseIdentity.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useImNotifications } from "@/im/useImNotifications.js";
@@ -38,6 +40,7 @@ import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
 import type { Theme } from "@/useTheme.js";
+import { WorkspaceWebRemoteControlTrigger } from "@/WorkspaceWebRemoteControlTrigger.js";
 
 const DESKTOP_ZOOM_MIN_LEVEL = -3;
 const DESKTOP_ZOOM_MAX_LEVEL = 5;
@@ -48,12 +51,15 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange,
   onThemeChange,
   onSettingsButtonClick,
+  onOpenUsageStats,
+  onLogout,
   onMessagesButtonClick,
   settingsButtonMode = "settings",
   isDesktop = false,
   workspacePath,
-  // workspaceIdentity / workspaceRemoteSessionId / activeTaskId 原为远控入口透传参数；
-  // 发布分支删除入口后不再读取，仍在 props 契约中保留给侧栏调用方。
+  workspaceIdentity,
+  workspaceRemoteSessionId,
+  activeTaskId,
   className,
 }: {
   theme: Theme;
@@ -61,6 +67,10 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onLocaleChange: (value: string) => void;
   onThemeChange: (value: string) => void;
   onSettingsButtonClick?: () => void;
+  /** 左下角菜单直达"使用统计"（设置页的用量分区）。 */
+  onOpenUsageStats?: () => void;
+  /** 左下角菜单的退出登录；缺省不显示可用项。 */
+  onLogout?: () => void;
   /** 打开 IM 侧边面板；Host 没注册消息服务时由外层不传（按钮自动隐藏）。 */
   onMessagesButtonClick?: () => void;
   settingsButtonMode?: "settings" | "back";
@@ -98,12 +108,20 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   useEffect(() => {
     void platform.setImBadgeCount?.({ count: imUnread });
   }, [platform, imUnread]);
+  // 退出登录与右上角身份徽标保持同一实现：identity.logout()（企业身份服务统一处理
+  // 会话清理与重启）；上下文里没有可登录身份时（如手机只读端）回落到传入的回调。
+  const identity = useEnterpriseIdentity();
+  const canIdentityLogout = Boolean(identity?.allowLogin);
+  const logoutAvailable = canIdentityLogout || Boolean(onLogout);
+  const runLogout = () => {
+    if (canIdentityLogout) void identity?.logout();
+    else onLogout?.();
+  };
+
   const messagesLabel =
     imUnread > 0
       ? `${intl.formatMessage({ id: "im.title" })} (${imUnread})`
       : intl.formatMessage({ id: "im.title" });
-  // 发布分支移除手机远控后，Bot/IM 通道配置入口从原远控弹层迁到这里，能力不回退。
-  const [botsDialogOpen, setBotsDialogOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [desktopZoomLevel, setDesktopZoomLevel] = useState(0);
   const runDesktopZoomCommand = useCallback(
@@ -271,22 +289,44 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             ) : null}
+            {/* 界面相关在上，应用级动作在下：全部设置 / 使用统计 /（最后）退出登录。 */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="preferences-menu-app-settings"
+              disabled={!onSettingsButtonClick}
+              onSelect={() => onSettingsButtonClick?.()}
+            >
+              <Settings className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.appSettings" })}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="preferences-menu-usage-stats"
+              disabled={!onOpenUsageStats}
+              onSelect={() => onOpenUsageStats?.()}
+            >
+              <ChartNoAxesColumn className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.usageStats" })}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-testid="preferences-menu-logout"
+              disabled={!logoutAvailable}
+              onSelect={runLogout}
+            >
+              <LogOut className="size-4" />
+              {intl.formatMessage({ id: "sidebar.settings.logout" })}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">
           {isDesktop && workspacePath ? (
-            <ControlHintTooltip title={intl.formatMessage({ id: "bots.manage.open" })}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-lg"
-                aria-label={intl.formatMessage({ id: "bots.manage.open" })}
-                data-testid="sidebar-bots-button"
-                onClick={() => setBotsDialogOpen(true)}
-              >
-                <Bot className="size-4" />
-              </Button>
-            </ControlHintTooltip>
+            <WorkspaceWebRemoteControlTrigger
+              workspacePath={workspacePath}
+              workspaceIdentity={workspaceIdentity}
+              remoteSessionId={workspaceRemoteSessionId}
+              initialTaskId={activeTaskId ?? undefined}
+              compact
+            />
           ) : null}
           {onMessagesButtonClick ? (
             <ControlHintTooltip title={messagesLabel}>
@@ -326,9 +366,6 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
           </ControlHintTooltip>
         </div>
       </div>
-      {botsDialogOpen ? (
-        <BotsDialog open onOpenChange={setBotsDialogOpen} />
-      ) : null}
     </footer>
   );
 });

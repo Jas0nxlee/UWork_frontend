@@ -485,7 +485,6 @@ const zhCN: Record<string, string> = {
   "bots.privateDelivery.retryHint": "将以文本重新发送完整回复，可能重复已收到的内容。",
   "bots.privateDelivery.retryFailed": "发送失败，请查看错误详情后重试。",
   "bots.boundGroups.title": "已绑定群聊",
-  "bots.manage.open": "机器人通道",
   "bots.boundGroups.count": "{count} 个话题",
   "bots.boundGroups.countOne": "{count} 个话题",
   "bots.boundGroups.toggle": "启用群聊：{name}",
@@ -2390,7 +2389,16 @@ const zhCN: Record<string, string> = {
   "webRemoteControl.failure.relayUnavailable": "外部 relay 连接不可用，请确认桌面端在线后重试。",
   "webRemoteControl.failure.unsupportedAction":
     "当前是 Web 远程控制模式，只支持访问桌面端当前窗口已经打开的工作区。",
+  "webRemoteControl.failure.enterpriseIdentityRequired":
+    "这台设备只允许本公司员工连接，请先完成企业微信授权。",
+  "webRemoteControl.failure.enterpriseIdentityRejected":
+    "登录的企业身份与这台设备不匹配，桌面端已拒绝本次连接。",
+  "webRemoteControl.failure.wecomAppRequired":
+    "这个入口只允许从企业微信工作台打开，请在企业微信里重试。",
   "webRemoteControl.failure.unexpectedError": "无法启动移动端远程控制，请回到桌面端重试。",
+  "webRemoteControl.workbench.title": "已在企业微信开放",
+  "webRemoteControl.workbench.description":
+    "打开企业微信 → 工作台 → UWork 远程控制，就能直接连接到这台电脑，无需扫码。",
   "webRemoteControl.copyLink": "复制链接",
   "webRemoteControl.copyLink.copied": "已复制远程控制链接",
   "webRemoteControl.copyLinkFailed": "复制远程控制链接失败：{error}",
@@ -2400,6 +2408,8 @@ const zhCN: Record<string, string> = {
     "刷新后，之前复制或扫码得到的远程控制链接将失效，已连接的手机需要重新扫码。",
   "webRemoteControl.refreshQr.success": "已刷新远程控制二维码",
   "webRemoteControl.refreshQr.failed": "刷新远程控制二维码失败：{error}",
+  "webRemoteControl.start": "开启",
+  "webRemoteControl.loadingStatus": "正在读取远程控制状态…",
   "webRemoteControl.stop": "停止",
   "webRemoteControl.switchWorkspace": "切换工作区",
   "webRemoteControl.expandNavigation": "展开任务和工作区",
@@ -2414,6 +2424,8 @@ const zhCN: Record<string, string> = {
   "webRemoteControl.taskStatus.error": "错误",
   "webRemoteControl.switchDevice": "切换设备",
   "webRemoteControl.unnamedDevice": "未命名设备",
+  "webRemoteControl.mobileShell.backToTask": "返回任务",
+  "webRemoteControl.mobileShell.backToChat": "返回任务会话",
   "webRemoteControl.mobileShell.backHome": "返回任务首页",
   "webRemoteControl.mobileShell.chatTitle": "任务会话",
   "webRemoteControl.mobileShell.reconnecting": "正在自动重连...",
@@ -2851,6 +2863,9 @@ const zhCN: Record<string, string> = {
   "sidebar.newTask": "新建任务",
 
   // 设置页
+  "sidebar.settings.usageStats": "使用统计",
+  "sidebar.settings.logout": "退出登录",
+  "sidebar.settings.appSettings": "应用设置",
   "settings.title": "设置",
   "settings.breadcrumbLabel": "设置路径",
   "settings.subtitle": "从左侧切换主要设置项，右侧查看详细配置。",

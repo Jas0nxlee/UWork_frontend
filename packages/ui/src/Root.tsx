@@ -65,6 +65,7 @@ import { RemoteWorkspaceControllerProvider } from "@/remote/useRemoteWorkspaceCo
 import { useRootProviderStateRefresh } from "@/root/useRootProviderStateRefresh.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 import { useRootProviderSettingsSnapshot } from "@/root/useRootProviderSettingsSnapshot.js";
+import { useWebRemoteControlAuthSync } from "@/web-remote-control/app/useWebRemoteControlAuthSync.js";
 import { useDesktopNativeThemeSync } from "@/root/useDesktopNativeThemeSync.js";
 import { useRootPlatformEffects } from "@/root/useRootPlatformEffects.js";
 import { useRootWorkspaceActions } from "@/root/useRootWorkspaceActions.js";
@@ -228,6 +229,13 @@ function RootInner({
   const theme = useZCodeStore((state) => state.theme);
   const user = useZCodeStore((state) => state.user);
   const isRestoringOAuthSession = useZCodeStore((state) => state.isRestoringOAuthSession);
+  useWebRemoteControlAuthSync(
+    platform,
+    services.oauthService,
+    user?.id,
+    isRestoringOAuthSession,
+    services.enterpriseIdentityService,
+  );
   const setUser = useZCodeStore((state) => state.setUser);
   const setIsRestoringOAuthSession = useZCodeStore((state) => state.setIsRestoringOAuthSession);
   const setOAuthError = useZCodeStore((state) => state.setOAuthError);
@@ -583,6 +591,7 @@ function RootInner({
     handleOpenFolderFromWorkspaceMenu,
     handleCreateTask,
     handleBackFromSettings,
+    handleLogout,
   } = useRootWorkspaceActions({
     intl,
     platform,
@@ -1325,6 +1334,7 @@ function RootInner({
     onCreateTask: handleCreateTask,
     onOpenWorkspace: handleOpenWorkspace,
     allowOpenWorkspace,
+    onLogout: handleLogout,
     user,
   };
 
@@ -1441,6 +1451,7 @@ function RootInner({
               remoteWorkspaceSessions={remoteWorkspaceSessions}
               allowRemoteWorkspace={allowRemoteWorkspace}
               handleBackFromSettings={handleBackFromSettings}
+              handleLogout={handleLogout}
               user={user}
               reconnectingRemoteWorkspaceKeys={reconnectingRemoteWorkspaceKeys}
               remoteWorkspaceRecoveryByWorkspaceKey={remoteWorkspaceRecoveryByWorkspaceKey}
