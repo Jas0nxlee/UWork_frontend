@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const require = createRequire(import.meta.url);
 
@@ -299,6 +300,23 @@ test("cross-origin redirects treat regex metacharacters in sensitive header name
   assert.equal(headers["x-token|secret"], undefined);
   assert.equal(headers["x-public"], "kept");
 });
+
+for (const shape of ["object", "array"] as const) {
+  test(`cross-origin redirects preserve cross-realm sensitive header rules for ${shape} headers`, async () => {
+    // CVE-2026-116689：instanceof Array 会丢弃另一 realm 的敏感头名单；不能让重定向泄露自定义凭据。
+    const sensitiveHeaders = runInNewContext("['X-Custom-Token']") as string[];
+    assert.equal(Array.isArray(sensitiveHeaders), true);
+    assert.equal(sensitiveHeaders instanceof Array, false);
+    const headers = await redirectHeaders(
+      shape === "object"
+        ? { "X-Custom-Token": "fixture-secret", "X-Public": "kept" }
+        : ["X-Custom-Token", "fixture-secret", "X-Public", "kept"],
+      sensitiveHeaders,
+    );
+    assert.equal(headers["x-custom-token"], undefined);
+    assert.equal(headers["x-public"], "kept");
+  });
+}
 
 for (const shape of ["array", "object"] as const) {
   test(`ExcelJS tmp rejects non-string ${shape} prefixes before path coercion`, async () => {
