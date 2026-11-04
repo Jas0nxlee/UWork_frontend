@@ -40,7 +40,7 @@ describe("provider-node private config codecs", () => {
     expect(
       ModelConfigRules.composeRecommended(ModelConfigRules.empty(), restored).resolve(input)
         .properties?.contextWindow,
-    ).toBe(128_000);
+    ).toBe(64_000);
     expect(restored.getDiscovered(input)?.properties?.contextWindow).toBe(64_000);
   });
 

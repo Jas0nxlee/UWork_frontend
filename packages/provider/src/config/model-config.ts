@@ -417,11 +417,11 @@ export class ModelConfigRules {
     for (const rule of this.#rules) {
       if (rule.type === "discovered-provider-model") {
         if (matchesDiscovered(rule, input)) {
-          result = result.overlay(rule.config);
           if (rule.catalogConfig) {
-            // 目录为自动推荐首选，但缺失字段继续继承网关；用户覆盖在下一层执行。
+            // 自动参数先继承目录，再由网关逐字段覆盖；个人值始终在下一层拥有最高优先级。
             result = applyCatalogConfig(result, rule.catalogConfig, input.apiType);
           }
+          result = result.overlay(rule.config);
         }
         continue;
       }
@@ -515,11 +515,10 @@ export class ModelConfigRules {
     opaqueAlias = false,
   ): ModelCapabilitySource {
     const discovered = this.getDiscoveredRule(input);
+    if (discovered && hasConfigLeaves(discovered.config.toJSON())) return "gateway";
     if (discovered?.catalogConfig && hasConfigLeaves(discovered.catalogConfig.toJSON()))
       return "catalog";
-    if (discovered && hasConfigLeaves(discovered.config.toJSON())) return "gateway";
-    // 路由逻辑别名可能包含型号词，但不能据此确认网关当前实际分配的后端。
-    if (opaqueAlias) return "unknown";
+    // 路由逻辑别名只能使用明确的模板/供应商精确映射，不能从宽泛型号词推断后端。
     // 通用兜底保证旧运行链路可用，但不能冒充已确认的型号能力。
     for (const rule of this.#rules) {
       if (isExactModelRule(rule)) {
@@ -528,7 +527,11 @@ export class ModelConfigRules {
       } else if (rule.type === "template-model") {
         if (rule.templateId === input.templateId && rule.modelId === input.modelId)
           return "builtin";
-      } else if (rule.type !== "discovered-provider-model" && rule.modelMatch !== ".*") {
+      } else if (
+        !opaqueAlias &&
+        rule.type !== "discovered-provider-model" &&
+        rule.modelMatch !== ".*"
+      ) {
         const config = new ModelConfigRules([rule]).resolve(input).toJSON();
         if (hasConfigLeaves(config.properties) || hasConfigLeaves(config.optionSpecs))
           return "builtin";

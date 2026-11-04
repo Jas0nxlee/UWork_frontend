@@ -115,8 +115,14 @@ describe("ProviderModelMetadataDialog", () => {
     expect(enUS["settings.modelProvider.help.inputModalities"]).toContain(
       "does not yet support audio attachments",
     );
-    expect(zhCN["settings.modelProvider.capabilityUnconfirmed"]).toContain("未匹配到 models.dev");
+    expect(zhCN["settings.modelProvider.capabilityUnconfirmed"]).toContain(
+      "网关和 models.dev 未提供",
+    );
     expect(zhCN["settings.modelProvider.capabilityUnconfirmed"]).toContain("软件内置默认配置");
+    expect(enUS["settings.modelProvider.capabilityUnconfirmed"]).toContain(
+      "Neither the gateway nor models.dev",
+    );
+    expect(zhCN["settings.modelProvider.capabilitySource.gateway"]).toContain("models.dev");
     expect(enUS["settings.modelProvider.capabilityUnconfirmed"]).toContain(
       "built-in default configuration",
     );

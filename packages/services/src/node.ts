@@ -1706,11 +1706,7 @@ export function createLocalServices(options: {
     }),
     configRuntime: providerConfigRuntime,
     discoverModels: (config) =>
-      discoverProviderModels(
-        config,
-        { request: hostApiNetworkTransport.fetch },
-        { includeCapabilities: false },
-      ),
+      discoverProviderModels(config, { request: hostApiNetworkTransport.fetch }),
     accountSource: accountProviderConfigSource,
     modelSelectionConfiguredDefaultSource,
     disposeModelSelectionConfiguredDefaultSource: () =>
@@ -1749,7 +1745,6 @@ export function createLocalServices(options: {
     },
   };
   const ucasGatewayService = createUcasGatewayService({
-    includeModelCapabilities: false,
     store: ucasGatewayStore,
     identitySessionStore: enterpriseIdentitySessionStore,
     resolveApiBaseUrl: async () => {

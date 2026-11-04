@@ -171,12 +171,12 @@ describe("模型名单发现与目录能力刷新", () => {
     await clearAppData();
   });
 
-  it("无目录命中使用内置默认，刷新保留手动覆盖并明确提示来源", async function () {
+  it("网关能力优先，刷新保留手动覆盖，未知别名明确提示内置兜底", async function () {
     this.timeout(180_000);
     let refreshed = false;
     let modelRequests = 0;
     let unexpectedRequests = 0;
-    // 原因：网关额外规格不进入自动层：仅取模型名单，未命中目录时应明确显示内置兼容默认，禁止推理请求。
+    // 原因：网关明确字段优先于目录和内置推荐；名单中的未知别名不得伪装成已确认规格，禁止推理请求。
     const server = createServer((request, response) => {
       if (request.method !== "GET" || request.url !== "/v1/models") {
         unexpectedRequests++;
@@ -243,14 +243,14 @@ describe("模型名单发现与目录能力刷新", () => {
       await row(SMALL_MODEL).waitForDisplayed({ timeout: 15_000 });
       await row(VISION_MODEL).waitForDisplayed({ timeout: 15_000 });
       expect(modelRequests).toBe(1);
-      expect(await source(SMALL_MODEL).getAttribute("data-capability-source")).toBe("unknown");
-      expect(await source(VISION_MODEL).getAttribute("data-capability-source")).toBe("unknown");
+      expect(await source(SMALL_MODEL).getAttribute("data-capability-source")).toBe("gateway");
+      expect(await source(VISION_MODEL).getAttribute("data-capability-source")).toBe("gateway");
       await openModel(SMALL_MODEL);
       await assertModelCapabilities({
-        contextWindow: "200000",
+        contextWindow: "32768",
         image: false,
         pdf: false,
-        reasoningLevels: ["disabled", "enabled"],
+        reasoningLevels: ["low", "high"],
       });
       await context().setValue("49152");
       await closeModel(true);
@@ -261,12 +261,12 @@ describe("模型名单发现与目录能力刷新", () => {
 
       await openModel(VISION_MODEL);
       await assertModelCapabilities({
-        contextWindow: "200000",
-        image: false,
-        pdf: false,
-        reasoningLevels: ["disabled", "enabled"],
+        contextWindow: "131072",
+        image: true,
+        pdf: true,
+        reasoningLevels: ["high", "max"],
       });
-      await screenshot(join(artifacts, "builtin-default-capabilities.png"));
+      await screenshot(join(artifacts, "gateway-model-capabilities.png"));
       await closeModel();
 
       refreshed = true;
@@ -275,11 +275,11 @@ describe("模型名单发现与目录能力刷新", () => {
       await discover().waitForClickable({ timeout: 15_000 });
       await openModel(SMALL_MODEL);
       await assertModelCapabilities({
-        contextWindow: "200000",
+        contextWindow: "65536",
         contextOverride: "49152",
-        image: false,
+        image: true,
         pdf: false,
-        reasoningLevels: ["disabled", "enabled"],
+        reasoningLevels: ["low", "medium", "high"],
       });
       await screenshot(join(artifacts, "refreshed-with-manual-override.png"));
       await closeModel();
@@ -288,11 +288,11 @@ describe("模型名单发现与目录能力刷新", () => {
       await openProviderSettings();
       await openModel(SMALL_MODEL);
       await assertModelCapabilities({
-        contextWindow: "200000",
+        contextWindow: "65536",
         contextOverride: "49152",
-        image: false,
+        image: true,
         pdf: false,
-        reasoningLevels: ["disabled", "enabled"],
+        reasoningLevels: ["low", "medium", "high"],
       });
       await closeModel();
       expect(await source(UNKNOWN_MODEL).getAttribute("data-capability-source")).toBe("unknown");
@@ -302,7 +302,9 @@ describe("模型名单发现与目录能力刷新", () => {
       );
       await notice.waitForDisplayed({ timeout: 15_000 });
       expect(await notice.getText()).toMatch(/能力未确认|capabilities unconfirmed/i);
-      expect(await notice.getText()).toMatch(/未匹配到 models\.dev|No matching models\.dev/i);
+      expect(await notice.getText()).toMatch(
+        /网关和 models\.dev 未提供|Neither the gateway nor models\.dev/i,
+      );
       expect(await notice.getText()).toMatch(/软件内置默认配置|built-in default configuration/i);
       await screenshot(join(artifacts, "unknown-model-capabilities.png"));
       await closeModel();
@@ -315,7 +317,7 @@ describe("模型名单发现与目录能力刷新", () => {
     }
   });
 
-  it("目录优先于网关，五类输入与手动推理重启保留，非聊天型号不可探测或选择", async function () {
+  it("网关上下文优先，目录补全五类输入，手动覆盖与非聊天限制重启保留", async function () {
     this.timeout(180_000);
     let modelRequests = 0;
     let unexpectedRequests = 0;
@@ -333,10 +335,6 @@ describe("模型名单发现与目录能力刷新", () => {
             {
               id: CATALOG_MODEL,
               context_window: 4096,
-              max_output_tokens: 1024,
-              supports_vision: false,
-              architecture: { input_modalities: ["text"] },
-              reasoning_levels: ["low"],
             },
             { id: IMAGE_MODEL },
             { id: UNKNOWN_MODEL },
@@ -376,12 +374,12 @@ describe("模型名单发现与目录能力刷新", () => {
       await row(CATALOG_MODEL).waitForDisplayed({ timeout: 15_000 });
       await browser.waitUntil(
         async () =>
-          (await source(CATALOG_MODEL).getAttribute("data-capability-source")) === "catalog",
+          (await source(CATALOG_MODEL).getAttribute("data-capability-source")) === "gateway",
         { timeout: 15_000 },
       );
       await openModel(CATALOG_MODEL);
       await assertModelCapabilities({
-        contextWindow: "262144",
+        contextWindow: "4096",
         image: true,
         audio: true,
         video: true,
@@ -422,7 +420,7 @@ describe("模型名单发现与目录能力刷新", () => {
       await openProviderSettings();
       await openModel(CATALOG_MODEL);
       await assertModelCapabilities({
-        contextWindow: "524288",
+        contextWindow: "4096",
         contextOverride: "245760",
         image: false,
         audio: false,

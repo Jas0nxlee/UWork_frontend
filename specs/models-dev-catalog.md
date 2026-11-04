@@ -2,7 +2,7 @@
 
 ## 产品规则
 
-本功能在模型设置中自动补齐模型的上下文、最大输出、输入类型和明确的推理档位。用户指定 models.dev 为自动参数首选，因此字段优先级为：个人普通/固定覆盖 > models.dev 目录 > 软件内置型号推荐/通用默认值。目录是型号推荐，不宣称为网关实测结果。2026-11-04 用户最终确认：网关只负责提供模型名单，名单解析仅校验 ID，忽略无关能力字段的类型错误；启用目录后不采用其自动参数。无匹配或目录不可用时，使用软件已内置的型号配置，未知型号使用已内置的通用上下文与推理默认值；不另造一套默认数值。启动时清除旧网关自动层，个人覆盖不动。
+本功能在模型设置中自动补齐模型的上下文、最大输出、输入类型和明确的推理档位。按用户最新指定，字段优先级为：个人普通/固定覆盖 > 网关明确下发参数 > models.dev 目录 > 软件内置型号推荐/通用默认值。目录是型号推荐，不宣称为网关实测结果。2026-11-04 用户最新确认：自动参数按网关 > models.dev > 内置逐字段合并，个人覆盖仍最高。网关未提供的字段从目录补齐，目录无匹配或不可用时使用软件内置型号/通用默认。启动刷新只更新目录层，不清空网关层。
 
 - 固定从 `https://models.dev/api.json` 获取公开目录，匹配在本机进行，不发送网关密钥、请求头、模型列表、工作区或任务内容。
 - 首次 Host 就绪后后台补齐已保存模型；模型设置刷新、自动获取和新增/改名时的推荐预览共用该目录。启动补齐不请求供应商的模型列表，不阻塞窗口启动。
@@ -17,14 +17,14 @@
 
 `services/model-catalog` 为 managed 模块，唯一拥有当前进程目录缓存、网络刷新和并发去重。ProviderConfigService 继续唯一拥有成员、自动能力与用户覆盖；UI 不直接联网、不另存可执行配置。
 
-目录模块公开 `createModelsDevCatalog({request, cachePath?, now?, ttlMs?}).enrich({apiType,baseUrl}, models)`，返回扩展的 `DiscoveredModelInput[]`；目录适配器只附加目录数据；Host 组装层按最终产品规则将网关自动 config 清空，再通过 Facade 保存目录层，不改个人配置。
+目录模块公开 `createModelsDevCatalog({request, cachePath?, now?, ttlMs?}).enrich({apiType,baseUrl}, models)`，返回扩展的 `DiscoveredModelInput[]`；目录适配器只附加目录数据；Host 保留网关 config，并通过 Facade 保存独立目录层，不改个人配置。
 
 Provider 自动规则增加可选 `catalogConfig` / `catalogSource`，分别保存目录配置及 `source=models.dev`、providerId、modelId、canonicalModelId（可选）、fetchedAt、stale。两者成对持久化。旧文件缺少目录字段继续有效。
 
 - 输入 `catalogConfig=undefined`：本次未取得目录结论，保留同端点已有目录值。
 - 输入 `catalogConfig=null`：成功查询但没有匹配，清除该身份旧目录推荐；用户值不受影响，自动层回到内置兜底。
 - 输入 `catalogConfig=object`：替换目录层，不物化为个人覆盖。
-- `preserveCapabilities=true` 保留底层 API 的既有兼容合同；本产品启用 models.dev 后，Host 主动提交空网关层，避免网关值遮挡内置兜底。
+- `preserveCapabilities=true` 保留已有网关层并只更新目录；启动补齐使用此模式。
 - 自动数据仍绑定 apiType/baseUrl。连接、ID、用户编辑代次或Registry revision变化，拒绝旧结果；目录更新不复活被删除的模型，不改变启停或顺序。
 - Settings/Resolution 提供 `capabilitySource=catalog` 和 catalogSource；非聊天通过派生 `unsupportedReason=non-chat-model` 表达，不增加第二份可变执行状态。
 
@@ -48,13 +48,13 @@ sequenceDiagram
   Catalog->>Catalog: 校验、精确匹配、原子缓存
   Catalog-->>Host: 原始模型 + catalogConfig/source
   Host->>Owner: 当前revision下更新自动层（预览不落盘）
-  Owner-->>UI: 手动 > 目录 > 内置，含来源和不可聊天原因
+  Owner-->>UI: 手动 > 网关 > 目录 > 内置，含来源和不可聊天原因
 ```
 
 ## 验收
 
 1. 标准ID准确获取不同上下文、输入支持与effort；相似/未知/冲突ID不误匹配，原始请求ID不变。
-2. 目录优先于内置，网关自动参数不参与；没有匹配时内置上下文/推理仍可用；手动上下文、image/audio/video/pdf和推理档位优先且重启保留。
+2. 网关优先于目录，目录优先于内置；缺失字段逐层补齐，没有匹配时内置上下文/推理仍可用；手动上下文、image/audio/video/pdf和推理档位优先且重启保留。
 3. 启动补齐已有模型，无须重新添加；发现和预览使用同一服务，预览不修改成员或配置。
 4. 网络失败、损坏缓存、无匹配、过期revision、删除、切换端点和Host销毁不覆盖错误身份或丢配置。
 5. image-only等非聊天模型仍可查看，聊天选择/探测禁用；0不成为有效上下文，缺失字段不推断支持。
@@ -66,3 +66,34 @@ sequenceDiagram
 - https://github.com/anomalyco/models.dev#api-reference
 - https://github.com/anomalyco/models.dev#adding-a-new-provider-model
 - https://models.dev/api.json
+
+## UCAS 离线内置映射（用户指定，2026-11-04）
+
+用户明确确认以下逻辑 ID 对应真实型号，允许仅对这些精确 ID 建立内置能力规则，不改请求中的原始 ID。获取公开目录中对应型号的上下文、输入/输出模态和推理配置，固定快照随软件分发，离线仍可使用。请求映射遵循 UCAS 的 OpenAI Chat Completions 协议；内置值低于网关与目录。
+
+| UCAS ID             | 用户指定型号        |
+| ------------------- | ------------------- |
+| ucas-gpt-max        | Claude-5-5-Sonnet   |
+| ucas-kimi           | Kimi-K3.1-Pro       |
+| ucas-glm            | GLM-5.3             |
+| ucas-deepseek-flash | DeepSeek-Flash-1017 |
+| ucas-deepseek-pro   | DeepSeek-Flash-1017 |
+| ucas-gpt-mini       | Claude-5-5-Haiku    |
+
+测试覆盖六个精确别名的离线解析、网关/目录/手动逐字段优先级，以及原始请求 ID 不变。
+
+### 内置数据快照
+
+2026-11-04 从 `https://models.dev/api.json` 的原厂记录提取：
+
+| 内置别名                                | 原厂 canonical                    | 上下文 / 最大输出 | 输入             | effort                    |
+| --------------------------------------- | --------------------------------- | ----------------- | ---------------- | ------------------------- |
+| ucas-gpt-max                            | anthropic/claude-sonnet-5-5       | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
+| ucas-gpt-mini                           | anthropic/claude-haiku-5-5        | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
+| ucas-kimi                               | moonshotai/kimi-k3.1-pro          | 1048576 / 1048576 | text,image,video | low,high,max              |
+| ucas-glm                                | zhipuai/glm-5.3                   | 1000000 / 131072  | text             | low,high,max              |
+| ucas-deepseek-flash / ucas-deepseek-pro | deepseek/deepseek-v4.1-flash-1017 | 1048576 / 393216  | text,image       | low,high,max              |
+
+实现位置是随包 `config/provider/zcode-builtin.json` 的六条精确 `templateModelRules`，版本34，不依赖在线目录或本机缓存。各模型输出均为text；未列出的输入显式false。请求模型ID保持UCAS别名。UCAS继续使用现有OpenAI Chat协议映射；Claude原生Messages的 `output_config.effort` 不直接发送到该接口，实际转换由网关负责，连通性通过只证明请求被接收，不能单独证明推理强度内部语义。
+
+公开请求参数依据：[Kimi API](https://platform.kimi.ai/docs/api/chat)、[GLM-5.3](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)、[DeepSeek 1017映射](https://api-docs.deepseek.com/updates/)、[DeepSeek推理](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude OpenAI兼容边界](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)。GLM/DeepSeek内置显式启用thinking，Kimi保持always-on原厂协议，不套用旧Kimi的thinking开关。

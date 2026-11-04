@@ -1,5 +1,5 @@
 {
-  "revision": 33,
+  "revision": 34,
   "schemaVersion": 1,
   "config": {
     "modelConfigRules": {
@@ -5627,6 +5627,192 @@
           "modelId": "qwen/qwen3.8-max-0902",
           "config": {
             "enabled": false
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-gpt-max",
+          "config": {
+            "properties": {
+              "contextWindow": 1000000,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": true,
+                "supportsAudio": false,
+                "supportsVideo": false,
+                "supportsPdf": true
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 128000,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "medium", "high", "xhigh", "max"],
+                "map": "{\"reasoning_effort\": reasoningLevel}"
+              }
+            }
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-kimi",
+          "config": {
+            "properties": {
+              "contextWindow": 1048576,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": true,
+                "supportsAudio": false,
+                "supportsVideo": true,
+                "supportsPdf": false
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 1048576,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "high", "max"],
+                "map": "{\"reasoning_effort\": reasoningLevel}"
+              }
+            }
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-glm",
+          "config": {
+            "properties": {
+              "contextWindow": 1000000,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": false,
+                "supportsAudio": false,
+                "supportsVideo": false,
+                "supportsPdf": false
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 131072,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "high", "max"],
+                "map": "{\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":reasoningLevel}"
+              }
+            }
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-deepseek-flash",
+          "config": {
+            "properties": {
+              "contextWindow": 1048576,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": true,
+                "supportsAudio": false,
+                "supportsVideo": false,
+                "supportsPdf": false
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 393216,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "high", "max"],
+                "map": "{\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":reasoningLevel}"
+              }
+            }
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-deepseek-pro",
+          "config": {
+            "properties": {
+              "contextWindow": 1048576,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": true,
+                "supportsAudio": false,
+                "supportsVideo": false,
+                "supportsPdf": false
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 393216,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "high", "max"],
+                "map": "{\"thinking\":{\"type\":\"enabled\"},\"reasoning_effort\":reasoningLevel}"
+              }
+            }
+          }
+        },
+        {
+          "templateId": "ucas",
+          "modelId": "ucas-gpt-mini",
+          "config": {
+            "properties": {
+              "contextWindow": 1000000,
+              "inputFormat": {
+                "supportsText": true,
+                "supportsImage": true,
+                "supportsAudio": false,
+                "supportsVideo": false,
+                "supportsPdf": true
+              },
+              "outputFormat": {
+                "supportsText": true
+              },
+              "supportsToolCall": true,
+              "supportsJsonSchemaOutput": true
+            },
+            "optionSpecs": {
+              "maxOutputTokens": {
+                "max": 128000,
+                "map": "{\"max_tokens\": maxOutputTokens}"
+              },
+              "reasoningLevel": {
+                "values": ["low", "medium", "high", "xhigh", "max"],
+                "map": "{\"reasoning_effort\": reasoningLevel}"
+              }
+            }
           }
         }
       ]

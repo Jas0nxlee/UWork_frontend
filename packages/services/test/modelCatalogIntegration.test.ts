@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DiscoveredModelInput, ProviderSettingsView } from "@zcode/provider";
 import type { ModelsDevCatalog } from "../src/model-catalog/contract.js";
+import { compileModelOptionMaps } from "@zcode/model-option-map";
 import { createProviderRuntime } from "../src/model-provider/providerRuntime.js";
 
 const connection = {
@@ -62,6 +63,132 @@ async function waitFor(check: () => Promise<boolean>) {
   assert.fail("catalog update was not published");
 }
 
+test("offline UCAS template aliases keep confirmed capabilities and their original request IDs", async () => {
+  const f = await fixture();
+  const runtime = createProviderRuntime(f.options);
+  const detailed = ["low", "medium", "high", "xhigh", "max"];
+  const effort = ["low", "high", "max"];
+  const cases = [
+    {
+      id: "ucas-gpt-max",
+      context: 1_000_000,
+      max: 128_000,
+      image: true,
+      video: false,
+      pdf: true,
+      levels: detailed,
+    },
+    {
+      id: "ucas-gpt-mini",
+      context: 1_000_000,
+      max: 128_000,
+      image: true,
+      video: false,
+      pdf: true,
+      levels: detailed,
+    },
+    {
+      id: "ucas-kimi",
+      context: 1_048_576,
+      max: 1_048_576,
+      image: true,
+      video: true,
+      pdf: false,
+      levels: effort,
+    },
+    {
+      id: "ucas-glm",
+      context: 1_000_000,
+      max: 131_072,
+      image: false,
+      video: false,
+      pdf: false,
+      levels: effort,
+    },
+    {
+      id: "ucas-deepseek-flash",
+      context: 1_048_576,
+      max: 393_216,
+      image: true,
+      video: false,
+      pdf: false,
+      levels: effort,
+    },
+    {
+      id: "ucas-deepseek-pro",
+      context: 1_048_576,
+      max: 393_216,
+      image: true,
+      video: false,
+      pdf: false,
+      levels: effort,
+    },
+  ];
+  try {
+    await runtime.start();
+    const before = await readFile(f.options.personalFilePath, "utf8");
+    const provider = (await runtime.providerSettings.getView()).providers.find(
+      (item) => item.providerId === "ucas",
+    )!;
+    for (const entry of cases) {
+      const preview = await runtime.providerSettings.resolveModelConfig({
+        providerId: "ucas",
+        modelId: entry.id,
+      });
+      const config = preview.effectiveConfig;
+      assert.equal(preview.capabilitySource, "builtin", entry.id);
+      assert.equal(config.properties?.contextWindow, entry.context, entry.id);
+      assert.deepEqual(
+        config.properties?.inputFormat,
+        {
+          supportsText: true,
+          supportsImage: entry.image,
+          supportsAudio: false,
+          supportsVideo: entry.video,
+          supportsPdf: entry.pdf,
+        },
+        entry.id,
+      );
+      assert.deepEqual(config.optionSpecs?.reasoningLevel?.values, entry.levels, entry.id);
+      assert.equal(config.optionSpecs?.maxOutputTokens?.max, entry.max, entry.id);
+      const row = provider.models.find((model) => model.modelId === entry.id);
+      if (row) {
+        assert.equal(row.modelId, entry.id);
+        assert.equal(row.capabilitySource, "builtin");
+      } else {
+        assert.equal(
+          entry.id,
+          "ucas-deepseek-pro",
+          "only the non-default pro alias needs a preview",
+        );
+      }
+      const request = compileModelOptionMaps({
+        reasoningLevel: { map: config.optionSpecs!.reasoningLevel!.map! },
+        maxOutputTokens: { map: config.optionSpecs!.maxOutputTokens!.map! },
+      }).apply(
+        { model: entry.id },
+        { reasoningLevel: entry.levels.at(-1)!, maxOutputTokens: 1024 },
+      );
+      assert.equal(request.model, entry.id);
+      assert.equal(request.reasoning_effort, entry.levels.at(-1));
+      assert.equal(request.max_tokens, 1024);
+    }
+    const unknown = await runtime.providerSettings.resolveModelConfig({
+      providerId: "ucas",
+      modelId: "ucas-unlisted-alias",
+    });
+    assert.equal(unknown.capabilitySource, "unknown");
+    assert.equal(
+      await readFile(f.options.personalFilePath, "utf8"),
+      before,
+      "previews do not add or rename aliases",
+    );
+  } finally {
+    runtime.dispose();
+    await f.cleanup();
+  }
+});
+
 test("startup enriches saved models without querying providers and preserves manual values", async () => {
   const f = await fixture();
   let gatewayRequests = 0;
@@ -109,7 +236,7 @@ test("startup enriches saved models without querying providers and preserves man
   }
 });
 
-test("catalog wins gateway defaults and new-ID previews never change saved membership", async () => {
+test("gateway overrides catalog fields and new-ID previews never change saved membership", async () => {
   const f = await fixture();
   const catalog: ModelsDevCatalog = {
     enrich: async (_connection, models) => models.map(recommendation),
@@ -129,7 +256,11 @@ test("catalog wins gateway defaults and new-ID previews never change saved membe
         getModel(await runtime.providerSettings.getView(), f.id).capabilitySource === "catalog",
     );
     const found = await runtime.providerSettings.discoverModels(f.id);
-    assert.equal(getModel(found.view, f.id).effectiveConfig.properties?.contextWindow, 32768);
+    assert.equal(getModel(found.view, f.id).effectiveConfig.properties?.contextWindow, 8000);
+    assert.equal(
+      getModel(found.view, f.id).effectiveConfig.properties?.inputFormat?.supportsAudio,
+      true,
+    );
     const before = await readFile(f.options.personalFilePath, "utf8");
     const preview = await runtime.providerSettings.resolveModelConfig({
       providerId: f.id,
@@ -151,7 +282,7 @@ test("catalog wins gateway defaults and new-ID previews never change saved membe
   }
 });
 
-test("a catalogue miss uses built-in defaults instead of gateway values and keeps personal overrides", async () => {
+test("a catalogue miss falls back through gateway then built-in and keeps personal overrides", async () => {
   const f = await fixture();
   const catalog: ModelsDevCatalog = {
     enrich: async (_connection, models) =>
@@ -180,14 +311,16 @@ test("a catalogue miss uses built-in defaults instead of gateway values and keep
   try {
     await runtime.start();
     await runtime.providerSettings.refresh("catalogue-ready");
+    assert.equal(
+      getModel(await runtime.providerSettings.getView(), f.id).effectiveConfig.properties
+        ?.contextWindow,
+      200_000,
+    );
     const found = await runtime.providerSettings.discoverModels(f.id);
     const automatic = getModel(found.view, f.id);
-    assert.equal(automatic.effectiveConfig.properties?.contextWindow, 200_000);
-    assert.deepEqual(automatic.effectiveConfig.optionSpecs?.reasoningLevel?.values, [
-      "disabled",
-      "enabled",
-    ]);
-    assert.equal(automatic.capabilitySource, "unknown");
+    assert.equal(automatic.effectiveConfig.properties?.contextWindow, 4000);
+    assert.deepEqual(automatic.effectiveConfig.optionSpecs?.reasoningLevel?.values, ["low"]);
+    assert.equal(automatic.capabilitySource, "gateway");
     await runtime.providerSettings.savePersonalModelDraft({
       providerId: f.id,
       originalModelId: "example-model",
@@ -207,11 +340,8 @@ test("a catalogue miss uses built-in defaults instead of gateway values and keep
       "low",
       "high",
     ]);
-    assert.equal(refreshed.effectiveBuiltinConfig.properties?.contextWindow, 200_000);
-    assert.deepEqual(refreshed.effectiveBuiltinConfig.optionSpecs?.reasoningLevel?.values, [
-      "disabled",
-      "enabled",
-    ]);
+    assert.equal(refreshed.effectiveBuiltinConfig.properties?.contextWindow, 4000);
+    assert.deepEqual(refreshed.effectiveBuiltinConfig.optionSpecs?.reasoningLevel?.values, ["low"]);
     const persisted = JSON.parse(await readFile(f.options.personalFilePath, "utf8"));
     const personalRule = persisted.config.modelConfigRules.providerModelRules.find(
       (rule: { providerId: string; modelId: string }) =>

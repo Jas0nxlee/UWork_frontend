@@ -18,7 +18,6 @@ const record = (value: unknown): Record<string, unknown> | null =>
 export function parseProviderModelListItem(
   item: unknown,
   apiType?: NonNullable<ProviderConfigObject["api"]>["type"],
-  options: { readonly includeCapabilities?: boolean } = {},
 ): DiscoveredModelInput | null {
   const data = record(item);
   const raw = typeof item === "string" ? item : data?.id;
@@ -30,8 +29,7 @@ export function parseProviderModelListItem(
     Array.from(id).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
   )
     throw new Error("模型列表包含无效的模型 ID");
-  // models.dev 模式只消费名单，未使用的网关能力字段不能阻断有效 ID。
-  if (!data || options.includeCapabilities === false) return id;
+  if (!data) return id;
   const invalid = (): never => {
     throw new Error("模型列表包含无效的模型能力，未添加任何模型");
   };
@@ -174,7 +172,6 @@ async function readBoundedJson(
 export async function discoverProviderModels(
   config: ProviderConfigObject,
   client: Pick<ApiClient, "request">,
-  options: { readonly includeCapabilities?: boolean } = {},
 ): Promise<readonly DiscoveredModelInput[]> {
   const api = config.api;
   if (!api?.baseUrl?.trim()) throw new Error("请先填写 Base URL");
@@ -238,7 +235,7 @@ export async function discoverProviderModels(
     const data = Array.isArray(body) ? body : envelope?.data;
     if (!Array.isArray(data)) throw new Error("模型列表格式不受支持，请检查 Base URL");
     for (const item of data) {
-      const model = parseProviderModelListItem(item, api.type, options);
+      const model = parseProviderModelListItem(item, api.type);
       if (model === null) continue;
       models.set(typeof model === "string" ? model : model.id, model);
       if (models.size > MAX_MODELS) throw new Error("模型列表超过数量限制，未添加任何模型");

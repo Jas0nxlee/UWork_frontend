@@ -260,7 +260,7 @@ describe("ProviderConfigService", () => {
       );
       expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
         enabled: false,
-        capabilitySource: "catalog",
+        capabilitySource: "gateway",
         catalogSource,
         effectiveConfig: {
           properties: { contextWindow: 64_000, inputFormat: { supportsAudio: true } },
@@ -295,7 +295,7 @@ describe("ProviderConfigService", () => {
         facade.getView().revision,
       );
       expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.capabilitySource).toBe(
-        "catalog",
+        "gateway",
       );
       view = await facade.addDiscoveredModels(
         "p",

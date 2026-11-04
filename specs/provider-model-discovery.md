@@ -105,8 +105,6 @@ sequenceDiagram
 - Node 24.14.0：全仓 `pnpm typecheck`、`pnpm lint`（330 项已有警告、0 错误）与 `pnpm architecture:check --changed` 通过；变更文件格式检查通过。
 - 扩展排查发现的 12 项静态目录/文案测试失败，已在隔离的原始 HEAD 源码副本重放确认同样失败；未为本次修复改动模型目录或降低这些断言。
 
-## models.dev 目录优先（2026-11-04）
+## models.dev 与 UCAS 内置参数（2026-11-04）
 
-本节 supersedes 上述自动层优先级：用户要求自动参数优先使用 models.dev，故新顺序为个人覆盖 > models.dev > 网关明确参数 > 内置。见 [目录合同](models-dev-catalog.md)。输入模态涵盖 audio，非聊天模型不得混入聊天选择。
-
-2026-11-04 最终优先级修订：启用 models.dev 的 Host 仅从网关导入名单，自动参数使用 models.dev，未匹配/不可用使用软件内置规则；个人配置最高。旧网关自动层清空不改个人层。底层无目录集成调用仍保留原网关元数据合同。详见 `models-dev-catalog.md`。
+最新产品顺序为个人覆盖 > 网关明确下发 > models.dev > 应用内置，逐字段合并；启动目录更新保留网关层。输入涵盖 text/image/audio/video/pdf，非聊天模型不得进入聊天选择。六个用户指定 UCAS 别名以精确模板规则随包提供上下文、输入能力和推理配置；未列出的逻辑别名仍不猜型号。完整映射、来源与验收见 [目录合同](models-dev-catalog.md)。

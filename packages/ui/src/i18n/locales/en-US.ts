@@ -4439,14 +4439,14 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.modelDefaultsLoaded": "Smart configuration matched for this model",
   "settings.modelProvider.modelConfigIncomplete": "Model configuration is incomplete",
   "settings.modelProvider.capabilitySource.catalog":
-    "Capabilities recommended by the models.dev catalog. Actual gateway limits may differ. Manual settings take priority.",
+    "Capabilities recommended by the models.dev catalog. Gateway metadata and manual settings take priority. Missing values use built-in configuration.",
   "settings.modelProvider.capabilitySource.gateway":
-    "Capabilities from the gateway. Missing values use model recommendations or compatibility defaults. Manual settings take priority.",
+    "Capabilities from the gateway. Missing values use the models.dev catalog first, then built-in configuration. Manual settings take priority.",
   "settings.modelProvider.capabilitySource.builtin":
     "Capabilities from built-in model recommendations. Gateway limits may differ. Manual settings take priority.",
   "settings.modelProvider.capabilitySource.unknown": "Model capabilities unconfirmed",
   "settings.modelProvider.capabilityUnconfirmed":
-    "No matching models.dev entry was found. Using built-in default configuration, which you can override manually. These compatibility defaults do not confirm the model’s actual context, input types, or reasoning levels; check the provider specifications.",
+    "Neither the gateway nor models.dev provided usable capability metadata. Using built-in default configuration, which you can override manually. These compatibility defaults do not confirm the model’s actual context, input types, or reasoning levels; check the provider specifications.",
   "settings.modelProvider.capabilitySourceLabel.catalog": "models.dev catalog recommendations",
   "settings.modelProvider.nonChatModel": "This model is not suitable for chat",
   "settings.modelProvider.audioInputNotice":

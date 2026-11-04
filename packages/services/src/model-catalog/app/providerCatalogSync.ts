@@ -17,13 +17,7 @@ export function createProviderCatalogSync(options: {
   const enrich = async (config: ProviderConfigObject, models: readonly DiscoveredModelInput[]) => {
     const api = config.api;
     if (!catalog || !api?.type || !api.baseUrl || !models.length) return models;
-    const enriched = await catalog.enrich({ apiType: api.type, baseUrl: api.baseUrl }, models);
-    // 产品规则：名单来自网关，自动参数只用目录和内置。清空旧网关层，不能遮挡内置兜底。
-    return enriched.map((model) => ({
-      ...(typeof model === "string" ? { id: model } : model),
-      config: {},
-      preserveCapabilities: undefined,
-    }));
+    return catalog.enrich({ apiType: api.type, baseUrl: api.baseUrl }, models);
   };
   const refreshProvider = (providerId: string): Promise<void> => {
     const pending = running.get(providerId);

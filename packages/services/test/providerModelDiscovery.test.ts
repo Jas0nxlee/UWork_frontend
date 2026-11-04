@@ -421,7 +421,7 @@ test("discovered model edits accept current revisions and continue to reject sta
   }
 });
 
-test("default UCAS provider and ID-only discovered aliases keep capabilities unconfirmed", async () => {
+test("mapped UCAS models use built-in defaults while unlisted ID-only aliases remain unconfirmed", async () => {
   const fixture = await runtimeFixture(async (providerConfig) => {
     assert.equal(providerConfig.api?.baseUrl, "https://llm.ucas.com.cn:15000/v1");
     assert.equal(providerConfig.api?.type, "openai-chat-completions");
@@ -443,9 +443,17 @@ test("default UCAS provider and ID-only discovered aliases keep capabilities unc
       ],
     );
     for (const model of initial.models) {
-      assert.equal(model.capabilitySource, "unknown");
+      assert.equal(
+        model.capabilitySource,
+        model.modelId === "ucas-gemini-flash" ? "unknown" : "builtin",
+      );
       assert.equal(model.personalConfig?.properties?.contextWindow, undefined);
     }
+    assert.equal(
+      initial.models.find((model) => model.modelId === "ucas-gpt-max")?.effectiveConfig.properties
+        ?.contextWindow,
+      1_000_000,
+    );
 
     const imported = await fixture.service.discoverModels("ucas");
     const updated = requireProvider(imported.view, "ucas");
@@ -892,32 +900,4 @@ test("concurrent Host startup seeds UCAS once and preserves its saved key on res
     second.dispose();
     await rm(dir, { recursive: true, force: true });
   }
-});
-
-// 自动参数来自目录/内置时，网关只提供名单；仍严格验证 ID。
-test("ID-only discovery ignores invalid unused capability fields but rejects invalid IDs", async () => {
-  const client = {
-    request: async () =>
-      Response.json({
-        data: [
-          {
-            id: "model-a",
-            context_window: "invalid",
-            reasoning_levels: 42,
-            supports_vision: "wrong",
-          },
-        ],
-      }),
-  };
-  assert.deepEqual(await discoverProviderModels(config, client, { includeCapabilities: false }), [
-    "model-a",
-  ]);
-  await assert.rejects(
-    discoverProviderModels(
-      config,
-      { request: async () => Response.json({ data: [{ id: 42 }] }) },
-      { includeCapabilities: false },
-    ),
-    /模型 ID/,
-  );
 });

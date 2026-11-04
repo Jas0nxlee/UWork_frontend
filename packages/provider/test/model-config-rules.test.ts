@@ -40,7 +40,7 @@ const complete = {
 };
 
 describe("ModelConfigRules", () => {
-  it("models.dev按字段优先于网关，刷新网关保持目录，明确无匹配只清目录", () => {
+  it("网关按字段优先于models.dev，刷新网关保持目录，明确无匹配只清目录", () => {
     const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
     const input = { providerId: "p", modelId: "m", ...scope };
     const source = {
@@ -65,10 +65,10 @@ describe("ModelConfigRules", () => {
     );
     let effective = ModelConfigRules.composeEffective(builtin, personal);
     expect(effective.resolve(input).properties).toMatchObject({
-      contextWindow: 128_000,
+      contextWindow: 64_000,
       inputFormat: { supportsImage: true },
     });
-    expect(effective.capabilitySource(input)).toBe("catalog");
+    expect(effective.capabilitySource(input)).toBe("gateway");
     personal = personal.setDiscovered(
       "p",
       "m",
@@ -77,7 +77,7 @@ describe("ModelConfigRules", () => {
     );
     expect(
       ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
-    ).toBe(128_000);
+    ).toBe(256_000);
     const roundTrip = parsePersonalModelConfigRules(personal.toPersonalJSON());
     expect(roundTrip.getDiscoveredRule(input)?.catalogSource).toEqual(source);
     personal = personal.setExact(
@@ -94,6 +94,92 @@ describe("ModelConfigRules", () => {
     effective = ModelConfigRules.composeEffective(builtin, personal);
     expect(effective.resolve(input).properties?.contextWindow).toBe(256_000);
     expect(effective.capabilitySource(input)).toBe("gateway");
+  });
+
+  it("稀疏网关只覆盖明确字段，其余继承目录再内置，个人覆盖仍最高", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 64_000, inputFormat: { supportsImage: false } },
+        optionSpecs: {
+          reasoningLevel: { values: ["high"], map: '{"reasoning_effort": reasoningLevel}' },
+        },
+      }),
+      scope,
+      {
+        config: parseModelConfig({
+          properties: {
+            contextWindow: 128_000,
+            inputFormat: { supportsImage: true, supportsAudio: true },
+          },
+          optionSpecs: {
+            reasoningLevel: { values: ["low", "high", "xhigh"] },
+            maxOutputTokens: { max: 4096 },
+          },
+        }),
+        source: {
+          source: "models.dev",
+          providerId: "example",
+          modelId: "m",
+          fetchedAt: 123,
+          stale: false,
+        },
+      },
+    );
+    let resolved = ModelConfigRules.composeEffective(builtin, personal).resolve(input);
+    expect(resolved.properties).toMatchObject({
+      contextWindow: 64_000,
+      inputFormat: { supportsImage: false, supportsAudio: true, supportsVideo: false },
+    });
+    expect(resolved.optionSpecs?.reasoningLevel?.values).toEqual(["high"]);
+    expect(resolved.optionSpecs?.maxOutputTokens?.max).toBe(4096);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 32_000, inputFormat: { supportsAudio: false } },
+      }),
+    );
+    resolved = ModelConfigRules.composeEffective(builtin, personal).resolve(input);
+    expect(resolved.properties).toMatchObject({
+      contextWindow: 32_000,
+      inputFormat: { supportsAudio: false },
+    });
+  });
+
+  it("UCAS逻辑别名可用明确模板映射，仍不把宽泛型号词匹配当作确认", () => {
+    const rules = new ModelConfigRules([
+      {
+        type: "model",
+        modelMatch: ".*deepseek.*",
+        config: parseModelConfig({ properties: { contextWindow: 64_000 } }),
+      },
+      {
+        type: "template-model",
+        templateId: "ucas",
+        modelId: "ucas-deepseek-flash",
+        config: parseModelConfig({ properties: { contextWindow: 128_000 } }),
+      },
+    ]);
+    expect(
+      rules.capabilitySource(
+        { providerId: "ucas", templateId: "ucas", modelId: "ucas-deepseek-flash" },
+        true,
+      ),
+    ).toBe("builtin");
+    expect(
+      rules.capabilitySource(
+        { providerId: "ucas", templateId: "ucas", modelId: "ucas-deepseek-unknown" },
+        true,
+      ),
+    ).toBe("unknown");
   });
 
   it("目录禁用推理不发送effort，明确effort仅为空映射补协议而保留复杂型号映射", () => {
@@ -118,16 +204,14 @@ describe("ModelConfigRules", () => {
       ModelConfigRules.composeEffective(builtin, personal).resolve(input).optionSpecs
         ?.reasoningLevel?.map,
     ).toBe('{"reasoning_effort": reasoningLevel}');
-    const complex = builtin
-      .rules()
-      .map((rule) => ({
-        ...rule,
-        config: rule.config.overlay(
-          parseModelConfig({
-            optionSpecs: { reasoningLevel: { map: '{"thinking":{"effort":reasoningLevel}}' } },
-          }),
-        ),
-      }));
+    const complex = builtin.rules().map((rule) => ({
+      ...rule,
+      config: rule.config.overlay(
+        parseModelConfig({
+          optionSpecs: { reasoningLevel: { map: '{"thinking":{"effort":reasoningLevel}}' } },
+        }),
+      ),
+    }));
     expect(
       ModelConfigRules.composeEffective(new ModelConfigRules(complex), personal).resolve(input)
         .optionSpecs?.reasoningLevel?.map,

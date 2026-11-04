@@ -4144,14 +4144,14 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.modelDefaultsLoaded": "已匹配到智能配置",
   "settings.modelProvider.modelConfigIncomplete": "模型配置不完整",
   "settings.modelProvider.capabilitySource.catalog":
-    "能力来源：models.dev 目录推荐。实际网关可能另有限制；手动设置优先。",
+    "能力来源：models.dev 目录推荐。网关下发的参数和手动设置优先；未提供的参数使用软件内置配置。",
   "settings.modelProvider.capabilitySource.gateway":
-    "能力来源：网关。未提供的参数沿用型号推荐或兼容默认值；手动设置优先。",
+    "能力来源：网关。未提供的参数优先由 models.dev 目录补全，再使用软件内置配置；手动设置优先。",
   "settings.modelProvider.capabilitySource.builtin":
     "能力来源：内置型号推荐。网关可能另有限制；手动设置优先。",
   "settings.modelProvider.capabilitySource.unknown": "模型能力未确认",
   "settings.modelProvider.capabilityUnconfirmed":
-    "未匹配到 models.dev 目录，使用软件内置默认配置，可手动覆盖。这些兼容默认值不代表实际上下文、输入类型或推理档位，请按服务商规格确认。",
+    "网关和 models.dev 未提供可用能力参数，使用软件内置默认配置，可手动覆盖。这些兼容默认值不代表实际上下文、输入类型或推理档位，请按服务商规格确认。",
   "settings.modelProvider.capabilitySourceLabel.catalog": "models.dev 目录推荐",
   "settings.modelProvider.nonChatModel": "该模型不适用于聊天",
   "settings.modelProvider.audioInputNotice": "音频为模型能力标记，当前客户端暂不支持音频附件。",
