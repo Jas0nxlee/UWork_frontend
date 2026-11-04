@@ -4128,7 +4128,7 @@ const zhCN: Record<string, string> = {
   "settings.modelProvider.help.maxOutputTokens":
     "单次模型请求允许生成的最大 Token 数。\n请勿超过模型的实际上限。",
   "settings.modelProvider.help.inputModalities":
-    "设置模型能够接收的内容类型：\n\n- **文本**：接收文本内容，为必选项。\n- **图片**：接收图片内容。\n- **视频**：接收视频内容。\n- **PDF**：直接接收 PDF 文档。",
+    "设置模型能够接收的内容类型：\n\n- **文本**：接收文本内容，为只读能力标记。\n- **图片**：接收图片内容。\n- **音频**：标记模型音频输入能力；当前客户端暂不支持音频附件。\n- **视频**：接收视频内容。\n- **PDF**：直接接收 PDF 文档。",
   "settings.modelProvider.help.outputModalities":
     "模型生成回复的内容类型。目前不支持文本以外的其他选项。",
   "settings.modelProvider.help.capabilities":
@@ -4143,13 +4143,20 @@ const zhCN: Record<string, string> = {
     "根据模型 ID、Base URL 和 API 格式，为您智能匹配推荐配置。UWork 会持续更新推荐配置，并自动同步给您。\n如果手动修改某项配置，该项将转为手动管理，不再跟随推荐更新；其他配置仍由智能配置管理。",
   "settings.modelProvider.modelDefaultsLoaded": "已匹配到智能配置",
   "settings.modelProvider.modelConfigIncomplete": "模型配置不完整",
+  "settings.modelProvider.capabilitySource.catalog":
+    "能力来源：models.dev 目录推荐。实际网关可能另有限制；手动设置优先。",
   "settings.modelProvider.capabilitySource.gateway":
     "能力来源：网关。未提供的参数沿用型号推荐或兼容默认值；手动设置优先。",
   "settings.modelProvider.capabilitySource.builtin":
     "能力来源：内置型号推荐。网关可能另有限制；手动设置优先。",
   "settings.modelProvider.capabilitySource.unknown": "模型能力未确认",
   "settings.modelProvider.capabilityUnconfirmed":
-    "网关只提供了模型名单，且无法识别真实型号。未手动设置的参数为兼容默认值，不代表实际上下文、输入类型或推理档位，请按网关规格确认。",
+    "未匹配到 models.dev 目录，使用软件内置默认配置，可手动覆盖。这些兼容默认值不代表实际上下文、输入类型或推理档位，请按服务商规格确认。",
+  "settings.modelProvider.capabilitySourceLabel.catalog": "models.dev 目录推荐",
+  "settings.modelProvider.nonChatModel": "该模型不适用于聊天",
+  "settings.modelProvider.audioInputNotice": "音频为模型能力标记，当前客户端暂不支持音频附件。",
+  "settings.modelProvider.catalogFetchedAt": "目录获取时间：{time}",
+  "settings.modelProvider.catalogStale": "正在使用缓存目录，联网后将自动更新。",
   "settings.modelProvider.capabilitySourceLabel.gateway": "网关提供的能力",
   "settings.modelProvider.capabilitySourceLabel.builtin": "内置型号推荐",
   "settings.modelProvider.capabilitySourceLabel.unknown": "模型能力未确认",

@@ -7,6 +7,7 @@ import {
   type UcasGatewayServiceOptions,
 } from "../src/ucas-gateway/ucasGatewayService.js";
 import type { UcasGatewayProvisioningTarget } from "../src/ucas-gateway/contract.js";
+import { createUcasGatewayClient } from "../src/ucas-gateway/ucasGatewayClient.js";
 import type { UcasGatewayStore } from "../src/ucas-gateway/ucasGatewayStore.js";
 
 const API_BASE = "https://auth.example.com";
@@ -581,4 +582,15 @@ test("an unconfigured host reports unconfigured without network calls", async ()
   const view = await service.getView();
   assert.equal(view.error, "unconfigured");
   assert.equal(view.configured, false);
+});
+
+test("ID-only gateway client ignores unused invalid metadata", async () => {
+  const client = createUcasGatewayClient({
+    apiBaseUrl: API_BASE,
+    token: "fixture-token",
+    includeModelCapabilities: false,
+    fetchImpl: async () =>
+      json({ data: [{ id: "ucas-glm", context_window: "bad", supports_vision: 42 }] }),
+  });
+  assert.deepEqual(await client.listEndpointModels(PUBLIC, "fixture-key"), ["ucas-glm"]);
 });

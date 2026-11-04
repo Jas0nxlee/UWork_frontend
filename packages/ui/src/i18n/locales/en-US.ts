@@ -4423,7 +4423,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.help.maxOutputTokens":
     "The maximum number of tokens a single model request may generate.\nDo not exceed the model's actual limit.",
   "settings.modelProvider.help.inputModalities":
-    "Set the content types the model can receive:\n\n- **Text**: Receives text content. Required.\n- **Images**: Receives image content.\n- **Video**: Receives video content.\n- **PDF**: Receives PDF documents directly.",
+    "Set the content types the model can receive:\n\n- **Text**: Receives text content. A read-only capability flag.\n- **Images**: Receives image content.\n- **Audio**: Marks model audio input support; this client does not yet support audio attachments.\n- **Video**: Receives video content.\n- **PDF**: Receives PDF documents directly.",
   "settings.modelProvider.help.outputModalities":
     "The content type of the model's replies. Only text is currently supported.",
   "settings.modelProvider.help.capabilities":
@@ -4438,13 +4438,21 @@ const enUS: Record<string, string> = {
     "Matches recommended configuration using the model ID, Base URL, and API format. UWork continually updates recommendations and automatically syncs them to you.\nWhen you manually change a setting, that setting becomes manually managed and stops following recommendation updates; other settings remain managed by smart configuration.",
   "settings.modelProvider.modelDefaultsLoaded": "Smart configuration matched for this model",
   "settings.modelProvider.modelConfigIncomplete": "Model configuration is incomplete",
+  "settings.modelProvider.capabilitySource.catalog":
+    "Capabilities recommended by the models.dev catalog. Actual gateway limits may differ. Manual settings take priority.",
   "settings.modelProvider.capabilitySource.gateway":
     "Capabilities from the gateway. Missing values use model recommendations or compatibility defaults. Manual settings take priority.",
   "settings.modelProvider.capabilitySource.builtin":
     "Capabilities from built-in model recommendations. Gateway limits may differ. Manual settings take priority.",
   "settings.modelProvider.capabilitySource.unknown": "Model capabilities unconfirmed",
   "settings.modelProvider.capabilityUnconfirmed":
-    "The gateway returned a model ID without a recognized model or capability details. Values without manual settings are compatibility defaults, not confirmed context, input types, or reasoning levels. Confirm them against the gateway specifications.",
+    "No matching models.dev entry was found. Using built-in default configuration, which you can override manually. These compatibility defaults do not confirm the model’s actual context, input types, or reasoning levels; check the provider specifications.",
+  "settings.modelProvider.capabilitySourceLabel.catalog": "models.dev catalog recommendations",
+  "settings.modelProvider.nonChatModel": "This model is not suitable for chat",
+  "settings.modelProvider.audioInputNotice":
+    "Audio is a model capability flag. This client does not yet support audio attachments.",
+  "settings.modelProvider.catalogFetchedAt": "Catalog fetched: {time}",
+  "settings.modelProvider.catalogStale": "Using the cached catalog. It will update when online.",
   "settings.modelProvider.capabilitySourceLabel.gateway": "Gateway capabilities",
   "settings.modelProvider.capabilitySourceLabel.builtin": "Built-in model recommendations",
   "settings.modelProvider.capabilitySourceLabel.unknown": "Model capabilities unconfirmed",

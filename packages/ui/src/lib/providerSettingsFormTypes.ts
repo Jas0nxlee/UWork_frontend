@@ -6,6 +6,7 @@ import type {
   ModelConfigObject,
   ProviderConfigObject,
   ProviderSettingsProviderView,
+  ProviderSettingsModelView,
 } from "@zcode/provider";
 
 /** 设置页面在一次编辑会话中使用的 Provider 状态。 */
@@ -37,10 +38,12 @@ export interface ProviderSettingsFormModel {
   modelId: string;
   builtin: boolean;
   capabilitySource?: ModelCapabilitySource;
-  /** Personal Rule 叠加前的 Built-in Rule 解析结果，用于编辑器表达继承与稀疏覆盖。 */
+  catalogSource?: ProviderSettingsModelView["catalogSource"];
+  unsupportedReason?: ProviderSettingsModelView["unsupportedReason"];
+  /** 个人覆盖叠加前的自动推荐解析结果，用于编辑器表达继承与稀疏覆盖。 */
   inheritedConfig?: ModelConfigObject;
   personalConfig: ModelConfigObject;
-  /** 缺省或 true 表示跟随 Built-in 推荐配置；false 表示固定个人配置。 */
+  /** 缺省或 true 表示跟随自动推荐配置；false 表示固定个人配置。 */
   useRecommendedConfig?: boolean;
   config: ModelConfigObject;
   hasPersonalConfig: boolean;

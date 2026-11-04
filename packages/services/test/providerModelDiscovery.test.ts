@@ -893,3 +893,31 @@ test("concurrent Host startup seeds UCAS once and preserves its saved key on res
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// 自动参数来自目录/内置时，网关只提供名单；仍严格验证 ID。
+test("ID-only discovery ignores invalid unused capability fields but rejects invalid IDs", async () => {
+  const client = {
+    request: async () =>
+      Response.json({
+        data: [
+          {
+            id: "model-a",
+            context_window: "invalid",
+            reasoning_levels: 42,
+            supports_vision: "wrong",
+          },
+        ],
+      }),
+  };
+  assert.deepEqual(await discoverProviderModels(config, client, { includeCapabilities: false }), [
+    "model-a",
+  ]);
+  await assert.rejects(
+    discoverProviderModels(
+      config,
+      { request: async () => Response.json({ data: [{ id: 42 }] }) },
+      { includeCapabilities: false },
+    ),
+    /模型 ID/,
+  );
+});

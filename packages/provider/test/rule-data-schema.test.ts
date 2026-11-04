@@ -116,7 +116,12 @@ describe("Todo104 最终规则数据合同", () => {
         let owner = candidate;
         for (const key of path.slice(0, -1)) owner = owner[key] as Record<string, unknown>;
         owner[path.at(-1)!] = missing;
-        expect(manualModelConfigSchema.safeParse(candidate).success, path.join(".")).toBe(false);
+        // 音频是后续新增的可编辑字段；旧固定文件缺省时保持继承，显式null仍拒绝。
+        const legacyAudio =
+          path.join(".") === "properties.inputFormat.supportsAudio" && missing === undefined;
+        expect(manualModelConfigSchema.safeParse(candidate).success, path.join(".")).toBe(
+          legacyAudio,
+        );
       }
     }
     expect(

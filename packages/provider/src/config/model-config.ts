@@ -28,6 +28,7 @@ import {
   type ProviderModelConfigRuleData,
   type ManualProviderModelConfigRuleData,
   type DiscoveredProviderModelConfigRuleData,
+  type ModelCatalogSource,
   type TemplateModelConfigRuleData,
   type ModelMatchConfigRuleData,
   type ModelApiMatchConfigRuleData,
@@ -339,8 +340,13 @@ export class ModelConfig extends ConfigOverlay<ModelConfig> {
 type RuleWithConfig<T> = Readonly<Omit<T, "config"> & { config: ModelConfig }>;
 export type ProviderModelConfigRule = RuleWithConfig<ProviderModelConfigRuleData>;
 export type ManualProviderModelConfigRule = RuleWithConfig<ManualProviderModelConfigRuleData>;
-export type DiscoveredProviderModelConfigRule =
-  RuleWithConfig<DiscoveredProviderModelConfigRuleData>;
+export type DiscoveredProviderModelConfigRule = Readonly<
+  Omit<DiscoveredProviderModelConfigRuleData, "config" | "catalogConfig"> & {
+    config: ModelConfig;
+    catalogConfig?: ModelConfig;
+  }
+>;
+export type { ModelCatalogSource } from "./rule-data-schema.js";
 export type TemplateModelConfigRule = RuleWithConfig<TemplateModelConfigRuleData>;
 export type ModelMatchConfigRule = RuleWithConfig<ModelMatchConfigRuleData>;
 export type ModelApiMatchConfigRule = RuleWithConfig<ModelApiMatchConfigRuleData>;
@@ -368,7 +374,8 @@ export interface ModelConfigRuleResolutionInput {
   readonly baseUrl?: string | null;
 }
 
-export type ModelCapabilitySource = "gateway" | "builtin" | "unknown";
+export type ModelCapabilitySource = "catalog" | "gateway" | "builtin" | "unknown";
+export type ModelUnsupportedReason = "non-chat-model";
 
 export class ModelConfigRules {
   readonly #rules: readonly ModelConfigRule[];
@@ -409,7 +416,13 @@ export class ModelConfigRules {
     const baseUrl = input.baseUrl == null ? undefined : normalizeBaseURLForRuleMatch(input.baseUrl);
     for (const rule of this.#rules) {
       if (rule.type === "discovered-provider-model") {
-        if (matchesDiscovered(rule, input)) result = result.overlay(rule.config);
+        if (matchesDiscovered(rule, input)) {
+          result = result.overlay(rule.config);
+          if (rule.catalogConfig) {
+            // 目录为自动推荐首选，但缺失字段继续继承网关；用户覆盖在下一层执行。
+            result = applyCatalogConfig(result, rule.catalogConfig, input.apiType);
+          }
+        }
         continue;
       }
       if (isExactModelRule(rule)) {
@@ -417,9 +430,7 @@ export class ModelConfigRules {
         // 手动规则要求所有可编辑叶子齐全，因此可直接覆盖；系统叶子继续来自当前身份的规则。
         // 清空整份基线会既丢失系统映射，也迫使 UI 把旧模型的隐藏配置复制进个人规则。
         result = (
-          rule.type === "manual-provider-model"
-            ? ModelConfig.fromData(clearManualModelConfig(result.toJSON()))
-            : result
+          rule.type === "manual-provider-model" ? manualConfigBase(result, rule.config) : result
         ).overlay(rule.config);
         continue;
       }
@@ -451,24 +462,50 @@ export class ModelConfigRules {
     modelId: string,
     config: ModelConfig,
     scope: { readonly apiType: string; readonly baseUrl: string },
+    catalog?: { readonly config: ModelConfig; readonly source: ModelCatalogSource } | null,
   ): ModelConfigRules {
+    const previous = this.getDiscoveredRule({ providerId, modelId, ...scope });
+    const catalogFields =
+      catalog === undefined
+        ? previous?.catalogConfig
+          ? { catalogConfig: previous.catalogConfig, catalogSource: previous.catalogSource }
+          : {}
+        : catalog === null
+          ? {}
+          : { catalogConfig: catalog.config, catalogSource: Object.freeze({ ...catalog.source }) };
     discoveredProviderModelConfigRuleSchema.parse({
       providerId,
       modelId,
       config: config.toJSON(),
       ...scope,
+      ...catalogFields,
+      ...(catalogFields.catalogConfig
+        ? { catalogConfig: catalogFields.catalogConfig.toJSON() }
+        : {}),
     });
     return new ModelConfigRules([
       ...this.deleteDiscovered(providerId, modelId).rules(),
-      { type: "discovered-provider-model", providerId, modelId, config, ...scope },
+      {
+        type: "discovered-provider-model",
+        providerId,
+        modelId,
+        config,
+        ...scope,
+        ...catalogFields,
+      },
     ]);
   }
 
   getDiscovered(input: ModelConfigRuleResolutionInput): ModelConfig | undefined {
+    return this.getDiscoveredRule(input)?.config;
+  }
+
+  getDiscoveredRule(
+    input: ModelConfigRuleResolutionInput,
+  ): DiscoveredProviderModelConfigRule | undefined {
     for (let index = this.#rules.length - 1; index >= 0; index -= 1) {
       const rule = this.#rules[index]!;
-      if (rule.type === "discovered-provider-model" && matchesDiscovered(rule, input))
-        return rule.config;
+      if (rule.type === "discovered-provider-model" && matchesDiscovered(rule, input)) return rule;
     }
     return undefined;
   }
@@ -477,8 +514,10 @@ export class ModelConfigRules {
     input: ModelConfigRuleResolutionInput,
     opaqueAlias = false,
   ): ModelCapabilitySource {
-    const discovered = this.getDiscovered(input);
-    if (discovered && hasConfigLeaves(discovered.toJSON())) return "gateway";
+    const discovered = this.getDiscoveredRule(input);
+    if (discovered?.catalogConfig && hasConfigLeaves(discovered.catalogConfig.toJSON()))
+      return "catalog";
+    if (discovered && hasConfigLeaves(discovered.config.toJSON())) return "gateway";
     // 路由逻辑别名可能包含型号词，但不能据此确认网关当前实际分配的后端。
     if (opaqueAlias) return "unknown";
     // 通用兜底保证旧运行链路可用，但不能冒充已确认的型号能力。
@@ -633,8 +672,56 @@ export class ModelConfigRules {
   #collect<T extends ModelConfigRule["type"]>(type: T) {
     return this.#rules
       .filter((rule): rule is Extract<ModelConfigRule, { type: T }> => rule.type === type)
-      .map(({ type: _type, config, ...identity }) => ({ ...identity, config: config.toJSON() }));
+      .map(({ type: _type, config, ...identity }) => ({
+        ...identity,
+        config: config.toJSON(),
+        ...("catalogConfig" in identity && identity.catalogConfig instanceof ModelConfig
+          ? { catalogConfig: identity.catalogConfig.toJSON() }
+          : {}),
+      }));
   }
+}
+
+function manualConfigBase(base: ModelConfig, manual: ModelConfig): ModelConfig {
+  const cleared = ModelConfig.fromData(clearManualModelConfig(base.toJSON()));
+  const audio =
+    manual.properties?.inputFormat?.supportsAudio === undefined
+      ? base.properties?.inputFormat?.supportsAudio
+      : undefined;
+  // 旧固定配置没有音频叶子，继续继承系统能力；新固定值与其他可编辑字段一样覆盖。
+  return audio === undefined
+    ? cleared
+    : cleared.overlay(
+        ModelConfig.fromData({ properties: { inputFormat: { supportsAudio: audio } } }),
+      );
+}
+
+function applyCatalogConfig(
+  base: ModelConfig,
+  catalog: ModelConfig,
+  apiType?: string | null,
+): ModelConfig {
+  let result = base.overlay(catalog);
+  const levels = catalog.optionSpecs?.reasoningLevel?.values;
+  if (!levels) return result;
+  const disabled = levels.length === 1 && (levels[0] === "disabled" || levels[0] === "none");
+  let map = disabled ? "{}" : undefined;
+  // 目录不携带可执行映射；只有明确effort且继承映射为空时才补当前协议的安全字段。
+  const inheritedMap = result.optionSpecs?.reasoningLevel?.map?.trim();
+  if (
+    !disabled &&
+    !levels.includes("enabled") &&
+    !levels.includes("disabled") &&
+    (!inheritedMap || inheritedMap === "{}")
+  ) {
+    if (apiType === "openai-chat-completions") map = '{"reasoning_effort": reasoningLevel}';
+    else if (apiType === "openai-responses") map = '{"reasoning": {"effort": reasoningLevel}}';
+    else if (apiType === "anthropic-messages")
+      map = '{"output_config": {"effort": reasoningLevel}}';
+  }
+  if (map !== undefined)
+    result = result.overlay(ModelConfig.fromData({ optionSpecs: { reasoningLevel: { map } } }));
+  return result;
 }
 
 function matchesDiscovered(

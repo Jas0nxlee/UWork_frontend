@@ -56,6 +56,60 @@ function completeModelConfig(
 }
 
 describe("ProviderConfigResolver", () => {
+  it.each(["inputFormat", "outputFormat"] as const)(
+    "目录明确%s不支持text时仍展示但不进入聊天Registry",
+    (field) => {
+      const scope = {
+        apiType: "openai-chat-completions" as const,
+        baseUrl: "https://gateway.example/v1",
+      };
+      const result = new ProviderConfigResolver().resolve({
+        zcodeBuiltinProviders: ProviderConfigMap.empty(),
+        personalProviders: new ProviderConfigMap([
+          [
+            "p",
+            createApiKeyProviderConfig({
+              group: "standard-personal",
+              apiFormat: scope.apiType,
+              baseURL: scope.baseUrl,
+              personalModels: ["image-model"],
+            }),
+          ],
+        ]),
+        accountProviders: ProviderConfigMap.empty(),
+        zcodeBuiltinModelRules: new ModelConfigRules([
+          { type: "model", modelMatch: ".*", config: completeModelConfig() },
+        ]),
+        personalModels: ModelConfigRules.empty().setDiscovered(
+          "p",
+          "image-model",
+          ModelConfig.empty(),
+          scope,
+          {
+            config: ModelConfig.fromData({ properties: { [field]: { supportsText: false } } }),
+            source: {
+              source: "models.dev",
+              providerId: "example",
+              modelId: "image-model",
+              fetchedAt: 123,
+              stale: false,
+            },
+          },
+        ),
+      });
+      expect(result.resolvedProviders[0]?.models[0]).toMatchObject({
+        capabilitySource: "catalog",
+        unsupportedReason: "non-chat-model",
+        executable: false,
+      });
+      expect(
+        result.resolvedProviders[0]?.models[0]?.issues.some(
+          (issue) => issue.code === "unsupported-model-output",
+        ),
+      ).toBe(true);
+      expect(result.registryProviders).toEqual([]);
+    },
+  );
   it("UCAS逻辑别名误命中型号词仍标未知，标准型号和网关能力保留各自来源", () => {
     const ids = ["ucas-deepseek-flash", "ucas-deepseek-custom", "gpt-5.4-mini", "ucas-explicit"];
     const result = new ProviderConfigResolver().resolve({

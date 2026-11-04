@@ -126,6 +126,7 @@ const wirePlanModelsSchema = z.object({
 const wireEndpointModelsSchema = z.object({ data: z.array(z.unknown()) });
 
 export interface UcasGatewayClientOptions {
+  readonly includeModelCapabilities?: boolean;
   /** control-plane 根地址（与企微认证服务同源）。 */
   readonly apiBaseUrl: string;
   readonly token: string;
@@ -331,7 +332,9 @@ export function createUcasGatewayClient(options: UcasGatewayClientOptions): Ucas
       const models = new Map<string, DiscoveredModelInput>();
       try {
         for (const item of raw.data) {
-          const model = parseProviderModelListItem(item, "openai-chat-completions");
+          const model = parseProviderModelListItem(item, "openai-chat-completions", {
+            includeCapabilities: options.includeModelCapabilities,
+          });
           if (model !== null) models.set(typeof model === "string" ? model : model.id, model);
         }
       } catch {

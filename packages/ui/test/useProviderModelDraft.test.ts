@@ -7,6 +7,40 @@ import { smartDraftModel } from "./providerModelSmartDraftFixture.js";
 
 afterEach(() => vi.useRealTimers());
 describe("Todo90 shared draft lifecycle", () => {
+  it("目录预览传递来源与非聊天原因，修改型号立即清除旧元数据", async () => {
+    const model = smartDraftModel();
+    const catalogSource = {
+      source: "models.dev" as const,
+      providerId: "openai",
+      modelId: "image-only",
+      fetchedAt: 1234,
+      stale: true,
+    };
+    const resolve = vi.fn(
+      async (): Promise<ModelConfigResolution> => ({
+        inheritedConfig: model.config,
+        effectiveConfig: model.config,
+        capabilitySource: "catalog",
+        catalogSource,
+        unsupportedReason: "non-chat-model",
+        issues: [],
+      }),
+    );
+    const { result } = renderHook(() =>
+      useProviderModelDraft({ model, open: true, scopeKey: "p", resolve }),
+    );
+    act(() => result.current.change({ idValue: "image-only" }));
+    await act(async () => {
+      await result.current.flush();
+    });
+    expect(result.current.capabilitySource).toBe("catalog");
+    expect(result.current.catalogSource).toEqual(catalogSource);
+    expect(result.current.unsupportedReason).toBe("non-chat-model");
+    act(() => result.current.change({ idValue: "another-model" }));
+    expect(result.current.catalogSource).toBeUndefined();
+    expect(result.current.unsupportedReason).toBeUndefined();
+  });
+
   it("关闭模式拒绝在途推荐；重新开启不复用旧模式的回包", async () => {
     const model = smartDraftModel();
     const pending: ((value: ModelConfigResolution) => void)[] = [];

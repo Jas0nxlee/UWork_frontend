@@ -39,6 +39,7 @@ import {
 } from "@/settings/model-provider-section/ModelConfigHelp.js";
 
 import { ModelEditorAdvanced } from "@/settings/model-provider-section/ModelEditorAdvanced.js";
+import type { ProviderSettingsFormModel } from "@/lib/providerSettingsFormTypes.js";
 
 export function selectFocusedInputText(event: Pick<FocusEvent<HTMLInputElement>, "currentTarget">) {
   event.currentTarget.select();
@@ -54,6 +55,8 @@ export function ProviderModelMetadataDialog({
   overrideFields,
   inheritedConfig,
   capabilitySource,
+  catalogSource,
+  unsupportedReason,
   onOpenChange,
   onDraftChange,
   onRestore,
@@ -73,6 +76,8 @@ export function ProviderModelMetadataDialog({
   overrideFields?: ReadonlySet<string>;
   inheritedConfig?: ModelConfigObject;
   capabilitySource?: ModelCapabilitySource;
+  catalogSource?: ProviderSettingsFormModel["catalogSource"];
+  unsupportedReason?: ProviderSettingsFormModel["unsupportedReason"];
   onOpenChange: (open: boolean) => void;
   onDraftChange: (patch: Partial<ProviderModelDraftValues>) => void;
   onRestore?: () => void;
@@ -175,7 +180,15 @@ export function ProviderModelMetadataDialog({
           className="min-h-0 min-w-0 -mr-3 space-y-4 overflow-y-auto pr-4"
           data-model-settings-scroll="true"
         >
-          <ModelCapabilitySourceNotice source={capabilitySource} />
+          <ModelCapabilitySourceNotice source={capabilitySource} catalogSource={catalogSource} />
+          {unsupportedReason === "non-chat-model" ? (
+            <p
+              className="text-ui-sm text-destructive"
+              data-model-unsupported-reason={unsupportedReason}
+            >
+              {intl.formatMessage({ id: "settings.modelProvider.nonChatModel" })}
+            </p>
+          ) : null}
           <ModelSettingsGroup group="basic">
             <div data-model-identity-row="true" className="flex flex-col gap-4">
               <div className="min-w-0 flex-1">
@@ -204,105 +217,111 @@ export function ProviderModelMetadataDialog({
               </div>
             </div>
           </ModelSettingsGroup>
-          <ModelSettingsGroup group="tokens">
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 block text-ui-base text-foreground-subtle">
-                  <ModelConfigInputLabel field="contextWindow" htmlFor={contextWindowInputId} />
-                </div>
-                <Input
-                  {...TECHNICAL_INPUT_ATTRIBUTES}
-                  id={contextWindowInputId}
-                  type="text"
-                  autoFocus={shouldFocusContextWindowInput}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  size="lg"
-                  value={draft.contextWindowValue}
-                  data-personal-override={overridden(
-                    "contextWindowValue",
-                    personalConfig?.properties?.contextWindow !== undefined,
-                  )}
-                  className={modelEditorControlStyle(
-                    overridden(
-                      "contextWindowValue",
-                      personalConfig?.properties?.contextWindow !== undefined,
-                    ),
-                  )}
-                  placeholder={
-                    draft.useRecommendedConfigValue === false ||
-                    inheritedConfig?.properties?.contextWindow === undefined
-                      ? undefined
-                      : String(inheritedConfig.properties.contextWindow)
-                  }
-                  onChange={(event) => {
-                    onDraftChange({ contextWindowValue: event.target.value });
-                  }}
-                  onFocus={selectFocusedInputText}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onKeyDown={handleTechnicalInputKeyDown}
-                />
-              </div>
-            </div>
-          </ModelSettingsGroup>
-          <ModelSettingsGroup group="tokens">
-            <div className="space-y-3">
-              <div data-model-max-output="true">
-                <div className="mb-1 flex items-center gap-2">
-                  <div className="text-ui-base text-foreground-subtle">
-                    <ModelConfigInputLabel field="maxOutputTokens" htmlFor={maxOutputInputId} />
+          {unsupportedReason !== "non-chat-model" ? (
+            <>
+              <ModelSettingsGroup group="tokens">
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 block text-ui-base text-foreground-subtle">
+                      <ModelConfigInputLabel field="contextWindow" htmlFor={contextWindowInputId} />
+                    </div>
+                    <Input
+                      {...TECHNICAL_INPUT_ATTRIBUTES}
+                      id={contextWindowInputId}
+                      type="text"
+                      autoFocus={shouldFocusContextWindowInput}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      size="lg"
+                      value={draft.contextWindowValue}
+                      data-personal-override={overridden(
+                        "contextWindowValue",
+                        personalConfig?.properties?.contextWindow !== undefined,
+                      )}
+                      className={modelEditorControlStyle(
+                        overridden(
+                          "contextWindowValue",
+                          personalConfig?.properties?.contextWindow !== undefined,
+                        ),
+                      )}
+                      placeholder={
+                        draft.useRecommendedConfigValue === false ||
+                        inheritedConfig?.properties?.contextWindow === undefined
+                          ? undefined
+                          : String(inheritedConfig.properties.contextWindow)
+                      }
+                      onChange={(event) => {
+                        onDraftChange({ contextWindowValue: event.target.value });
+                      }}
+                      onFocus={selectFocusedInputText}
+                      onCompositionStart={handleCompositionStart}
+                      onCompositionEnd={handleCompositionEnd}
+                      onKeyDown={handleTechnicalInputKeyDown}
+                    />
                   </div>
-                  {addModelConfigResolutionPending ? (
-                    <span
-                      className="inline-flex shrink-0 items-center text-foreground-subtlest"
-                      role="status"
-                    >
-                      <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
-                      <span className="sr-only">
-                        {intl.formatMessage({ id: "common.loading" })}
-                      </span>
-                    </span>
-                  ) : null}
                 </div>
-                <Input
-                  {...TECHNICAL_INPUT_ATTRIBUTES}
-                  id={maxOutputInputId}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  size="lg"
-                  value={draft.maxOutputTokensValue}
-                  data-personal-override={overridden(
-                    "maxOutputTokensValue",
-                    personalConfig?.optionSpecs?.maxOutputTokens?.max !== undefined,
-                  )}
-                  className={modelEditorControlStyle(
-                    overridden(
-                      "maxOutputTokensValue",
-                      personalConfig?.optionSpecs?.maxOutputTokens?.max !== undefined,
-                    ),
-                  )}
-                  placeholder={
-                    draft.useRecommendedConfigValue === false ||
-                    inheritedConfig?.optionSpecs?.maxOutputTokens?.max === undefined
-                      ? undefined
-                      : String(inheritedConfig.optionSpecs.maxOutputTokens.max)
-                  }
-                  disabled={maxOutputTokensInputDisabled}
-                  aria-label={intl.formatMessage({
-                    id: "settings.modelProvider.maxOutputTokens",
-                  })}
-                  aria-busy={addModelConfigResolutionPending}
-                  onChange={(event) => onDraftChange({ maxOutputTokensValue: event.target.value })}
-                  onFocus={selectFocusedInputText}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onKeyDown={handleTechnicalInputKeyDown}
-                />
-              </div>
-            </div>
-          </ModelSettingsGroup>
+              </ModelSettingsGroup>
+              <ModelSettingsGroup group="tokens">
+                <div className="space-y-3">
+                  <div data-model-max-output="true">
+                    <div className="mb-1 flex items-center gap-2">
+                      <div className="text-ui-base text-foreground-subtle">
+                        <ModelConfigInputLabel field="maxOutputTokens" htmlFor={maxOutputInputId} />
+                      </div>
+                      {addModelConfigResolutionPending ? (
+                        <span
+                          className="inline-flex shrink-0 items-center text-foreground-subtlest"
+                          role="status"
+                        >
+                          <Loader2Icon className="size-3.5 animate-spin" aria-hidden="true" />
+                          <span className="sr-only">
+                            {intl.formatMessage({ id: "common.loading" })}
+                          </span>
+                        </span>
+                      ) : null}
+                    </div>
+                    <Input
+                      {...TECHNICAL_INPUT_ATTRIBUTES}
+                      id={maxOutputInputId}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      size="lg"
+                      value={draft.maxOutputTokensValue}
+                      data-personal-override={overridden(
+                        "maxOutputTokensValue",
+                        personalConfig?.optionSpecs?.maxOutputTokens?.max !== undefined,
+                      )}
+                      className={modelEditorControlStyle(
+                        overridden(
+                          "maxOutputTokensValue",
+                          personalConfig?.optionSpecs?.maxOutputTokens?.max !== undefined,
+                        ),
+                      )}
+                      placeholder={
+                        draft.useRecommendedConfigValue === false ||
+                        inheritedConfig?.optionSpecs?.maxOutputTokens?.max === undefined
+                          ? undefined
+                          : String(inheritedConfig.optionSpecs.maxOutputTokens.max)
+                      }
+                      disabled={maxOutputTokensInputDisabled}
+                      aria-label={intl.formatMessage({
+                        id: "settings.modelProvider.maxOutputTokens",
+                      })}
+                      aria-busy={addModelConfigResolutionPending}
+                      onChange={(event) =>
+                        onDraftChange({ maxOutputTokensValue: event.target.value })
+                      }
+                      onFocus={selectFocusedInputText}
+                      onCompositionStart={handleCompositionStart}
+                      onCompositionEnd={handleCompositionEnd}
+                      onKeyDown={handleTechnicalInputKeyDown}
+                    />
+                  </div>
+                </div>
+              </ModelSettingsGroup>
+            </>
+          ) : null}
           <ModelEditorAdvanced
             open={open}
             errorField={draftErrorField}
@@ -321,6 +340,9 @@ export function ProviderModelMetadataDialog({
                     personalValue={personalConfig?.properties?.inputFormat}
                     overrideFields={activeOverrides}
                   />
+                  <p className="mt-2 text-ui-sm text-foreground-subtle">
+                    {intl.formatMessage({ id: "settings.modelProvider.audioInputNotice" })}
+                  </p>
                 </div>
               </div>
             </ModelSettingsGroup>

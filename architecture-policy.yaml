@@ -858,6 +858,24 @@ modules:
     layers:
       ui: .
     owner: persistence
+  # model-catalog：由 architecture:adopt 登记
+  - id: model-catalog
+    roots:
+      - packages/services/src/model-catalog
+    managed: true
+    requires:
+      - provider
+      - shared
+    publicEntrypoints:
+      - packages/services/src/model-catalog/module.ts
+      - packages/services/src/model-catalog/contract.ts
+    layers:
+      adapters: .
+      contract: contract.ts
+      domain: domain
+      app: app
+    layerOrder: [ contract, domain, app, adapters ]
+    owner: model-provider
 
 global:
   # 临时时间戳（2026-09-10）：unmanaged-new-file 只约束此日期之后首次入库的文件。

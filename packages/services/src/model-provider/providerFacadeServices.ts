@@ -21,6 +21,7 @@ import {
 import { createServiceDescriptor } from "../descriptors.js";
 import type { ModelConnectivityResult } from "@zcode/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
+import { createProviderCatalogSync, type ModelsDevCatalog } from "../model-catalog/module.js";
 
 export type {
   ProviderSettingsProviderView,
@@ -146,17 +147,35 @@ export function createProviderSettingsService(
   ensureReady: () => Promise<void> = async () => {},
   testConnectivity?: ProviderSettingsConnectivityTester,
   discoverModels?: ProviderModelDiscoverer,
-): IProviderSettingsService {
+  modelCatalog?: ModelsDevCatalog,
+  isActive: () => boolean = () => true,
+): IProviderSettingsService & { refreshCatalog(): Promise<ProviderSettingsView> } {
+  const catalog = createProviderCatalogSync({ facade, catalog: modelCatalog, isActive });
+  const log = createServiceLogger("provider-model-catalog");
+  const refreshSaved = async (providerId: string) => {
+    try {
+      return await catalog.refresh(providerId);
+    } catch (error) {
+      // 用户变更已经成功落盘，附加目录刷新失败不能把保存结果反转为失败。
+      log.warn(undefined, "模型已保存，目录更新暂不可用", { error });
+      return facade.getView();
+    }
+  };
   const inFlight = new Map<string, Promise<ProviderModelDiscoveryResult>>();
   const discover = async (providerId: string): Promise<ProviderModelDiscoveryResult> => {
     await ensureReady();
+    await catalog.wait(providerId);
     await facade.waitForProviderOperations(providerId);
     const before = facade.getView();
     const provider = before.providers.find((item) => item.providerId === providerId);
     if (!provider || provider.effectiveConfig.group !== "standard-personal")
       throw new Error("请选择自定义供应商");
     if (!discoverModels) throw new Error("当前 Host 不支持自动获取模型，请更新 Host");
-    const models = await discoverModels(provider.effectiveConfig);
+    const models = await catalog.enrich(
+      provider.effectiveConfig,
+      await discoverModels(provider.effectiveConfig),
+    );
+    if (!isActive()) throw new Error("模型服务已关闭");
     const existing = new Set(provider.models.map((model) => model.modelId));
     const added = models.filter(
       (model) => !existing.has(typeof model === "string" ? model : model.id),
@@ -165,6 +184,10 @@ export function createProviderSettingsService(
     return { view, discovered: models.length, added, skipped: models.length - added };
   };
   return {
+    refreshCatalog: async () => {
+      await ensureReady();
+      return catalog.refresh();
+    },
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
     discoverModels: (providerId) => {
       if (typeof providerId !== "string" || !providerId.trim())
@@ -185,7 +208,8 @@ export function createProviderSettingsService(
     },
     refresh: async (reason) => {
       await ensureReady();
-      return facade.refresh(reason);
+      await facade.refresh(reason);
+      return catalog.refresh();
     },
     createPersonalProvider: async (input) => {
       await ensureReady();
@@ -193,11 +217,13 @@ export function createProviderSettingsService(
     },
     resolveModelConfig: async (input) => {
       await ensureReady();
-      return facade.resolveModelConfig(input);
+      return facade.resolveModelConfig(input, await catalog.preview(input));
     },
     savePersonalProviderOverlay: async (providerId, config, metadata) => {
       await ensureReady();
-      return facade.savePersonalProviderOverlay(providerId, config, metadata);
+      await catalog.wait(providerId);
+      await facade.savePersonalProviderOverlay(providerId, config, metadata);
+      return refreshSaved(providerId);
     },
     setUcasApiKeyIfMissing: async (apiKey) => {
       await ensureReady();
@@ -205,6 +231,7 @@ export function createProviderSettingsService(
     },
     applyUcasGatewayProvisioning: async (input) => {
       await ensureReady();
+      await catalog.wait(UCAS_PROVIDER_ID);
       await facade.waitForProviderOperations(UCAS_PROVIDER_ID);
       const applied = input.modelsOnly
         ? { view: facade.getView(), apiKeyApplied: false }
@@ -222,7 +249,8 @@ export function createProviderSettingsService(
         const id = (typeof model === "string" ? model : model.id).trim();
         if (id) byId.set(id, typeof model === "string" ? id : { ...model, id });
       }
-      const models = [...byId.values()];
+      const models = await catalog.enrich(provider.effectiveConfig, [...byId.values()]);
+      if (!isActive()) throw new Error("模型服务已关闭");
       const existing = new Set(provider.models.map((model) => model.modelId));
       const added = [...byId.keys()].filter((modelId) => !existing.has(modelId));
       // 已有成员也必须走同一事务刷新自动能力，不能被“新增为零”的幂等统计短路。
@@ -256,11 +284,15 @@ export function createProviderSettingsService(
     },
     addPersonalModel: async (providerId, modelId, config, useRecommendedConfig) => {
       await ensureReady();
-      return facade.addPersonalModel(providerId, modelId, config, useRecommendedConfig);
+      await catalog.wait(providerId);
+      await facade.addPersonalModel(providerId, modelId, config, useRecommendedConfig);
+      return refreshSaved(providerId);
     },
     renamePersonalModel: async (providerId, currentModelId, nextModelId) => {
       await ensureReady();
-      return facade.renamePersonalModel(providerId, currentModelId, nextModelId);
+      await catalog.wait(providerId);
+      await facade.renamePersonalModel(providerId, currentModelId, nextModelId);
+      return refreshSaved(providerId);
     },
     deletePersonalModel: async (providerId, modelId) => {
       await ensureReady();
@@ -268,7 +300,9 @@ export function createProviderSettingsService(
     },
     savePersonalModelDraft: async (input) => {
       await ensureReady();
-      return facade.savePersonalModelDraft(input);
+      await catalog.wait(input.providerId);
+      await facade.savePersonalModelDraft(input);
+      return refreshSaved(input.providerId);
     },
     setPersonalModelEnabled: async (providerId, modelId, enabled) => {
       await ensureReady();

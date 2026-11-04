@@ -3,6 +3,7 @@ import type {
   ModelConfigRules,
   ModelId,
   ModelConfigObject,
+  ModelCatalogSource,
   ProviderConfig,
   ProviderId,
   ProviderTemplateId,
@@ -116,6 +117,9 @@ export type DiscoveredModelInput =
       readonly config?: ModelConfigObject;
       /** 仅本地目录读取失败时使用；补成员但不撤销已确认的自动能力。 */
       readonly preserveCapabilities?: true;
+      /** undefined 保留现有目录；null 表示成功查询但无匹配。 */
+      readonly catalogConfig?: ModelConfigObject | null;
+      readonly catalogSource?: ModelCatalogSource;
     };
 
 function assertMembershipCurrent(
@@ -648,11 +652,23 @@ export class ProviderConfigService implements ProviderSource<ProviderConfigSnaps
         if (typeof model !== "string" && model.preserveCapabilities && model.config !== undefined) {
           throw new Error("保留模型能力与覆盖模型能力不能同时声明");
         }
+        if (
+          typeof model !== "string" &&
+          (model.catalogConfig != null) !== (model.catalogSource !== undefined)
+        ) {
+          throw new Error("目录配置与来源必须成对提供");
+        }
         return [
           normalizeId("modelId", typeof model === "string" ? model : model.id),
           {
             config: parseModelConfig(typeof model === "string" ? {} : (model.config ?? {})),
             preserveCapabilities: typeof model !== "string" && model.preserveCapabilities === true,
+            catalog:
+              typeof model === "string" || model.catalogConfig === undefined
+                ? undefined
+                : model.catalogConfig === null
+                  ? null
+                  : { config: parseModelConfig(model.catalogConfig), source: model.catalogSource! },
           },
         ] as const;
       }),
@@ -686,8 +702,18 @@ export class ProviderConfigService implements ProviderSource<ProviderConfigSnaps
       }
       // 自动能力不能混入个人精确覆盖，否则下次刷新无法区分用户修改和网关事实。
       for (const [modelId, discovered] of incoming) {
-        if (!discovered.preserveCapabilities) {
-          models = models.setDiscovered(id, modelId, discovered.config, { apiType, baseUrl });
+        if (!discovered.preserveCapabilities || discovered.catalog !== undefined) {
+          const config = discovered.preserveCapabilities
+            ? (models.getDiscovered({ providerId: id, modelId, apiType, baseUrl }) ??
+              ModelConfig.empty())
+            : discovered.config;
+          models = models.setDiscovered(
+            id,
+            modelId,
+            config,
+            { apiType, baseUrl },
+            discovered.catalog,
+          );
         }
       }
       return {

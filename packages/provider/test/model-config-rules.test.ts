@@ -40,6 +40,108 @@ const complete = {
 };
 
 describe("ModelConfigRules", () => {
+  it("models.dev按字段优先于网关，刷新网关保持目录，明确无匹配只清目录", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const source = {
+      source: "models.dev" as const,
+      providerId: "openai",
+      modelId: "m",
+      fetchedAt: 123,
+      stale: false,
+    };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 64_000, inputFormat: { supportsImage: true } },
+      }),
+      scope,
+      { config: parseModelConfig({ properties: { contextWindow: 128_000 } }), source },
+    );
+    let effective = ModelConfigRules.composeEffective(builtin, personal);
+    expect(effective.resolve(input).properties).toMatchObject({
+      contextWindow: 128_000,
+      inputFormat: { supportsImage: true },
+    });
+    expect(effective.capabilitySource(input)).toBe("catalog");
+    personal = personal.setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 256_000 } }),
+      scope,
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(128_000);
+    const roundTrip = parsePersonalModelConfigRules(personal.toPersonalJSON());
+    expect(roundTrip.getDiscoveredRule(input)?.catalogSource).toEqual(source);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 32_000 } }),
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(32_000);
+    personal = personal
+      .deleteExact("p", "m")
+      .setDiscovered("p", "m", personal.getDiscovered(input)!, scope, null);
+    effective = ModelConfigRules.composeEffective(builtin, personal);
+    expect(effective.resolve(input).properties?.contextWindow).toBe(256_000);
+    expect(effective.capabilitySource(input)).toBe("gateway");
+  });
+
+  it("目录禁用推理不发送effort，明确effort仅为空映射补协议而保留复杂型号映射", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const source = {
+      source: "models.dev" as const,
+      providerId: "openai",
+      modelId: "m",
+      fetchedAt: 123,
+      stale: false,
+    };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered("p", "m", parseModelConfig({}), scope, {
+      config: parseModelConfig({ optionSpecs: { reasoningLevel: { values: ["low", "high"] } } }),
+      source,
+    });
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).optionSpecs
+        ?.reasoningLevel?.map,
+    ).toBe('{"reasoning_effort": reasoningLevel}');
+    const complex = builtin
+      .rules()
+      .map((rule) => ({
+        ...rule,
+        config: rule.config.overlay(
+          parseModelConfig({
+            optionSpecs: { reasoningLevel: { map: '{"thinking":{"effort":reasoningLevel}}' } },
+          }),
+        ),
+      }));
+    expect(
+      ModelConfigRules.composeEffective(new ModelConfigRules(complex), personal).resolve(input)
+        .optionSpecs?.reasoningLevel?.map,
+    ).toBe('{"thinking":{"effort":reasoningLevel}}');
+    personal = personal.setDiscovered("p", "m", parseModelConfig({}), scope, {
+      config: parseModelConfig({ optionSpecs: { reasoningLevel: { values: ["disabled"] } } }),
+      source,
+    });
+    expect(
+      ModelConfigRules.composeEffective(new ModelConfigRules(complex), personal).resolve(input)
+        .optionSpecs?.reasoningLevel?.map,
+    ).toBe("{}");
+  });
+
   it("网关能力按连接隔离，刷新只替换自动层，个人覆盖始终优先", () => {
     const builtin = parseZCodeBuiltinModelConfigRules({
       ...emptyBuiltin,

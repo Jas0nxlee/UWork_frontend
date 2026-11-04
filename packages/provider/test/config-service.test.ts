@@ -237,6 +237,99 @@ describe("ProviderConfigService", () => {
       expect(resolution.inheritedConfig.properties?.contextWindow).toBe(900_000);
       expect(resolution.effectiveConfig.properties?.contextWindow).toBe(64_000);
       expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.enabled).toBe(false);
+      const catalogSource = {
+        source: "models.dev" as const,
+        providerId: "example",
+        modelId: "m",
+        fetchedAt: 123,
+        stale: false,
+      };
+      view = await facade.addDiscoveredModels(
+        "p",
+        [
+          {
+            id: "m",
+            preserveCapabilities: true,
+            catalogConfig: {
+              properties: { contextWindow: 1_000_000, inputFormat: { supportsAudio: true } },
+            },
+            catalogSource,
+          },
+        ],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        enabled: false,
+        capabilitySource: "catalog",
+        catalogSource,
+        effectiveConfig: {
+          properties: { contextWindow: 64_000, inputFormat: { supportsAudio: true } },
+        },
+      });
+      const stored = JSON.stringify(personal.current.models.toPersonalJSON());
+      const retainedCatalog = facade.resolveModelConfig(
+        { providerId: "p", modelId: "m" },
+        { id: "m", config: {} },
+      );
+      expect(retainedCatalog.capabilitySource).toBe("catalog");
+      expect(retainedCatalog.inheritedConfig.properties?.contextWindow).toBe(1_000_000);
+      const preview = facade.resolveModelConfig(
+        { providerId: "p", originalModelId: "m", modelId: "preview-model", personalConfig: {} },
+        {
+          id: "preview-model",
+          preserveCapabilities: true,
+          catalogConfig: { properties: { contextWindow: 123_000 } },
+          catalogSource: { ...catalogSource, modelId: "preview-model" },
+        },
+      );
+      expect(preview).toMatchObject({
+        capabilitySource: "catalog",
+        inheritedConfig: { properties: { contextWindow: 123_000 } },
+        effectiveConfig: { properties: { contextWindow: 123_000 } },
+      });
+      expect(JSON.stringify(personal.current.models.toPersonalJSON())).toBe(stored);
+      expect(personal.current.providers.get("p")?.personalModelIds).not.toContain("preview-model");
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", preserveCapabilities: true }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.capabilitySource).toBe(
+        "catalog",
+      );
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", preserveCapabilities: true, catalogConfig: null }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.capabilitySource).toBe(
+        "gateway",
+      );
+      expect(
+        facade.resolveModelConfig({ providerId: "p", modelId: "m" }).inheritedConfig.properties
+          ?.contextWindow,
+      ).toBe(900_000);
+      for (const catalogConfig of [null, undefined]) {
+        const withoutGateway = facade.resolveModelConfig(
+          { providerId: "p", modelId: "m" },
+          {
+            id: "m",
+            config: {},
+            catalogConfig,
+          },
+        );
+        expect(withoutGateway.inheritedConfig.properties?.contextWindow).toBe(200_000);
+        expect(withoutGateway.effectiveConfig.properties?.contextWindow).toBe(64_000);
+        expect(withoutGateway.capabilitySource).toBe("unknown");
+      }
+      expect(
+        personal.current.models.getDiscovered({
+          providerId: "p",
+          modelId: "m",
+          apiType: "anthropic-messages",
+          baseUrl: "https://api.example.com",
+        })?.properties?.contextWindow,
+      ).toBe(900_000);
     } finally {
       registry.dispose();
       service.dispose();

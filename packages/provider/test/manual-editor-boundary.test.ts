@@ -22,6 +22,17 @@ export const manualConfig = {
 };
 
 describe("Todo130 手动可编辑字段边界", () => {
+  it("audio支持可手动冻结，旧固定配置缺少audio仍保持兼容", () => {
+    expect(manualModelConfigSchema.safeParse(manualConfig).success).toBe(true);
+    const updated = {
+      ...manualConfig,
+      properties: {
+        ...manualConfig.properties,
+        inputFormat: { ...manualConfig.properties.inputFormat, supportsAudio: true },
+      },
+    };
+    expect(manualModelConfigSchema.parse(updated).properties.inputFormat.supportsAudio).toBe(true);
+  });
   it("只要求可编辑叶子，拒绝隐藏字段；enabled 的三态不变", () => {
     for (const enabled of [undefined, null, true, false])
       expect(manualModelConfigSchema.safeParse({ ...manualConfig, enabled }).success).toBe(true);

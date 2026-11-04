@@ -1,3 +1,4 @@
+import { createModelsDevCatalog } from "./model-catalog/module.js";
 import {
   createRemoteProjectService,
   IRemoteProjectService,
@@ -1699,9 +1700,17 @@ export function createLocalServices(options: {
     | Pick<IZCodeAgentService, "testModelConnectivity">
     | undefined;
   const providerRuntime = createProviderRuntimeFromConfigRuntime({
+    modelCatalog: createModelsDevCatalog({
+      request: hostApiNetworkTransport.fetch,
+      cachePath: join(resolveAppConfigDir(), "model-catalog", "models-dev.json"),
+    }),
     configRuntime: providerConfigRuntime,
     discoverModels: (config) =>
-      discoverProviderModels(config, { request: hostApiNetworkTransport.fetch }),
+      discoverProviderModels(
+        config,
+        { request: hostApiNetworkTransport.fetch },
+        { includeCapabilities: false },
+      ),
     accountSource: accountProviderConfigSource,
     modelSelectionConfiguredDefaultSource,
     disposeModelSelectionConfiguredDefaultSource: () =>
@@ -1740,6 +1749,7 @@ export function createLocalServices(options: {
     },
   };
   const ucasGatewayService = createUcasGatewayService({
+    includeModelCapabilities: false,
     store: ucasGatewayStore,
     identitySessionStore: enterpriseIdentitySessionStore,
     resolveApiBaseUrl: async () => {
@@ -3503,8 +3513,11 @@ export async function createServerHostServices(options: {
   const serverSessionDbPath = await resolveAgentSessionDbPath({
     defaultSessionDbPath: join(homedir(), ".zcode", "cli", "db", "db.sqlite"),
   });
-  if (!serverSessionDbPath) throw new Error("Source Server alias migration requires an absolute session database path");
-  const workspaceAliasRepo = new SourceServerWorkspaceAliasRepo({ sessionDbPath: serverSessionDbPath });
+  if (!serverSessionDbPath)
+    throw new Error("Source Server alias migration requires an absolute session database path");
+  const workspaceAliasRepo = new SourceServerWorkspaceAliasRepo({
+    sessionDbPath: serverSessionDbPath,
+  });
   const workspaceIdentityMapper = new SourceServerWorkspaceIdentityMapper();
   const sourceServerWorkspaceService = createSourceServerWorkspaceService(workspaceAliasRepo, {
     defaultWorkspaceIdentity: (workspacePath) =>

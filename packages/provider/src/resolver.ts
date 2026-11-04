@@ -12,6 +12,8 @@ import {
   ModelConfig,
   ModelConfigRules,
   type ModelCapabilitySource,
+  type ModelCatalogSource,
+  type ModelUnsupportedReason,
   type ZhipuAccountAccessConfig,
   type ModelId,
   type ProviderConfig,
@@ -121,10 +123,23 @@ export function createRegistryModelConfig(
   config: ModelConfig,
   path: readonly string[] = ["model"],
 ): RegistryConfigResult<RegistryModelConfig> {
-  const issues = config.validateComplete(path);
+  const issues = [...config.validateComplete(path)];
+  if (getModelUnsupportedReason(config))
+    issues.push({
+      code: "unsupported-model-output",
+      path: [...path, "properties"],
+      message: "该模型不支持文本输入或文本输出，不适用于当前聊天入口",
+    });
   return issues.length > 0
     ? { ok: false, issues: Object.freeze([...issues]) }
     : { ok: true, config: config as RegistryModelConfig };
+}
+
+export function getModelUnsupportedReason(config: ModelConfig): ModelUnsupportedReason | undefined {
+  return config.properties?.inputFormat?.supportsText === false ||
+    config.properties?.outputFormat?.supportsText === false
+    ? "non-chat-model"
+    : undefined;
 }
 
 export interface ProviderConfigResolverInput {
@@ -145,6 +160,8 @@ export interface ResolvedProviderModelCandidate {
   readonly config: ModelConfig;
   readonly effectiveBuiltinConfig: ModelConfig;
   readonly capabilitySource?: ModelCapabilitySource;
+  readonly catalogSource?: ModelCatalogSource;
+  readonly unsupportedReason?: ModelUnsupportedReason;
   readonly issues: readonly ConfigValidationIssue[];
   readonly enabled: boolean;
   readonly executable: boolean;
@@ -296,6 +313,8 @@ export class ProviderConfigResolver {
             resolutionInput,
             isUcasLogicalModelAlias(providerId, modelId),
           ),
+          catalogSource: recommendedModelRules.getDiscoveredRule(resolutionInput)?.catalogSource,
+          unsupportedReason: getModelUnsupportedReason(modelConfig),
           issues: Object.freeze(modelIssues),
           enabled: modelEnabled,
           executable,

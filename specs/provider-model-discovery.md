@@ -104,3 +104,9 @@ sequenceDiagram
 - Electron：1 个真实界面用例通过；本地 `/models` 两次请求，导入 3 个模型，验证 32K 纯文本与 128K 图片/PDF 的差异、49,152 手动上下文保留、自动基线刷新到 65,536、重启持久化和未知别名提示；未发推理请求。
 - Node 24.14.0：全仓 `pnpm typecheck`、`pnpm lint`（330 项已有警告、0 错误）与 `pnpm architecture:check --changed` 通过；变更文件格式检查通过。
 - 扩展排查发现的 12 项静态目录/文案测试失败，已在隔离的原始 HEAD 源码副本重放确认同样失败；未为本次修复改动模型目录或降低这些断言。
+
+## models.dev 目录优先（2026-11-04）
+
+本节 supersedes 上述自动层优先级：用户要求自动参数优先使用 models.dev，故新顺序为个人覆盖 > models.dev > 网关明确参数 > 内置。见 [目录合同](models-dev-catalog.md)。输入模态涵盖 audio，非聊天模型不得混入聊天选择。
+
+2026-11-04 最终优先级修订：启用 models.dev 的 Host 仅从网关导入名单，自动参数使用 models.dev，未匹配/不可用使用软件内置规则；个人配置最高。旧网关自动层清空不改个人层。底层无目录集成调用仍保留原网关元数据合同。详见 `models-dev-catalog.md`。

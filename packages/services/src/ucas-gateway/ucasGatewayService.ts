@@ -27,6 +27,7 @@ import {
 import { createServiceLogger } from "../logger/serviceLogger.js";
 
 export interface UcasGatewayServiceOptions {
+  readonly includeModelCapabilities?: boolean;
   readonly store: UcasGatewayStore;
   readonly identitySessionStore: Pick<IdentitySessionStore, "read" | "withCurrentSession">;
   /** 企业认证服务根地址；同时承载网关 API。 */
@@ -38,9 +39,9 @@ export interface UcasGatewayServiceOptions {
   readonly onDiagnostic?: (event: { readonly code: string; readonly reason: string }) => void;
 }
 
-export function createUcasGatewayService(
-  options: UcasGatewayServiceOptions,
-): IUcasGatewayService & { dispose(): void; disposeAll(): void } {
+type GatewayService = IUcasGatewayService & { dispose(): void; disposeAll(): void };
+
+export function createUcasGatewayService(options: UcasGatewayServiceOptions): GatewayService {
   const log = createServiceLogger("ucas-gateway");
   const now = options.now ?? Date.now;
   const changed = new Emitter<UcasGatewayView>();
@@ -141,6 +142,7 @@ export function createUcasGatewayService(
                 ? createUcasGatewayClient({
                     apiBaseUrl,
                     token: session.token,
+                    includeModelCapabilities: options.includeModelCapabilities,
                     ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
                     ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
                   })
@@ -187,9 +189,9 @@ export function createUcasGatewayService(
     const { record, client } = scope;
     if (!client) {
       if (record.session && record.session.expiresAt > now())
-        await withIdentity(record, async () => {
-          publish({ ...view, status: "idle", configured: false, error: "unconfigured" });
-        });
+        await withIdentity(record, async () =>
+          publish({ ...view, status: "idle", configured: false, error: "unconfigured" }),
+        );
       return uncommitted();
     }
     if (
@@ -321,9 +323,9 @@ export function createUcasGatewayService(
       });
       return result ?? uncommitted();
     } catch (error) {
-      await withIdentity(record, async () => {
-        publish({ ...view, status: "error", error: errorCode(error) });
-      });
+      await withIdentity(record, async () =>
+        publish({ ...view, status: "error", error: errorCode(error) }),
+      );
       return uncommitted();
     }
   };
@@ -332,14 +334,12 @@ export function createUcasGatewayService(
     captured = captureScope(),
     operation = runSync,
   ): Promise<UcasGatewaySyncResult> => {
-    const previous = syncTask ?? Promise.resolve();
-    // 排队意图绑定接收时的身份，不能在 A 的 replace-key 等待期间改用 B 的身份执行。
-    // 捕获在排队期间也可能失败；立即接住拒绝，再在原队列位置传播，避免未处理拒绝终止 Host。
+    // 排队绑定接收时的身份；捕获失败立即接住并在原队列传播，避免切换账号或未处理拒绝。
     const prepared = captured.then(
       (scope) => ({ ok: true as const, scope }),
       (error: unknown) => ({ ok: false as const, error }),
     );
-    const task = previous
+    const task = (syncTask ?? Promise.resolve())
       .catch(() => undefined)
       .then(async () => {
         const result = await prepared;

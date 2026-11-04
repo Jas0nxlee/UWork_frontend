@@ -6,6 +6,7 @@
     "#src/*": "./src/*"
   },
   "exports": {
+    "./model-catalog": "./src/model-catalog/module.ts",
     "./paths": "./src/paths.ts",
     "./data-directory-startup": "./src/project-storage/cold-startup-entry.ts",
     "./storage-startup": "./src/project-storage/startup-entry.ts",

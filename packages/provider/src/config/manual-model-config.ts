@@ -15,11 +15,16 @@ export const manualModelConfigSchema = completeModelConfigDataSchema
         supportsMidConversationSystem: true,
       })
       .extend({
-        inputFormat: complete.properties.shape.inputFormat.pick({
-          supportsImage: true,
-          supportsVideo: true,
-          supportsPdf: true,
-        }),
+        inputFormat: complete.properties.shape.inputFormat
+          .pick({
+            supportsImage: true,
+            supportsVideo: true,
+            supportsPdf: true,
+          })
+          .extend({
+            // 旧固定配置未保存音频位时继续继承；新编辑器会提交明确值。
+            supportsAudio: complete.properties.shape.inputFormat.shape.supportsAudio.optional(),
+          }),
       }),
     optionSpecs: complete.optionSpecs.pick({ reasoningLevel: true }).extend({
       maxOutputTokens: complete.optionSpecs.shape.maxOutputTokens.pick({ max: true }),

@@ -2,6 +2,8 @@ import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderModelMetadataDialog } from "@/settings/model-provider-section/ProviderModelMetadataDialog.js";
+import zhCN from "@/i18n/locales/zh-CN.js";
+import enUS from "@/i18n/locales/en-US.js";
 
 function extractInputTag(html: string, needle: string) {
   return html.match(/<input[^>]*>/g)?.find((tag) => tag.includes(needle)) ?? "";
@@ -102,7 +104,24 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
 }));
 
 describe("ProviderModelMetadataDialog", () => {
-  it.each(["gateway", "builtin", "unknown"] as const)(
+  it("models.dev 目录来源在中英文中有明确名称，音频说明不宣称附件执行能力", () => {
+    expect(zhCN["settings.modelProvider.capabilitySourceLabel.catalog"]).toBe(
+      "models.dev 目录推荐",
+    );
+    expect(enUS["settings.modelProvider.capabilitySourceLabel.catalog"]).toContain("models.dev");
+    expect(zhCN["settings.modelProvider.capabilitySource.catalog"]).toContain("models.dev");
+    expect(enUS["settings.modelProvider.capabilitySource.catalog"]).toContain("models.dev");
+    expect(zhCN["settings.modelProvider.help.inputModalities"]).toContain("暂不支持音频附件");
+    expect(enUS["settings.modelProvider.help.inputModalities"]).toContain(
+      "does not yet support audio attachments",
+    );
+    expect(zhCN["settings.modelProvider.capabilityUnconfirmed"]).toContain("未匹配到 models.dev");
+    expect(zhCN["settings.modelProvider.capabilityUnconfirmed"]).toContain("软件内置默认配置");
+    expect(enUS["settings.modelProvider.capabilityUnconfirmed"]).toContain(
+      "built-in default configuration",
+    );
+  });
+  it.each(["gateway", "builtin", "catalog", "unknown"] as const)(
     "shows capability provenance and identifies unconfirmed defaults: %s",
     (capabilitySource) => {
       const html = renderToStaticMarkup(
@@ -128,6 +147,41 @@ describe("ProviderModelMetadataDialog", () => {
       );
     },
   );
+  it("非聊天目录型号显示原因与缓存状态，隐藏不适用容量输入", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProviderModelMetadataDialog, {
+        open: true,
+        capabilitySource: "catalog",
+        catalogSource: {
+          source: "models.dev",
+          providerId: "openai",
+          modelId: "image-model",
+          fetchedAt: Date.UTC(2026, 10, 4),
+          stale: true,
+        },
+        unsupportedReason: "non-chat-model",
+        draft: {
+          ...MODEL_FORMAT_DRAFT,
+          idValue: "image-model",
+          contextWindowValue: "",
+          maxOutputTokensValue: "",
+          inputFormatValue: { ...MODEL_FORMAT_DRAFT.inputFormatValue, supportsText: false },
+        },
+        inheritedConfig: { properties: { contextWindow: 200_000 } },
+        draftErrorMessage: null,
+        onOpenChange: vi.fn(),
+        onDraftChange: vi.fn(),
+        onCommit: () => true,
+      }),
+    );
+    expect(html).toContain('data-model-unsupported-reason="non-chat-model"');
+    expect(html).toContain("settings.modelProvider.catalogFetchedAt");
+    expect(html).toContain("settings.modelProvider.catalogStale");
+    expect(html).not.toContain('data-model-settings-group="tokens"');
+    expect(html).toMatch(/aria-pressed="false"[^>]*data-model-input-modality="text"/);
+    expect(html).toContain("settings.modelProvider.audioInputNotice");
+  });
+
   it.each([true, false])("Todo134：模型 ID 只读权限不随布局改变：%s", (modelIdReadOnly) => {
     const html = renderToStaticMarkup(
       createElement(ProviderModelMetadataDialog, {
@@ -364,7 +418,7 @@ describe("ProviderModelMetadataDialog", () => {
     ).toBe(true);
     expect(html).not.toContain('data-model-capability-icon="true"');
     expect(html).not.toContain("settings.modelProvider.supportsToolCall");
-    expect(html.match(/data-model-option-checkbox="true"/g)).toHaveLength(7);
+    expect(html.match(/data-model-option-checkbox="true"/g)).toHaveLength(8);
     expect(html).toContain("data-model-option-checkbox");
     const overriddenModality =
       html.match(
@@ -458,7 +512,7 @@ describe("ProviderModelMetadataDialog", () => {
     expect(html).toMatch(/<input[^>]*autofocus[^>]*inputMode="numeric"[^>]*>/);
   });
 
-  it("添加模型弹窗展示推理与高级分组、禁用必选 Text 并使用复选框模态选项", () => {
+  it("添加模型弹窗展示推理与高级分组、锁定只读 Text 并使用复选框模态选项", () => {
     const html = renderToStaticMarkup(
       createElement(ProviderModelMetadataDialog, {
         mode: "add",
@@ -507,13 +561,13 @@ describe("ProviderModelMetadataDialog", () => {
     expect(html).toContain('data-model-input-modality="image"');
     expect(html).toContain('data-model-input-modality="video"');
     expect(html).toContain('data-model-input-modality="pdf"');
-    expect(html).not.toContain('data-model-input-modality="audio"');
+    expect(html).toContain('data-model-input-modality="audio"');
     expect(html).not.toContain('data-model-output-modality="text"');
     expect(html).not.toContain('data-model-modality-icon="true"');
     expect(html.match(/data-model-modality-lock="true"/g)).toHaveLength(1);
     const modalityButtons =
       html.match(/<button[^>]*data-model-(?:input|output)-modality=[^>]*>/g) ?? [];
-    expect(modalityButtons).toHaveLength(4);
+    expect(modalityButtons).toHaveLength(5);
     expect(
       modalityButtons.find((button) => button.includes('data-model-input-modality="image"')),
     ).toContain('aria-pressed="false"');

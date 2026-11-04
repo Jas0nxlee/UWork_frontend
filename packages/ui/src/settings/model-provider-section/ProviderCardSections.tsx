@@ -547,12 +547,19 @@ export function ProviderModelsSection({
                     }}
                     onTest={onTestModel}
                   />
-                  {!completeProperties && (
+                  {model.unsupportedReason === "non-chat-model" ? (
+                    <div
+                      className="px-3 pb-2 text-ui-sm text-destructive"
+                      data-model-unsupported-reason={model.unsupportedReason}
+                    >
+                      {intl.formatMessage({ id: "settings.modelProvider.nonChatModel" })}
+                    </div>
+                  ) : !completeProperties ? (
                     <div className="px-3 pb-2 text-ui-sm text-destructive">
                       {model.issues?.[0]?.message ??
                         intl.formatMessage({ id: "settings.modelProvider.modelConfigIncomplete" })}
                     </div>
-                  )}
+                  ) : null}
                   {model.capabilitySource ? (
                     <p
                       data-testid="model-provider-capability-source"
@@ -594,6 +601,8 @@ export function ProviderModelsSection({
           draftErrorField={addDraftErrorField}
           inheritedConfig={editor.inheritedConfig}
           capabilitySource={editor.capabilitySource}
+          catalogSource={editor.catalogSource}
+          unsupportedReason={editor.unsupportedReason}
           overrideFields={editor.overrides}
           onOpenChange={handleAddDialogOpenChange}
           onDraftChange={updateAddDraft}
