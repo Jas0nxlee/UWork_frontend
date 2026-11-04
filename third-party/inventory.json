@@ -433,7 +433,7 @@
     "docs/knip/docs/src/styles/theme-light.css": "e2e85900fd43b5b563f56b9ce7e2a09f07d7420a78e80f0133efffeb8fce2aa0",
     "docs/knip/docs/src/util/post.ts": "6d7c45bd29035a73f1b67d24524760c7e317f367d32216de2c9a240dda7a40d1",
     "docs/knip/docs/tsconfig.json": "662b1f10a5e572b49a45669e4be9ee46c22f987dcf277c204948777b367df1cd",
-    "package.json": "2087605f780c0844fd8f53a110414f94e640dd8a150dace1132243b4f5246020",
+    "package.json": "375d79e9ec902f4b15fb990ca7bdf1d24fb1ff85bec78982036f286be4548db1",
     "packages/client/package.json": "e76f441549130dc3e5e68072a36b6cb9044e19a6625f1e813f19a4def2b1b689",
     "packages/desktop/package.json": "a1655db43e79fc0ad8da8e5e2bb1f1a81b41111b537c697832a08d27350e0409",
     "packages/desktop/src/renderer/public/material-icons/3d.svg": "9527b849f0fba57ca7640e2717b3a19cb5f5e046712cbbd8b75d73af338c68fb",
@@ -1729,7 +1729,7 @@
     "packages/ui/src/components/ui/usePdfZoomOverlay.ts": "c8c91b003ce2fded32c7a2369dc6eac43aa4b9dc9c830a0f5ceccb21d366b610",
     "packages/ui/src/components/ui/UWorkLogo.tsx": "90935586d36ac2378ba67d5ca3285b1be8103f49f04438a41256590c012707a9",
     "packages/ui/src/components/ui/ZCodeAboutLogo.tsx": "fb31cf1901ad3f21826b7d4c4ecbd549debb523a26ac5644dab490cb1bdef27c",
-    "packages/ui/src/lib/builtinSkillI18n.ts": "9ec3855748c8533e1da4dcbf7608d2def55643b6da852db4407d5864a44cdf50",
+    "packages/ui/src/lib/builtinSkillI18n.ts": "0efa292d1df3422896a4a13a0337a0e117b237d51d26eec8977061fb3aea8868",
     "packages/ui/src/styles.css": "a6b69656639a1a67d7d562db711a9bbec349fab6d65b10c190910cc34f68f6d5",
     "packages/ui/src/styles/shadcn-4.1.1.css": "e378809c96a5ba1e3909caf8362d83935100b641eab6bc2fe7a7dcb0c40cb32a",
     "packages/web-share/package.json": "4865c14968b96d355c45c2edf612443f79d6d05cfbe433a28374e19b1b0c9d88",
@@ -2879,7 +2879,7 @@
     "packages/web-share/public/material-icons/zeabur.svg": "8bb7c84934202e9b24842ddb1ca69d316b9d69f1a4f5ebc9bbcce78eb2cea1a7",
     "packages/web-share/public/material-icons/zig.svg": "37be0ce02cf471b18d86150b3c38e80caa7c16c49a15078e7db6f1f41788d101",
     "packages/web-share/public/material-icons/zip.svg": "dad79a45f756542d37abd422502ecfbea15720b92ea1c9d80ef0439ab6b9448a",
-    "packages/web/package.json": "5ebbadbf8e9dd81b99affc0a62437fafd77350d48165ed184b5360f7b0eceee1",
+    "packages/web/package.json": "b3170c61d819fe1ab7ed7ebbb3ec9fbacfa1d2c75a32060a263006bac81c4411",
     "packages/zcode-cua/cua-driver-actions.js": "3b43abb671421b3c3154a559f01cbe0761741d380bbe40ebb0711c4a18ea64e5",
     "packages/zcode-cua/cua-driver-apps.js": "2d6883ce1669c2a083358bd4c357c38651c2c897ffd6e93a24895022dc580e61",
     "packages/zcode-cua/cua-driver-errors.js": "0094ef43748628a8ecb4244e87a1237a32f9d6a80408870b367559579f74396d",
@@ -2907,7 +2907,7 @@
     "plugins/office-editor/ui/vendor/superdoc/LICENSE-AGPL-3.0.txt": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.css": "0c1fd0ae51215b4fe5573858190c97ac971f888c63875970979e72018daef33f",
     "plugins/office-editor/ui/vendor/superdoc/superdoc.min.js": "360490e362af6623eae40cc5aa82efcc5d9dedf5455195b9c373c48220c232ad",
-    "pnpm-lock.yaml": "b9c61eb20b62bf8307acfffff26abf7a53559a046d8f9bd33e9344f39d722d81",
+    "pnpm-lock.yaml": "d2a5f4f6f57e2f44994732cb9815dab0617b785049c5cddc63dcd69491765fe4",
     "pnpm-workspace.yaml": "b8480e283f2ceb291a106217e47bc6d1ab660a1bc79ecfbd91341ee59c3d837a",
     "scripts/license-texts/Apache-2.0.txt": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
     "scripts/native-search-tools-config.mjs": "06e9d2b066a22f4bb731fb7356d786b52cf08e20dd6faf91e1a82b167d7462e8",
@@ -27441,7 +27441,7 @@
       "files": [
         {
           "file": "packages/ui/src/lib/builtinSkillI18n.ts",
-          "sha256": "9ec3855748c8533e1da4dcbf7608d2def55643b6da852db4407d5864a44cdf50"
+          "sha256": "0efa292d1df3422896a4a13a0337a0e117b237d51d26eec8977061fb3aea8868"
         },
         {
           "file": "apps/zcode-cli/packages/superpowers-plugin/LICENSE",
