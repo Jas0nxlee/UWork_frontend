@@ -12,11 +12,19 @@ const bootstrap = (desktopAppVersion?: string): WebRemoteControlWindowBootstrapR
   ...(desktopAppVersion === undefined ? {} : { desktopAppVersion }),
 });
 
-function harness(options: { url?: string; ready?: boolean; version?: string } = {}) {
+function harness(
+  options: {
+    url?: string;
+    ready?: boolean;
+    version?: string;
+    agreed?: string;
+  } = {},
+) {
   const requestBootstrap = vi.fn(async () => bootstrap(options.version));
   const navigate = vi.fn();
   const onMismatch = vi.fn();
   const onAccepted = vi.fn();
+  const remembered: string[] = [];
   const url =
     options.url ?? "https://zcode.z.ai/remote/v4?sid=a&hash=x%2By&t=1&app_version=3.12.1#task";
   const guard = createWebRemoteControlVersionGuard({
@@ -26,8 +34,10 @@ function harness(options: { url?: string; ready?: boolean; version?: string } = 
     navigate,
     onMismatch,
     onAccepted,
+    readAgreedVersion: () => options.agreed,
+    rememberAgreedVersion: (version) => remembered.push(version),
   });
-  return { guard, requestBootstrap, navigate, onMismatch, onAccepted, url };
+  return { guard, requestBootstrap, navigate, onMismatch, onAccepted, url, remembered };
 }
 
 describe("remote v4 desktop version guard", () => {
@@ -41,6 +51,45 @@ describe("remote v4 desktop version guard", () => {
     await h.guard.check();
     h.guard.confirm();
     expect(h.navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("部署侧关闭版本导航时：只读 bootstrap，不解析版本、不导航", async () => {
+    const requestBootstrap = vi.fn(async () => bootstrap("9.9.9"));
+    const navigate = vi.fn();
+    const onAccepted = vi.fn();
+    const guard = createWebRemoteControlVersionGuard({
+      requestBootstrap,
+      enabled: false,
+      getUrl: () => "https://zcode.z.ai/remote/v4?sid=a",
+      isPageReady: () => true,
+      navigate,
+      onMismatch: vi.fn(),
+      onAccepted,
+    });
+    const result = await guard.check();
+    expect(result).toEqual(bootstrap("9.9.9"));
+    expect(onAccepted).toHaveBeenCalledWith(bootstrap("9.9.9"));
+    expect(navigate).not.toHaveBeenCalled();
+    expect(guard.isBlocked()).toBe(false);
+  });
+
+  it("会话内已协商过同一版本时不再导航（企微把页面以裸 URL 重开也不会重载循环）", async () => {
+    // 这一轮 URL 没有 app_version（企微重开丢了参数），但本会话已经和 3.12.2 协商过。
+    const h = harness({
+      url: "https://zcode.z.ai/remote/v4?sid=a",
+      version: "3.12.2",
+      agreed: "3.12.2",
+    });
+    expect(await h.guard.check()).toEqual(bootstrap("3.12.2"));
+    expect(h.navigate).not.toHaveBeenCalled();
+    expect(h.guard.isBlocked()).toBe(false);
+  });
+
+  it("首次导航时记住版本，后续同一版本不再重载", async () => {
+    const h = harness({ url: "https://zcode.z.ai/remote/v4?sid=a", version: "3.12.2" });
+    await h.guard.check();
+    expect(h.navigate).toHaveBeenCalledTimes(1);
+    expect(h.remembered).toEqual(["3.12.2"]);
   });
 
   it("fills a missing version and accepts the v4 trailing slash", async () => {

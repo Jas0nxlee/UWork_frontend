@@ -37,6 +37,50 @@ describe("remote device catalogue", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer session-1");
   });
 
+  it("后台回 503（上游抖动）时自动重试，不把用户丢到错误页", async () => {
+    // 前两次 503、第三次成功
+    let calls = 0;
+    const flaky = vi.fn(async () => {
+      calls += 1;
+      if (calls <= 2) return json({ error: { code: "PIVOT_UNAVAILABLE" } }, 503);
+      return json({ devices: [{ deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac" }] });
+    });
+    const devices = await fetchRemoteDevices({
+      context,
+      token: "session-1",
+      fetchImpl: flaky as unknown as typeof fetch,
+      retryDelayMs: () => 0,
+    });
+    expect(devices).toEqual([{ deviceSid: "sid-1", deviceMid: "mid-1", name: "办公室 Mac" }]);
+    expect(flaky).toHaveBeenCalledTimes(3);
+  });
+
+  it("令牌无效（401）不重试，立即失败交给上层重新登录", async () => {
+    const fetchImpl = vi.fn(async () => json({ error: { code: "UNAUTHORIZED" } }, 401));
+    await expect(
+      fetchRemoteDevices({
+        context,
+        token: "stale",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        retryDelayMs: () => 0,
+      }),
+    ).rejects.toThrow("remote devices 401");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("重试也用尽后抛出最后一次的状态（不静默吞掉）", async () => {
+    const fetchImpl = vi.fn(async () => json({ error: { code: "PIVOT_UNAVAILABLE" } }, 503));
+    await expect(
+      fetchRemoteDevices({
+        context,
+        token: "t",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        retryDelayMs: () => 0,
+      }),
+    ).rejects.toThrow("remote devices 503");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("maps a catalogue entry into the existing relay device view", () => {
     const view = toRelayDeviceView({
       deviceSid: "sid-1",

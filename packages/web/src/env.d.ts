@@ -16,6 +16,8 @@ interface ImportMetaEnv {
   readonly VITE_ZCODE_BASE_URL?: string;
   readonly VITE_ZCODE_ENDPOINT_ORIGIN?: string;
   readonly VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL?: string;
+  /** `off` = 关闭"按桌面版本导航"（自托管单一构建时用，避免企微丢参导致的整页重载循环）。 */
+  readonly VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD?: string;
 }
 
 interface ImportMeta {
