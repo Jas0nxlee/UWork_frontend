@@ -56,6 +56,7 @@
 - 配置企业准入但当前终端标识缺失时，不能以旧验证或旧 HMAC 权限替代；拒绝企业身份验证并关闭该远控 runtime。未启用企业准入的 legacy HMAC 保持原有行为。
 - 企业 HTTP 验证结果须同时匹配当前 runtime、终端 SID 与验证尝试代次，并在发布前复核桌面当前企业身份；旧终端的迟到成功/失败均不得改变新终端资格。
 - Renderer 订阅企业身份 owner 的变更，通过现有 platform 通道发送失效提示；Main 重新读取共享身份事实。同用户续期保持连接，组织/用户切换、注销或已启用身份读取失败时撤销旧 runtime；通知内容本身不授予权限，迟到身份读取不能撤销新 runtime。
+- 注销和到期仍先清空 UI 投影，但共享会话清理提交后必须再发布当前 owner 视图，保证 Main 能在提交后复核身份。提交前的 UI 事件不能代替这次通知；重发当前视图而不写入旧退出状态，避免迟到退出覆盖已经开始的新登录。
 - 验证前丢弃应用请求和 raw RPC，且不把旧 bridge 的业务数据发给新终端；错误反馈可以发送。验证成功后再请求当前手机查看状态。
 
 ```mermaid
@@ -72,6 +73,9 @@ sequenceDiagram
   Manager->>Auth: B 身份帧触发验证（绑定 B + attempt）
   Auth-->>Manager: 验证结果
   Manager->>Manager: 同一 runtime/B/attempt 与桌面身份才发布 verified
+  Auth->>UI: 注销/到期先清空 UI（共享清理仍可能在途）
+  Auth->>Auth: 提交共享会话 tombstone
+  Auth->>UI: 重发当前 owner 视图（不覆盖新登录）
   UI->>Manager: owner 身份变更提示（现有 platform 通道）
   Manager->>Manager: 读共享身份，同人保留，换人/注销撤销旧 runtime
 ```

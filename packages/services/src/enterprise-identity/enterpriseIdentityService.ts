@@ -236,6 +236,8 @@ export function createEnterpriseIdentityService(options: {
     if (current !== generation) return;
     if (result.accepted) {
       knownRevision = result.record.revision;
+      // UI 的提前清空不代表共享清理已提交；提交后再提示 Main 读取权威身份。
+      if (!disposed) publisher.republish();
       await broadcast();
     } else if (result.record.session) await restoreOwned(current);
   };
@@ -417,6 +419,9 @@ export function createEnterpriseIdentityService(options: {
       // 退出是已接受的设备级命令，先持久化 tombstone；后续新尝试必须在该版本上 admission。
       const result = await enqueue(() => store.write(null, undefined, () => true));
       knownRevision = result.record.revision;
+      // 原因：提前 signedOut 的读者可能仍读到旧共享会话，提交后必须再通知。
+      // 重发当前投影，不发布捕获的旧退出状态，避免并发新登录被迟到退出覆盖。
+      if (!disposed) publisher.republish();
       await broadcast();
       if (previous && adapter?.revoke) {
         try {

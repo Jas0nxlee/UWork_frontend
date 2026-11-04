@@ -14,6 +14,14 @@ import {
   createBrowserWebRemoteControlRelayAuthProvider,
 } from "../../web/src/web-remote-control/index.js";
 import { createHmacTestRelay } from "./helpers/hmacRelay.js";
+import {
+  createEnterpriseIdentityService,
+  disposeEnterpriseIdentityService,
+} from "../../services/src/enterprise-identity/enterpriseIdentityService.js";
+import {
+  createSharedIdentitySessionStore,
+  readEnterpriseIdentitySubject,
+} from "../../services/src/enterprise-identity/identitySessionStore.js";
 
 const cleanups: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
@@ -787,5 +795,94 @@ it("桌面注销后迟到的手机验证不能复活已停止runtime", async () 
     },
   });
   await vi.waitFor(() => expect(readResponse).toBe(true));
+  expect(f.manager.getStatus(1).status).toBe("idle");
+});
+
+it("真实身份owner先清空UI、延迟提交注销后，Main仍会重新读取并撤销已验证终端", async () => {
+  const values = new Map<string, string>();
+  let releaseTombstone!: () => void;
+  let tombstoneStarted!: () => void;
+  const writingTombstone = new Promise<void>((resolve) => {
+    tombstoneStarted = resolve;
+  });
+  const tombstoneGate = new Promise<void>((resolve) => {
+    releaseTombstone = resolve;
+  });
+  const credentials = {
+    load: async (key: string) => values.get(key) ?? null,
+    save: async (key: string, value: string) => {
+      if (JSON.parse(value).session === null) {
+        tombstoneStarted();
+        await tombstoneGate;
+      }
+      values.set(key, value);
+    },
+    delete: async (key: string) => {
+      values.delete(key);
+    },
+  };
+  let writes: Promise<unknown> = Promise.resolve();
+  const store = createSharedIdentitySessionStore(credentials, <T>(operation: () => Promise<T>) => {
+    const result = writes.then(operation, operation);
+    writes = result.catch(() => {});
+    return result;
+  });
+  const session = {
+    profile: { id: "user-1", tenantId: "org-a", provider: "wecom" as const, displayName: "User" },
+    token: "desktop-token",
+    expiresAt: Date.now() + 600_000,
+  };
+  await store.write(session, 0, () => true);
+  const owner = createEnterpriseIdentityService({
+    credentials,
+    sessionStore: store,
+    adapter: {
+      listOrganizations: () => [],
+      resolveOrganization: () => undefined,
+      start: async () => {
+        throw new Error("Login is outside this regression");
+      },
+      restore: async () => session,
+    },
+  });
+  await owner.restoreSession();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => acceptedEnterpriseIdentity()),
+  );
+  cleanups.push(() => vi.unstubAllGlobals());
+  const f = await fixture({
+    enterpriseAuth: {
+      ...enterpriseFixture,
+      resolveLocalSubject: () => readEnterpriseIdentitySubject(credentials),
+    },
+  });
+  const notifications: Promise<void>[] = [];
+  const subscription = owner.onDidChange((view) => {
+    notifications.push(
+      f.manager.notifyAuthStateChanged(1, {
+        state: view.status === "authenticated" ? "signed-in" : "signed-out",
+      }),
+    );
+  });
+  cleanups.push(async () => {
+    subscription.dispose();
+    await disposeEnterpriseIdentityService(owner);
+  });
+  const params = parseWebRemoteControlHmacQrParams(new URL((await f.start()).qrUrl).searchParams)!;
+  const phone = await connectEnterpriseTerminal(f, params, "phone-owner-logout");
+  phone.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
+  await vi.waitFor(() =>
+    expect(phone.received.some((p) => p.zcode_type === "mobile-task-view-request")).toBe(true),
+  );
+  const logout = owner.logout();
+  await writingTombstone;
+  await Promise.all(notifications);
+  expect((await owner.getView()).status).toBe("signed-out");
+  expect(f.manager.getStatus(1).mobileConnected).toBe(true);
+  releaseTombstone();
+  await logout;
+  await Promise.all(notifications);
+  expect(await readEnterpriseIdentitySubject(credentials)).toBeNull();
   expect(f.manager.getStatus(1).status).toBe("idle");
 });
