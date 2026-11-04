@@ -4,7 +4,6 @@ import { selectWecomReleaseAssets } from "../release-installer-assets.mjs";
 
 const names = [
   "mac-arm64.dmg",
-  "mac-x64.dmg",
   "win-x64.exe",
   "linux-x86_64.AppImage",
   "linux-amd64.deb",
@@ -28,14 +27,14 @@ const release = {
   ].map((name) => ({ name })),
 };
 
-test("全部五平台九个安装包按槽位选择，排除压缩归档和辅助附件", () => {
+test("全部四平台八个安装包按槽位选择，排除压缩归档和辅助附件", () => {
   const selected = selectWecomReleaseAssets(release);
   assert.deepEqual(
     selected.assets.map((asset) => asset.name),
     names,
   );
   assert.equal(selected.body, "notes");
-  assert.equal(release.assets.length, 15);
+  assert.equal(release.assets.length, 14);
 });
 
 test("任一安装格式/架构缺失或重复都失败，不能回退到 ZIP 或其它版本", () => {
@@ -64,7 +63,7 @@ test("Linux 支持打包架构别名，同一槽位有多个别名产物仍判�
       name: name.replace("x86_64", "x64").replace("amd64", "x64").replace("aarch64", "arm64"),
     })),
   };
-  assert.equal(selectWecomReleaseAssets(alternate).assets.length, 9);
+  assert.equal(selectWecomReleaseAssets(alternate).assets.length, 8);
   assert.throws(
     () =>
       selectWecomReleaseAssets({

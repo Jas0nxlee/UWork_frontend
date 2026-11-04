@@ -104,6 +104,24 @@ import * as sessionRepository from "./repositories/sessions.js";
 import * as todoRepository from "./repositories/todos.js";
 import * as usageRepository from "./repositories/usage.js";
 
+const SQLITE_BUSY = 5;
+const SQLITE_LOCKED = 6;
+
+/**
+ * Windows 文件系统可能在进程关闭后延迟释放数据库锁，Linux 在某些文件系统（NFS、某些容器环境）
+ * 也可能遇到类似问题。检测 SQLite 锁错误以便重试。
+ */
+function isSqliteLockError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const err = error as { code?: string; errcode?: number; errstr?: string };
+  return (
+    err.code === "ERR_SQLITE_ERROR" &&
+    (err.errstr === "database is locked" ||
+      err.errstr === "database table is locked" ||
+      (typeof err.errcode === "number" && ((err.errcode & 0xff) === SQLITE_BUSY || (err.errcode & 0xff) === SQLITE_LOCKED)))
+  );
+}
+
 function forkChildSessionId(entry: SessionEntryInfo): SessionId | null {
   if (!entry.data || typeof entry.data !== "object" || Array.isArray(entry.data)) return null;
   const ack = (entry.data as Record<string, unknown>).ack;
@@ -251,21 +269,49 @@ export class SqliteSessionStore
     const dbPath = options.dbPath ?? getDefaultSessionDbPath();
     const startupLockTimeoutMs =
       options.startupLockTimeoutMs ?? DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS;
-    let db: DatabaseSync;
-    try {
-      if (dbPath !== ":memory:") {
-        maybeThrowStorageFsFault({ operation: "mkdir", path: dirname(dbPath) });
-        await mkdir(dirname(dbPath), { recursive: true });
+    let db: DatabaseSync | undefined;
+    
+    // Windows/Linux 文件系统可能延迟释放数据库锁；使用重试确保跨平台健壮性。
+    const maxRetries = 10;
+    const initialDelayMs = 200;
+    let lastError: unknown;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (dbPath !== ":memory:") {
+          maybeThrowStorageFsFault({ operation: "mkdir", path: dirname(dbPath) });
+          await mkdir(dirname(dbPath), { recursive: true });
+        }
+        maybeThrowStorageFsFault({ operation: "sqliteOpen", path: dbPath });
+        db = new DatabaseSync(dbPath, { timeout: startupLockTimeoutMs });
+        break; // 成功打开，跳出重试循环
+      } catch (error) {
+        lastError = error;
+        const isLockError = isSqliteLockError(error);
+        if (!isLockError || attempt >= maxRetries) {
+          throw new SqliteSessionMigrationError(
+            `Failed to open SQLite session database at ${dbPath}${isLockError ? " (database locked - please close other UWork instances)" : ""}`,
+            {
+              cause: error,
+              dbPath,
+              kind: isLockError ? "database_locked" : "open_failed",
+            }
+          );
+        }
+        // 递增退避
+        const delayMs = Math.min(initialDelayMs * Math.pow(2, attempt), 2000);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      maybeThrowStorageFsFault({ operation: "sqliteOpen", path: dbPath });
-      db = new DatabaseSync(dbPath, { timeout: startupLockTimeoutMs });
-    } catch (error) {
-      throw new SqliteSessionMigrationError(`Failed to open SQLite session database at ${dbPath}`, {
-        cause: error,
+    }
+    
+    if (!db) {
+      throw new SqliteSessionMigrationError(`Failed to open SQLite session database after ${maxRetries} retries`, {
+        cause: lastError,
         dbPath,
         kind: "open_failed",
       });
     }
+    
     try {
       const migration = await runSqliteSessionMigrationsAsync(db, dbPath, migrationOptions ?? { lockWaitTimeoutMs: startupLockTimeoutMs });
       return new SqliteSessionStore(db, dbPath, options, migration);

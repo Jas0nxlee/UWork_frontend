@@ -7,6 +7,7 @@ export const databaseStartupErrorCodeSchema = z.enum([
   "out_of_memory",
   "corrupt",
   "open_failed",
+  "database_locked",
   "lock_timeout",
   "checksum_mismatch",
   "sql_failed",
@@ -42,7 +43,8 @@ export function classifyDatabaseStartupError(error: unknown): DatabaseStartupErr
       return "out_of_memory";
     if (primary === 11 || primary === 26) return "corrupt";
     if (primary === 14) fallback = "open_failed";
-    if (primary === 5) fallback = "lock_timeout";
+    // SQLITE_BUSY (5) 和 SQLITE_LOCKED (6) 映射到 database_locked
+    if (primary === 5 || primary === 6) fallback = "database_locked";
     const kind = databaseStartupErrorCodeSchema.safeParse(value.kind);
     if (kind.success && kind.data !== "sql_failed") fallback = kind.data;
     error = value.cause;

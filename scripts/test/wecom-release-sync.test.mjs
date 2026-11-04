@@ -10,7 +10,6 @@ import { createWecomClient } from "../wecom-release-client.mjs";
 
 const names = [
   "mac-arm64.dmg",
-  "mac-x64.dmg",
   "win-x64.exe",
   "linux-x86_64.AppImage",
   "linux-amd64.deb",
@@ -155,7 +154,7 @@ test("配置集中列出缺失项且不泄漏已有凭据，父目录可回退�
   );
 });
 
-test("完整五平台九包上传、分页核对与重跑零重复", async (t) => {
+test("完整四平台八包上传、分页核对与重跑零重复", async (t) => {
   const f = await fixture(t);
   const client = disk();
   const result = await syncWecomRelease({ ...f, client, log() {} });
@@ -190,7 +189,7 @@ test("草稿、缺包、重复包和损坏附件在任何写入前失败", async
   assert.equal(client.writes, 0);
 });
 
-test("旧三包目录扩为九包，只补六个缺失安装包且保留原文件", async (t) => {
+test("旧三包目录扩为八包，只补五个缺失安装包且保留原文件", async (t) => {
   const f = await fixture(t);
   const client = disk();
   await syncWecomRelease({ ...f, client, log() {} });
@@ -200,8 +199,8 @@ test("旧三包目录扩为九包，只补六个缺失安装包且保留原文�
   const previousFiles = new Map(client.files);
   const initialized = client.initialized;
   const result = await syncWecomRelease({ ...f, client, log() {} });
-  assert.equal(client.initialized - initialized, 6);
-  assert.equal(client.files.size, 10);
+  assert.equal(client.initialized - initialized, 5);
+  assert.equal(client.files.size, 9);
   assert.deepEqual(
     result.files.filter((file) => file.action === "skipped").map((file) => file.name),
     previousNames,

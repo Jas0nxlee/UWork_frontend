@@ -146,6 +146,16 @@ jobs:
               sleep "$((2 ** attempt))"
             done
           done < "$RUNNER_TEMP/wecom-selected-assets.txt"
+          
+          # 复制更新日志文件到资源目录
+          version="${RELEASE_TAG#v}"
+          changelog_file="docs/releases/${version}-changelog.txt"
+          if [[ -f "$changelog_file" ]]; then
+            cp "$changelog_file" "$RUNNER_TEMP/wecom-release-assets/"
+            echo "已复制更新日志: $changelog_file"
+          else
+            echo "警告: 更新日志文件不存在: $changelog_file"
+          fi
 
       - name: Inspect access or upload and verify all installers
         env:

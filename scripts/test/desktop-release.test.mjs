@@ -106,9 +106,9 @@ async function fixture(run) {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test("a complete release has 16 application artifacts from one version and commit", async () => {
+test("a complete release has 14 application artifacts from one version and commit", async () => {
   await fixture(async (directory) =>
-    assert.equal((await validateReleaseAssets({ directory, version, sha })).length, 16),
+    assert.equal((await validateReleaseAssets({ directory, version, sha })).length, 14),
   );
 });
 test("a mutated installer cannot be published", async () => {
@@ -119,7 +119,7 @@ test("a mutated installer cannot be published", async () => {
 });
 test("a missing platform and a mixed source commit each block release", async () => {
   await fixture(async (directory) => {
-    const file = join(directory, "uwork-mac-x64.json");
+    const file = join(directory, "uwork-mac-arm64.json");
     const manifest = JSON.parse(await readFile(file, "utf8"));
     manifest.sha = "b".repeat(40);
     await writeFile(file, JSON.stringify(manifest));
