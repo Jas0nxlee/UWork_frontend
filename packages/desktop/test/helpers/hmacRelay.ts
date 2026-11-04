@@ -3,17 +3,19 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { WebSocketServer, type WebSocket } from "ws";
 
 /** 真实 loopback 协议夹具：不模拟企业或 OAuth；仅实现既有 HMAC relay 配对与透传。 */
-export async function createHmacTestRelay() {
+export async function createHmacTestRelay(options: { includeTerminalSid?: boolean } = {}) {
   const server = createServer((_request, response) => {
     response.writeHead(404).end();
   });
   const sockets = new WebSocketServer({ server });
   const rooms = new Map<string, { hash: string; device?: WebSocket; terminal?: WebSocket }>();
+  const connectionIds = new WeakMap<WebSocket, string>();
   const messages: Array<{ type: string; role?: string }> = [];
   const send = (socket: WebSocket | undefined, payload: unknown) => {
     if (socket?.readyState === 1) socket.send(JSON.stringify(payload));
   };
   sockets.on("connection", (socket) => {
+    connectionIds.set(socket, randomUUID());
     let sid = "";
     let role: "device" | "terminal" | undefined;
     let nonce: string | undefined;
@@ -22,6 +24,9 @@ export async function createHmacTestRelay() {
       const room = rooms.get(sid);
       const payload = {
         type: "pair_status_ack",
+        ...(options.includeTerminalSid !== false && room?.terminal
+          ? { terminal_sid: connectionIds.get(room.terminal) }
+          : {}),
         pair_status: room?.device && room.terminal ? "matched" : "waiting",
       };
       send(room?.device, payload);
@@ -66,6 +71,9 @@ export async function createHmacTestRelay() {
         send(socket, {
           type: "auth_ack",
           device_sid: sid,
+          ...(options.includeTerminalSid !== false && room.terminal
+            ? { terminal_sid: connectionIds.get(room.terminal) }
+            : {}),
           pair_status: room.device && room.terminal ? "matched" : "waiting",
         });
         status();

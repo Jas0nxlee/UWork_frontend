@@ -149,6 +149,8 @@ export class WebRemoteControlHmacDeviceTransport {
   private connectAttempt = 0;
   private socketGeneration = 0;
   private lastPairedSocketGeneration = 0;
+  private terminalSid?: string;
+  private terminalSessionObserved = false;
   private readonly payloadSerializer = new WebRemoteControlRelayPayloadSerializer();
 
   constructor(private readonly options: WebRemoteControlHmacDeviceTransportOptions) {
@@ -158,6 +160,8 @@ export class WebRemoteControlHmacDeviceTransport {
 
   start(): void {
     this.manuallyClosed = false;
+    this.terminalSessionObserved = false;
+    this.terminalSid = undefined;
     this.terminalClose = false;
     this.wasPaired = false;
     this.lastPairedSocketGeneration = 0;
@@ -358,7 +362,7 @@ export class WebRemoteControlHmacDeviceTransport {
       }
       case "auth_ack":
       case "pair_status_ack": {
-        this.applyPairStatus(message.pair_status);
+        this.applyPairStatus(message.pair_status, message.terminal_sid);
         break;
       }
       case "data": {
@@ -384,7 +388,7 @@ export class WebRemoteControlHmacDeviceTransport {
     });
   }
 
-  private applyPairStatus(status: "waiting" | "matched"): void {
+  private applyPairStatus(status: "waiting" | "matched", terminalSid?: string): void {
     // Bugfix: 休眠恢复后可能出现 WebSocket 半开（本地未 close、relay 端已回收）。
     // 只要还能收到 pair_status_ack，就更新最近心跳应答时间；后续由心跳超时守卫判断是否需要重连。
     this.lastPairStatusAckAt = Date.now();
@@ -410,6 +414,16 @@ export class WebRemoteControlHmacDeviceTransport {
       return;
     }
     if (status === "matched") {
+      const session =
+        typeof terminalSid === "string" && terminalSid.trim() && terminalSid.length <= 512
+          ? terminalSid
+          : undefined;
+      // 同一个device SID可被新手机替换，paired状态不一定变化；先撤销旧终端授权，再恢复业务发送。
+      if (!this.terminalSessionObserved || this.terminalSid !== session) {
+        this.terminalSessionObserved = true;
+        this.terminalSid = session;
+        this.options.onTerminalSessionChanged?.(session);
+      }
       const previousPairedGeneration = this.lastPairedSocketGeneration;
       const sendReadyKind =
         previousPairedGeneration === 0

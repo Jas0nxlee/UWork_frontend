@@ -23,6 +23,7 @@ afterEach(async () => {
 async function fixture(
   options: {
     relayWsUrl?: string;
+    includeTerminalSid?: boolean;
     remoteUrl?: string;
     enterpriseAuth?: {
       apiBaseUrl: string;
@@ -36,7 +37,7 @@ async function fixture(
     };
   } = {},
 ) {
-  const relay = await createHmacTestRelay();
+  const relay = await createHmacTestRelay({ includeTerminalSid: options.includeTerminalSid });
   cleanups.push(() => relay.close());
   const credentials = new Map<string, string>();
   const settings: AppSettings = { recentProjects: [] };
@@ -558,4 +559,233 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     expect(error).toMatchObject({ reason: "enterprise-identity-rejected" });
     expect(String(error?.error ?? "")).toContain("公司");
   });
+});
+
+async function connectEnterpriseTerminal(
+  f: Awaited<ReturnType<typeof fixture>>,
+  params: NonNullable<ReturnType<typeof parseWebRemoteControlHmacQrParams>>,
+  mid: string,
+) {
+  const received: WebRemoteControlAppPayload[] = [];
+  let paired = false;
+  const terminal = new WebRemoteControlHmacTerminalTransport({
+    relayWsUrl: f.relay.wsUrl,
+    deviceSid: params.deviceSid,
+    deviceMid: mid,
+    passHash: params.passHash,
+    authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
+    WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
+    onStateChange: (state) => {
+      if (state === "paired") paired = true;
+    },
+    onFailure: vi.fn(),
+    onError: vi.fn(),
+    reloadPage: vi.fn(),
+    onPayload: (payload) => received.push(payload),
+  });
+  cleanups.push(() => terminal.dispose());
+  terminal.start();
+  await vi.waitFor(() => expect(paired).toBe(true));
+  return { terminal, received };
+}
+const acceptedEnterpriseIdentity = () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ user: { id: "user-1", org_id: "org-a" } }),
+});
+const enterpriseFixture = {
+  apiBaseUrl: "https://auth.example.com",
+  allowSameOrgAnyUser: false,
+  resolveLocalSubject: async () => ({ orgId: "org-a", userId: "user-1" }),
+};
+
+it("新手机替换已验证终端后，必须重新提交企业身份，不能复用旧资格", async () => {
+  const refresh = vi.fn(async () => acceptedEnterpriseIdentity());
+  vi.stubGlobal("fetch", refresh);
+  cleanups.push(() => vi.unstubAllGlobals());
+  const f = await fixture({ enterpriseAuth: enterpriseFixture });
+  const params = parseWebRemoteControlHmacQrParams(new URL((await f.start()).qrUrl).searchParams)!;
+  const a = await connectEnterpriseTerminal(f, params, "phone-a");
+  a.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "token-a" });
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  a.terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "authorized-a" });
+  await vi.waitFor(() =>
+    expect(a.received.some((p) => p.zcode_type === "bootstrap-response")).toBe(true),
+  );
+  const b = await connectEnterpriseTerminal(f, params, "phone-b");
+  b.terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "unverified-b" });
+  b.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "token-b" });
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(b.received.some((p) => p.zcode_type === "mobile-task-view-request")).toBe(true),
+  );
+  expect(
+    b.received.some((p) => p.zcode_type === "bootstrap-response" && p.requestId === "unverified-b"),
+  ).toBe(false);
+  b.terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "authorized-b" });
+  await vi.waitFor(() =>
+    expect(
+      b.received.some(
+        (p) => p.zcode_type === "bootstrap-response" && p.requestId === "authorized-b",
+      ),
+    ).toBe(true),
+  );
+});
+
+it("旧手机的迟到身份验证不能放行替换后的新手机", async () => {
+  let release!: (response: ReturnType<typeof acceptedEnterpriseIdentity>) => void;
+  let readOldResponse = false;
+  const refresh = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    )
+    .mockImplementation(async () => acceptedEnterpriseIdentity());
+  vi.stubGlobal("fetch", refresh);
+  cleanups.push(() => vi.unstubAllGlobals());
+  const f = await fixture({ enterpriseAuth: enterpriseFixture });
+  const params = parseWebRemoteControlHmacQrParams(new URL((await f.start()).qrUrl).searchParams)!;
+  const a = await connectEnterpriseTerminal(f, params, "phone-a");
+  a.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "late-a" });
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  const b = await connectEnterpriseTerminal(f, params, "phone-b");
+  release({
+    ok: true,
+    status: 200,
+    json: async () => {
+      readOldResponse = true;
+      return { user: { id: "user-1", org_id: "org-a" } };
+    },
+  });
+  await vi.waitFor(() => expect(readOldResponse).toBe(true));
+  b.terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "unverified-late-b" });
+  b.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "fresh-b" });
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(b.received.some((p) => p.zcode_type === "mobile-task-view-request")).toBe(true),
+  );
+  expect(
+    b.received.some(
+      (p) => p.zcode_type === "bootstrap-response" && p.requestId === "unverified-late-b",
+    ),
+  ).toBe(false);
+});
+
+it("启用企业门禁但relay未提供终端身份时拒绝，不退回已验证窗口资格", async () => {
+  const refresh = vi.fn(async () => acceptedEnterpriseIdentity());
+  vi.stubGlobal("fetch", refresh);
+  cleanups.push(() => vi.unstubAllGlobals());
+  const f = await fixture({ includeTerminalSid: false, enterpriseAuth: enterpriseFixture });
+  const params = parseWebRemoteControlHmacQrParams(new URL((await f.start()).qrUrl).searchParams)!;
+  const phone = await connectEnterpriseTerminal(f, params, "phone-without-id");
+  phone.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "token" });
+  await vi.waitFor(() =>
+    expect(
+      phone.received.some(
+        (p) => p.zcode_type === "app-error" && p.reason === "enterprise-identity-rejected",
+      ),
+    ).toBe(true),
+  );
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+it.each(["switch", "logout", "resolver-error"])(
+  "企业身份%s撤销已验证HMAC会话，同人续期保持",
+  async (change) => {
+    let subject: { orgId: string; userId: string } | null = { orgId: "org-a", userId: "user-1" };
+    let resolverFails = false;
+    const refresh = vi.fn(async () => acceptedEnterpriseIdentity());
+    vi.stubGlobal("fetch", refresh);
+    cleanups.push(() => vi.unstubAllGlobals());
+    const f = await fixture({
+      enterpriseAuth: {
+        ...enterpriseFixture,
+        resolveLocalSubject: async () => {
+          if (resolverFails) throw new Error("identity unavailable");
+          return subject;
+        },
+      },
+    });
+    const params = parseWebRemoteControlHmacQrParams(
+      new URL((await f.start()).qrUrl).searchParams,
+    )!;
+    const phone = await connectEnterpriseTerminal(f, params, "phone-a");
+    phone.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "token-a" });
+    await vi.waitFor(() =>
+      expect(phone.received.some((p) => p.zcode_type === "mobile-task-view-request")).toBe(true),
+    );
+    await f.manager.notifyAuthStateChanged(1, { state: "signed-in" });
+    expect(f.manager.getStatus(1).mobileConnected).toBe(true);
+    subject = change === "switch" ? { orgId: "org-a", userId: "user-2" } : null;
+    resolverFails = change === "resolver-error";
+    await f.manager.notifyAuthStateChanged(1, {
+      state: change === "switch" ? "signed-in" : "signed-out",
+    });
+    expect(f.manager.getStatus(1).status).toBe("idle");
+  },
+);
+
+it("旧企业身份读取迟到不能停止新窗口runtime", async () => {
+  let subject = { orgId: "org-a", userId: "user-1" };
+  let pendingRead: Promise<typeof subject> | undefined;
+  let release!: (value: typeof subject) => void;
+  const f = await fixture({
+    enterpriseAuth: {
+      ...enterpriseFixture,
+      resolveLocalSubject: async () => {
+        if (pendingRead) {
+          const current = pendingRead;
+          pendingRead = undefined;
+          return current;
+        }
+        return subject;
+      },
+    },
+  });
+  await f.start();
+  pendingRead = new Promise((resolve) => {
+    release = resolve;
+  });
+  const oldNotification = f.manager.notifyAuthStateChanged(1, { state: "signed-in" });
+  subject = { orgId: "org-a", userId: "user-2" };
+  await f.start();
+  release({ orgId: "org-a", userId: "user-1" });
+  await oldNotification;
+  expect(f.manager.getStatus(1).status).toBe("running");
+});
+
+it("桌面注销后迟到的手机验证不能复活已停止runtime", async () => {
+  let subject: { orgId: string; userId: string } | null = { orgId: "org-a", userId: "user-1" };
+  let release!: (value: ReturnType<typeof acceptedEnterpriseIdentity>) => void;
+  let readResponse = false;
+  const refresh = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  vi.stubGlobal("fetch", refresh);
+  cleanups.push(() => vi.unstubAllGlobals());
+  const f = await fixture({
+    enterpriseAuth: { ...enterpriseFixture, resolveLocalSubject: async () => subject },
+  });
+  const params = parseWebRemoteControlHmacQrParams(new URL((await f.start()).qrUrl).searchParams)!;
+  const phone = await connectEnterpriseTerminal(f, params, "phone-a");
+  phone.terminal.sendPayload({ zcode_type: "enterprise-identity", token: "late-a" });
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  subject = null;
+  await f.manager.notifyAuthStateChanged(1, { state: "signed-out" });
+  release({
+    ok: true,
+    status: 200,
+    json: async () => {
+      readResponse = true;
+      return { user: { id: "user-1", org_id: "org-a" } };
+    },
+  });
+  await vi.waitFor(() => expect(readResponse).toBe(true));
+  expect(f.manager.getStatus(1).status).toBe("idle");
 });

@@ -42,6 +42,8 @@ export interface WebRemoteControlHmacDeviceTransportOptions {
   };
   onRegisteredAuth(auth: { deviceSid: string; passHash: string }): void;
   onStateChange(state: WebRemoteControlHmacDeviceTransportState): void;
+  /** 在 paired/send-ready 前通知当前终端连接变化；不保存企业身份。 */
+  onTerminalSessionChanged?(terminalSid: string | undefined): void;
   onPayload(payload: WebRemoteControlAppPayload): void;
   onRawTransportPayload?(payload: unknown): boolean;
   onRawTransportFault?(reasonCode: string): void;

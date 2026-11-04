@@ -147,6 +147,8 @@ interface WindowControlRuntime {
   mobileDeviceInfo?: WebRemoteControlMobileDeviceInfo;
   /** 企业准入状态：仅在本机身份可用且二维码带上准入参数时存在。 */
   enterpriseGate?: "pending" | "verified";
+  enterpriseTerminalSid?: string;
+  enterpriseVerificationAttempt?: number;
   /** 本机身份（组织 + 人），用于与手机上报的身份比对。 */
   enterpriseSubject?: { orgId: string; userId: string; displayName?: string };
   /** 校验通过后记下的远端身份，用于日志与状态展示。 */
@@ -698,6 +700,8 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     runtime: WindowControlRuntime,
     payload: WebRemoteControlAppPayload,
   ): void {
+    if (runtimes.get(runtime.windowId) !== runtime) return;
+    if (runtime.enterpriseGate === "pending" && payload.zcode_type !== "app-error") return;
     if (runtime.pendingOutboundPayloads.length > 0) {
       bufferOutboundPayload(runtime, payload);
       flushPendingOutboundPayloads(runtime);
@@ -1338,6 +1342,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
   }
 
   function routeRawTransportCandidate(runtime: WindowControlRuntime, payload: unknown): boolean {
+    if (runtime.enterpriseGate === "pending") return true;
     const bridge = runtime.currentBridge;
     if (!bridge || bridge.degraded) return false;
     return bridge.relayProtocol?.acceptPayload(payload) ?? false;
@@ -1378,8 +1383,17 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
     const enterprise = dependencies.enterpriseAuth;
     const local = runtime.enterpriseSubject;
     if (runtime.enterpriseGate !== "pending" || !enterprise || !local) return;
+    const terminalSid = runtime.enterpriseTerminalSid;
+    const attempt = (runtime.enterpriseVerificationAttempt ?? 0) + 1;
+    runtime.enterpriseVerificationAttempt = attempt;
+    const isCurrent = () =>
+      runtimes.get(runtime.windowId) === runtime &&
+      runtime.status !== "error" &&
+      runtime.enterpriseGate === "pending" &&
+      runtime.enterpriseTerminalSid === terminalSid &&
+      runtime.enterpriseVerificationAttempt === attempt;
     const reject = (message: string) => {
-      runtime.enterpriseGate = undefined;
+      if (!isCurrent()) return;
       dependencies.logger.warn("[web-remote-control] enterprise identity rejected", {
         windowId: runtime.windowId,
         message,
@@ -1391,6 +1405,10 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         createFailure("enterprise-identity-rejected", message),
       );
     };
+    if (!terminalSid) {
+      reject("中继未提供当前手机会话标识，无法验证企业身份。");
+      return;
+    }
     if (typeof token !== "string" || !token.trim() || token.length > 16_384) {
       reject("企业身份令牌缺失或过长。");
       return;
@@ -1420,6 +1438,7 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       reject(`企业身份校验请求失败：${error instanceof Error ? error.message : String(error)}`);
       return;
     }
+    if (!isCurrent()) return;
     const remoteOrg = typeof user.org_id === "string" ? user.org_id : "";
     if (!remoteOrg || remoteOrg !== local.orgId) {
       reject("当前登录的企业与这台设备所属公司不一致。");
@@ -1432,13 +1451,51 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       reject("只能由登录这台设备的同一个人控制。");
       return;
     }
+    const currentSubject = await enterprise.resolveLocalSubject?.().catch(() => null);
+    if (!isCurrent()) return;
+    if (!sameEnterpriseSubject(local, currentSubject)) {
+      reject("桌面企业身份已变化，请重新开启远控。");
+      return;
+    }
     runtime.enterpriseGate = "verified";
+    requestMobileTaskView(runtime);
     runtime.remoteEnterpriseName = typeof user.name === "string" ? user.name : undefined;
     dependencies.logger.info("[web-remote-control] enterprise identity verified", {
       windowId: runtime.windowId,
       orgId: remoteOrg,
       sameUser: remoteIds.includes(local.userId.trim().toLowerCase()),
     });
+  }
+
+  function sameEnterpriseSubject(
+    left: WindowControlRuntime["enterpriseSubject"],
+    right: WindowControlRuntime["enterpriseSubject"] | null,
+  ): boolean {
+    return Boolean(
+      left &&
+      right &&
+      left.orgId === right.orgId &&
+      left.userId.trim().toLowerCase() === right.userId.trim().toLowerCase(),
+    );
+  }
+
+  function resetEnterpriseTerminal(
+    runtime: WindowControlRuntime,
+    terminalSid: string | undefined,
+  ): void {
+    if (!runtime.enterpriseSubject) return;
+    // 原因：窗口/长期配对码不是手机身份；换终端必须撤销旧bridge、缓冲和所有在途验证。
+    runtime.enterpriseGate = "pending";
+    runtime.enterpriseTerminalSid = terminalSid;
+    runtime.enterpriseVerificationAttempt = (runtime.enterpriseVerificationAttempt ?? 0) + 1;
+    runtime.remoteEnterpriseName = undefined;
+    runtime.mobileTaskViewEpoch = randomUUID();
+    runtime.mobileTaskViewSeq = -1;
+    cancelBridgeOpen(runtime);
+    disposeRuntimeBridgeResources(runtime);
+    clearPendingOutboundPayloadTimer(runtime);
+    runtime.pendingOutboundPayloads.length = 0;
+    runtime.pendingBridgeInvalidation = undefined;
   }
 
   function routePayload(runtime: WindowControlRuntime, payload: WebRemoteControlAppPayload): void {
@@ -1715,6 +1772,9 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
         relayMessageLogger: dependencies.relayMessageLogger,
         onRegisteredAuth: (value) => {
           auth = value;
+        },
+        onTerminalSessionChanged: (terminalSid) => {
+          if (runtime && !controller.signal.aborted) resetEnterpriseTerminal(runtime, terminalSid);
         },
         onStateChange: (state) => {
           if (!runtime || controller.signal.aborted) return;
@@ -2165,7 +2225,26 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       change: WebRemoteControlAuthStateChange,
     ): Promise<void> {
       // 修复原因：UWork 的随机配对凭据不属于已退役 OAuth，展示态清理不得撤销 HMAC runtime。
-      if (dependencies.hmacRelay) return;
+      if (dependencies.hmacRelay) {
+        const enterprise = dependencies.enterpriseAuth;
+        const candidates = [...runtimes.values()].filter((runtime) => runtime.enterpriseSubject);
+        if (!enterprise || candidates.length === 0) return;
+        const revision = ++authNotificationRevision;
+        // Renderer只提示owner变化；Main重新读取共享身份，同人续期不影响配对。
+        const local = await enterprise.resolveLocalSubject?.().catch(() => null);
+        if (revision !== authNotificationRevision) return;
+        for (const runtime of candidates) {
+          if (revision !== authNotificationRevision) return;
+          if (
+            runtimes.get(runtime.windowId) !== runtime ||
+            sameEnterpriseSubject(runtime.enterpriseSubject, local)
+          )
+            continue;
+          resetEnterpriseTerminal(runtime, undefined);
+          await stopWindowRuntime(runtime.windowId, "enterprise-identity-changed");
+        }
+        return;
+      }
       const revision = ++authNotificationRevision;
       if (change.state === "signed-in") {
         const login = await dependencies.getLogin();

@@ -49,6 +49,33 @@
 顺序契约：启用企业准入时，终端在配对完成后**必须**先发这一帧，桌面在通过校验前
 **丢弃**该终端的其它 payload（不排队、不缓存，避免"先放行后校验"的窗口）。
 
+### 3.2.1 企业准入绑定当前手机连接（2026-11-04 回归修订）
+
+- `WindowControlRuntime` 唯一拥有企业认证状态，但已验证资格必须绑定 relay 在 `auth_ack` / `pair_status_ack` 提供的当前 `terminal_sid`，不能只绑定长期 device SID 或窗口。
+- Desktop transport 在匹配消息送达时先发布终端会话变化，再恢复 paired/send-ready。首个终端或终端替换时，manager 清除旧已验证状态、旧 bridge/attachment 与待发业务帧，重新等待企业身份帧。
+- 配置企业准入但当前终端标识缺失时，不能以旧验证或旧 HMAC 权限替代；拒绝企业身份验证并关闭该远控 runtime。未启用企业准入的 legacy HMAC 保持原有行为。
+- 企业 HTTP 验证结果须同时匹配当前 runtime、终端 SID 与验证尝试代次，并在发布前复核桌面当前企业身份；旧终端的迟到成功/失败均不得改变新终端资格。
+- Renderer 订阅企业身份 owner 的变更，通过现有 platform 通道发送失效提示；Main 重新读取共享身份事实。同用户续期保持连接，组织/用户切换、注销或已启用身份读取失败时撤销旧 runtime；通知内容本身不授予权限，迟到身份读取不能撤销新 runtime。
+- 验证前丢弃应用请求和 raw RPC，且不把旧 bridge 的业务数据发给新终端；错误反馈可以发送。验证成功后再请求当前手机查看状态。
+
+```mermaid
+sequenceDiagram
+  participant Relay as Relay socket owner
+  participant Transport as Desktop transport
+  participant Manager as Window runtime owner
+  participant Auth as 企业身份服务
+  participant UI as Renderer 身份订阅
+  Relay->>Transport: matched + terminal_sid B
+  Transport->>Manager: 终端会话由 A 改为 B
+  Manager->>Manager: 撤销 A 的验证/bridge/缓冲，B=pending
+  Transport->>Manager: paired/send-ready
+  Manager->>Auth: B 身份帧触发验证（绑定 B + attempt）
+  Auth-->>Manager: 验证结果
+  Manager->>Manager: 同一 runtime/B/attempt 与桌面身份才发布 verified
+  UI->>Manager: owner 身份变更提示（现有 platform 通道）
+  Manager->>Manager: 读共享身份，同人保留，换人/注销撤销旧 runtime
+```
+
 ### 3.3 新增失败原因
 
 `enterprise-identity-required`（没发身份帧）、`enterprise-identity-rejected`（校验不通过：组织不符或人被拒）。
@@ -125,13 +152,13 @@
 
 ### 6.4 设备目录与配对应答（材料不落后台存储）
 
-| 步骤 | 端点 | 说明 |
-| --- | --- | --- |
-| 桌面登记 | `PUT /api/client/remote-devices/:sid` | `{deviceMid,name,platform,ttlSeconds≤600}`，幂等心跳，**不含密钥** |
-| 手机列设备 | `GET /api/client/remote-devices` | 只列本人 TTL 内设备 |
-| 手机请求配对 | `POST /api/client/remote-devices/:sid/pairings` | `{id,expiresAt}`（≤60s） |
-| 桌面应答 | `GET /api/client/remote-pairings/next?deviceSid=` + `POST .../:id/answer {sid,hash}` | 长轮询 ≤30s；材料只留在后台进程内 Map（一次性） |
-| 手机取材料 | `GET /api/client/remote-devices/:sid/pairings/:id` | `answered` 时一次性返回 `{sid,hash,org,enterpriseAuth}` |
+| 步骤         | 端点                                                                                 | 说明                                                               |
+| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| 桌面登记     | `PUT /api/client/remote-devices/:sid`                                                | `{deviceMid,name,platform,ttlSeconds≤600}`，幂等心跳，**不含密钥** |
+| 手机列设备   | `GET /api/client/remote-devices`                                                     | 只列本人 TTL 内设备                                                |
+| 手机请求配对 | `POST /api/client/remote-devices/:sid/pairings`                                      | `{id,expiresAt}`（≤60s）                                           |
+| 桌面应答     | `GET /api/client/remote-pairings/next?deviceSid=` + `POST .../:id/answer {sid,hash}` | 长轮询 ≤30s；材料只留在后台进程内 Map（一次性）                    |
+| 手机取材料   | `GET /api/client/remote-devices/:sid/pairings/:id`                                   | `answered` 时一次性返回 `{sid,hash,org,enterpriseAuth}`            |
 
 - 组织/成员隔离：全部端点按会话的 `tenant_id + user_id` 过滤，跨成员一律 404；
   因此"同组织任意人可连"在本入口不成立（`allowSameOrgAnyUser` 不参与），比扫码更严。

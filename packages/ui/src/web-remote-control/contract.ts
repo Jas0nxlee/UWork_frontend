@@ -1,4 +1,4 @@
-import type { IOAuthService } from "@zcode/services";
+import type { IOAuthService, IEnterpriseIdentityService } from "@zcode/services";
 import type { IPlatformService } from "@zcode/shared";
 import type { WebRemoteControlWorkspaceSwitcherApi } from "@/root/types.js";
 
@@ -10,6 +10,7 @@ export type WebRemoteControlAuthPlatform = Pick<
   "notifyWebRemoteControlAuthStateChanged"
 >;
 export type WebRemoteControlAuthEvents = Pick<IOAuthService, "onDidChangeSession">;
+export type WebRemoteControlEnterpriseAuthEvents = Pick<IEnterpriseIdentityService, "onDidChange">;
 export type { WebRemoteControlMobileTaskView } from "@zcode/shared";
 export type WebRemoteControlTaskViewSwitcher = Pick<
   WebRemoteControlWorkspaceSwitcherApi,

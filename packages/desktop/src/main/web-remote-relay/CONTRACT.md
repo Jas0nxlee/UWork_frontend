@@ -9,3 +9,5 @@ index.ts/contract.ts 与既有 desktopMobileRemoteControlConfig.ts 配置入口�
 UWork Main 显式注入 hmacRelay：socket 由 HMAC adapter 所有、配对凭据由既有 credential/settings 存储所有，manager 保留窗口/attachment lifecycle。HMAC 不读取 OAuth 或企业身份，缺失自建端点时失败关闭；既有 V2 clearLegacy 仅用于显式 V2，不清理 HMAC 凭据。HMAC stop 保留配对，resetPairing 撤销 socket 后清理配对再启动。
 
 认证/持久化 ports 与 socket 事件/timing options 分别位于 contracts/hmacIdentity.ts 和 contracts/hmacTransport.ts；公开 contract.ts 统一导出，避免把两种协议的 socket 回调与认证命令混成一个庞大服务接口。自建 relay 每 SID 单 device 槽，因此现有窗口 registry 是唯一 owner；start 新窗口先撤销旧窗口生命周期，所有配对 IO 经同一串行入口并复验 controller。
+
+`auth_ack` / `pair_status_ack` 的既有 `terminal_sid` 由 socket adapter 在 paired/send-ready 之前同步通知 manager；adapter 不保存企业验证。manager 按终端连接绑定验证资格与在途尝试，换终端先释放旧 bridge/缓冲，缺少终端标识的企业模式拒绝准入；未配置企业模式的 HMAC 保持兼容。企业身份 owner 变更只经现有 platform 通知提示 Main 复核，同人续期不撤销，换人/注销撤销旧 runtime。
