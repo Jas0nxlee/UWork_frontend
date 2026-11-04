@@ -58,6 +58,7 @@ export function parseCatalog(value: unknown): CatalogIndex {
     throw new Error("Invalid catalog");
   const data: Record<string, CatalogProvider> = Object.create(null);
   const canonical = new Map<string, CatalogMatch[]>();
+  const canonicalEvidence = new Map<string, CatalogMatch[]>();
   const byProvider = new Map<string, Map<string, CatalogMatch[]>>(),
     endpoints = new Map<string, string[]>();
   let count = 0;
@@ -95,12 +96,21 @@ export function parseCatalog(value: unknown): CatalogIndex {
       providerModels.set(normalized, [...(providerModels.get(normalized) ?? []), match]);
       if (canonicalId && key(canonicalId) === `${key(providerId)}/${normalized}`)
         canonical.set(normalized, [...(canonical.get(normalized) ?? []), match]);
+      if (canonicalId && key(canonicalId).endsWith(`/${normalized}`))
+        canonicalEvidence.set(normalized, [...(canonicalEvidence.get(normalized) ?? []), match]);
     }
     data[providerId] = { id: providerId, ...(api ? { api } : {}), models };
   }
   if (!count) throw new Error("Empty catalog");
   const single = (matches: readonly CatalogMatch[] | undefined) =>
     matches?.length === 1 ? matches[0] : undefined;
+  const consensus = (matches: readonly CatalogMatch[] | undefined) => {
+    if (!matches || matches.length < 2) return undefined;
+    const first = matches[0]!;
+    // 原厂记录缺失时仅采纳多方相同 canonical 与完整能力，不用单个转售商猜私有别名。
+    const signature = JSON.stringify(first.model);
+    return matches.every((item) => JSON.stringify(item.model) === signature) ? first : undefined;
+  };
   return {
     data,
     match(baseUrl, modelId) {
@@ -127,7 +137,7 @@ export function parseCatalog(value: unknown): CatalogIndex {
           );
       }
       // 私有端点无法证明唯一转售商别名的真实身份；无端点/namespace 时只信自指 canonical。
-      return single(canonical.get(normalized));
+      return single(canonical.get(normalized)) ?? consensus(canonicalEvidence.get(normalized));
     },
   };
 }

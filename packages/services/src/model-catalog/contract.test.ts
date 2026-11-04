@@ -215,3 +215,36 @@ describe("models.dev catalog", () => {
     });
   });
 });
+
+it("uses agreeing canonical records when the manufacturer entry is absent", async () => {
+  const model = {
+    id: "image-v2",
+    canonical_model_id: "maker/image-v2",
+    limit: { context: 0 },
+    modalities: { input: ["text", "image"], output: ["image"] },
+    reasoning: false,
+  };
+  const data = {
+    a: { id: "a", models: { "image-v2": model } },
+    b: { id: "b", models: { "image-v2": model } },
+  };
+  const catalog = track(createModelsDevCatalog({ request: async () => Response.json(data) }));
+  const [result] = await catalog.enrich(connection, ["image-v2"]);
+  expect(result).toMatchObject({
+    catalogConfig: { properties: { contextWindow: null, outputFormat: { supportsText: false } } },
+    catalogSource: { canonicalModelId: "maker/image-v2" },
+  });
+});
+it("rejects conflicting canonical evidence and a lone reseller without the manufacturer", async () => {
+  const model = { id: "image-v2", canonical_model_id: "maker/image-v2", limit: { context: 1000 } };
+  for (const models of [undefined, { "image-v2": { ...model, limit: { context: 2000 } } }]) {
+    const data = {
+      a: { id: "a", models: { "image-v2": model } },
+      ...(models ? { b: { id: "b", models } } : {}),
+    };
+    const catalog = track(createModelsDevCatalog({ request: async () => Response.json(data) }));
+    expect(await catalog.enrich(connection, ["image-v2"])).toEqual([
+      { id: "image-v2", catalogConfig: null },
+    ]);
+  }
+});
