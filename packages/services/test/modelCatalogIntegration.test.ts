@@ -111,7 +111,7 @@ test("offline UCAS template aliases keep confirmed capabilities and their origin
       max: 393_216,
       image: true,
       video: false,
-      pdf: false,
+      pdf: true,
       levels: effort,
     },
     {
@@ -147,6 +147,13 @@ test("offline UCAS template aliases keep confirmed capabilities and their origin
           supportsVideo: entry.video,
           supportsPdf: entry.pdf,
         },
+        entry.id,
+      );
+      // 本机已勾选过能力不能掩盖内置缺项；离线配置必须直接提供用户指定的 PDF 和原生搜索。
+      assert.equal(config.properties?.supportsJsonSchemaOutput, true, entry.id);
+      assert.equal(
+        config.properties?.supportsNativeWebSearch,
+        entry.id === "ucas-deepseek-flash",
         entry.id,
       );
       assert.deepEqual(config.optionSpecs?.reasoningLevel?.values, entry.levels, entry.id);

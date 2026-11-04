@@ -1,5 +1,5 @@
 {
-  "revision": 34,
+  "revision": 35,
   "schemaVersion": 1,
   "config": {
     "modelConfigRules": {
@@ -5733,13 +5733,14 @@
                 "supportsImage": true,
                 "supportsAudio": false,
                 "supportsVideo": false,
-                "supportsPdf": false
+                "supportsPdf": true
               },
               "outputFormat": {
                 "supportsText": true
               },
               "supportsToolCall": true,
-              "supportsJsonSchemaOutput": true
+              "supportsJsonSchemaOutput": true,
+              "supportsNativeWebSearch": true
             },
             "optionSpecs": {
               "maxOutputTokens": {

@@ -84,16 +84,21 @@ sequenceDiagram
 
 ### 内置数据快照
 
-2026-11-04 从 `https://models.dev/api.json` 的原厂记录提取：
+2026-11-04 从 `https://models.dev/api.json` 的原厂记录提取基准参数；`ucas-deepseek-flash` 的 PDF 与原生联网搜索按用户指定补充。
 
-| 内置别名                                | 原厂 canonical                    | 上下文 / 最大输出 | 输入             | effort                    |
-| --------------------------------------- | --------------------------------- | ----------------- | ---------------- | ------------------------- |
-| ucas-gpt-max                            | anthropic/claude-sonnet-5-5       | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
-| ucas-gpt-mini                           | anthropic/claude-haiku-5-5        | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
-| ucas-kimi                               | moonshotai/kimi-k3.1-pro          | 1048576 / 1048576 | text,image,video | low,high,max              |
-| ucas-glm                                | zhipuai/glm-5.3                   | 1000000 / 131072  | text             | low,high,max              |
-| ucas-deepseek-flash / ucas-deepseek-pro | deepseek/deepseek-v4.1-flash-1017 | 1048576 / 393216  | text,image       | low,high,max              |
+| 内置别名            | 原厂 canonical                    | 上下文 / 最大输出 | 输入             | effort                    |
+| ------------------- | --------------------------------- | ----------------- | ---------------- | ------------------------- |
+| ucas-gpt-max        | anthropic/claude-sonnet-5-5       | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
+| ucas-gpt-mini       | anthropic/claude-haiku-5-5        | 1000000 / 128000  | text,image,pdf   | low,medium,high,xhigh,max |
+| ucas-kimi           | moonshotai/kimi-k3.1-pro          | 1048576 / 1048576 | text,image,video | low,high,max              |
+| ucas-glm            | zhipuai/glm-5.3                   | 1000000 / 131072  | text             | low,high,max              |
+| ucas-deepseek-flash | deepseek/deepseek-v4.1-flash-1017 | 1048576 / 393216  | text,image,pdf   | low,high,max              |
+| ucas-deepseek-pro   | deepseek/deepseek-v4.1-flash-1017 | 1048576 / 393216  | text,image       | low,high,max              |
 
-实现位置是随包 `config/provider/zcode-builtin.json` 的六条精确 `templateModelRules`，版本34，不依赖在线目录或本机缓存。各模型输出均为text；未列出的输入显式false。请求模型ID保持UCAS别名。UCAS继续使用现有OpenAI Chat协议映射；Claude原生Messages的 `output_config.effort` 不直接发送到该接口，实际转换由网关负责，连通性通过只证明请求被接收，不能单独证明推理强度内部语义。
+实现位置是随包 `config/provider/zcode-builtin.json` 的六条精确 `templateModelRules`，版本35，不依赖在线目录或本机缓存。各模型输出均为text；未列出的输入显式false。请求模型ID保持UCAS别名。UCAS继续使用现有OpenAI Chat协议映射；Claude原生Messages的 `output_config.effort` 不直接发送到该接口，实际转换由网关负责，连通性通过只证明请求被接收，不能单独证明推理强度内部语义。
 
 公开请求参数依据：[Kimi API](https://platform.kimi.ai/docs/api/chat)、[GLM-5.3](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)、[DeepSeek 1017映射](https://api-docs.deepseek.com/updates/)、[DeepSeek推理](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude OpenAI兼容边界](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk)。GLM/DeepSeek内置显式启用thinking，Kimi保持always-on原厂协议，不套用旧Kimi的thinking开关。
+
+### ucas-deepseek-flash 能力修订（用户指定，2026-11-04）
+
+仅精确别名 `ucas-deepseek-flash` 的内置默认设为：输入 text/image/pdf=true，audio/video=false；supportsJsonSchemaOutput=true、supportsNativeWebSearch=true。这是用户指定的 UCAS 能力配置，优先级仍低于手动、网关和目录；不把该声明推广到 `ucas-deepseek-pro` 或其他 DeepSeek 型号，也不改请求 ID。随包配置版本35。离线回归直接读取真实内置文件，同时验证 flash 的正例和 pro 的负例。
