@@ -51,6 +51,34 @@ export const providerModelConfigRuleSchema = templateModelConfigRuleSchema
 export const manualProviderModelConfigRuleSchema = providerModelConfigRuleSchema.extend({
   config: manualModelConfigSchema,
 });
+export const modelCatalogSourceSchema = z
+  .object({
+    source: z.literal("models.dev"),
+    providerId: idSchema,
+    modelId: idSchema,
+    canonicalModelId: idSchema.optional(),
+    fetchedAt: z.number().finite().nonnegative(),
+    stale: z.boolean(),
+  })
+  .strict();
+export const discoveredProviderModelConfigRuleSchema = providerModelConfigRuleSchema
+  .extend({
+    apiType: idSchema,
+    baseUrl: z.url(),
+    // 网关只拥有能力元数据；用户启停状态不能由刷新覆盖。
+    config: modelConfigDataSchema.omit({ enabled: true }),
+    catalogConfig: modelConfigDataSchema.omit({ enabled: true }).optional(),
+    catalogSource: modelCatalogSourceSchema.optional(),
+  })
+  .superRefine((rule, context) => {
+    if ((rule.catalogConfig === undefined) !== (rule.catalogSource === undefined)) {
+      context.addIssue({
+        code: "custom",
+        path: ["catalogConfig"],
+        message: "目录配置与来源必须成对保存",
+      });
+    }
+  });
 
 export const builtinModelConfigRulesSchema = z
   .object({
@@ -65,6 +93,7 @@ export const personalModelConfigRulesSchema = z
   .object({
     providerModelRules: z.array(providerModelConfigRuleSchema),
     manualProviderModelRules: z.array(manualProviderModelConfigRuleSchema),
+    discoveredProviderModelRules: z.array(discoveredProviderModelConfigRuleSchema).optional(),
   })
   .strict()
   .superRefine((rules, context) => {
@@ -179,7 +208,11 @@ export type ProviderSiteMatchConfigRuleData = z.infer<typeof providerSiteMatchCo
 export type TemplateModelConfigRuleData = z.infer<typeof templateModelConfigRuleSchema>;
 export type ProviderModelConfigRuleData = z.infer<typeof providerModelConfigRuleSchema>;
 export type ManualProviderModelConfigRuleData = z.infer<typeof manualProviderModelConfigRuleSchema>;
+export type DiscoveredProviderModelConfigRuleData = z.infer<
+  typeof discoveredProviderModelConfigRuleSchema
+>;
 export type BuiltinModelConfigRulesData = z.infer<typeof builtinModelConfigRulesSchema>;
 export type PersonalModelConfigRulesData = z.infer<typeof personalModelConfigRulesSchema>;
 export type ProviderConfigRuleData = z.infer<typeof providerConfigRuleSchema>;
+export type ModelCatalogSource = z.infer<typeof modelCatalogSourceSchema>;
 export type ProviderTemplateConfigRuleData = z.infer<typeof providerTemplateConfigRuleSchema>;

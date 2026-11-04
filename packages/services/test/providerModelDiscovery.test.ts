@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { compileModelOptionMaps } from "@zcode/model-option-map";
+import { completeNewModelSelection } from "@zcode/provider";
 import { discoverProviderModels } from "../src/model-provider/providerModelDiscovery.js";
 const config = {
   api: { type: "openai-chat-completions" as const, baseUrl: "https://models.example" },
@@ -24,6 +26,182 @@ test("root URL uses /v1/models and deduplicates IDs with saved auth", async () =
     },
   });
   assert.deepEqual(ids, ["model-a", "model-b"]);
+});
+
+test("discovery preserves explicit gateway capabilities without inventing unknown values", async () => {
+  const models = await discoverProviderModels(config, {
+    request: async () =>
+      Response.json({
+        data: [
+          {
+            id: "opaque-a",
+            context_window: 32768,
+            max_output_tokens: 4096,
+            supports_vision: false,
+            supports_reasoning: false,
+            supports_tools: false,
+          },
+          {
+            id: "opaque-b",
+            context_length: 262144,
+            architecture: { input_modalities: ["text", "image", "audio"] },
+            reasoning_effort: ["low", "medium", "high"],
+            supports_tools: true,
+          },
+          {
+            id: "opaque-unknown",
+            supports_reasoning: true,
+            supported_endpoint_types: ["gemini", "anthropic"],
+          },
+        ],
+      }),
+  });
+  assert.deepEqual(models, [
+    {
+      id: "opaque-a",
+      config: {
+        properties: {
+          contextWindow: 32768,
+          inputFormat: { supportsImage: false },
+          supportsToolCall: false,
+        },
+        optionSpecs: {
+          maxOutputTokens: { max: 4096 },
+          reasoningLevel: { values: ["disabled"], map: "{}" },
+        },
+      },
+    },
+    {
+      id: "opaque-b",
+      config: {
+        properties: {
+          contextWindow: 262144,
+          inputFormat: {
+            supportsText: true,
+            supportsImage: true,
+            supportsVideo: false,
+            supportsAudio: true,
+            supportsPdf: false,
+          },
+          supportsToolCall: true,
+        },
+        optionSpecs: {
+          reasoningLevel: {
+            values: ["low", "medium", "high"],
+            map: '{"reasoning_effort": reasoningLevel}',
+          },
+        },
+      },
+    },
+    "opaque-unknown",
+  ]);
+});
+
+test("invalid capability fields reject the entire discovery result", async () => {
+  for (const invalid of [
+    { context_window: "32000" },
+    { context_length: -1 },
+    { max_output_tokens: 0 },
+    { supports_vision: "false" },
+    { supports_tools: 1 },
+    { supports_reasoning: "true" },
+    { architecture: { input_modalities: ["text", "hologram"] } },
+    { reasoning_effort: ["high", "high"] },
+  ]) {
+    await assert.rejects(
+      discoverProviderModels(config, {
+        request: async () =>
+          Response.json({ data: [{ id: "valid" }, { id: "invalid", ...invalid }] }),
+      }),
+      /模型能力/,
+    );
+  }
+});
+
+test("explicit effort tiers use protocol-owned request maps and unsupported reasoning sends nothing", async () => {
+  for (const [type, expected] of [
+    ["openai-chat-completions", { reasoning_effort: "high" }],
+    ["openai-responses", { reasoning: { effort: "high" } }],
+    ["anthropic-messages", { output_config: { effort: "high" } }],
+  ] as const) {
+    const models = await discoverProviderModels(
+      { ...config, api: { ...config.api, type } },
+      {
+        request: async () =>
+          Response.json({
+            data: [
+              {
+                id: "opaque",
+                reasoning_levels: ["low", "high"],
+                optionSpecs: { reasoningLevel: { map: '{"unsafe": true}' } },
+              },
+              { id: "no-reasoning", supports_reasoning: false },
+              { id: "toggle", reasoning_levels: ["disabled", "enabled"] },
+            ],
+          }),
+      },
+    );
+    const effort = models[0],
+      disabled = models[1],
+      toggle = models[2];
+    assert.ok(typeof effort !== "string" && effort);
+    assert.ok(typeof disabled !== "string" && disabled);
+    assert.ok(typeof toggle !== "string" && toggle);
+    const patch = (model: typeof effort, level: string) =>
+      JSON.parse(
+        JSON.stringify(
+          compileModelOptionMaps({
+            reasoningLevel: { map: model.config!.optionSpecs!.reasoningLevel!.map! },
+            maxOutputTokens: { map: "{}" },
+          }).apply({}, { reasoningLevel: level, maxOutputTokens: 4096 }),
+        ),
+      );
+    assert.deepEqual(patch(effort, "high"), expected);
+    assert.deepEqual(patch(disabled, "disabled"), {});
+    assert.equal(toggle.config?.optionSpecs?.reasoningLevel?.map, undefined);
+  }
+});
+
+test("unordered gateway reasoning tiers default to the highest semantic level", async () => {
+  for (const [raw, expected] of [
+    [
+      ["high", "low"],
+      ["low", "high"],
+    ],
+    [
+      ["max", "medium", "none", "xhigh", "low", "minimal", "high"],
+      ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+    ],
+    [
+      ["enabled", "disabled"],
+      ["disabled", "enabled"],
+    ],
+  ]) {
+    const models = await discoverProviderModels(config, {
+      request: async () => Response.json({ data: [{ id: "opaque", reasoning_levels: raw }] }),
+    });
+    const model = models[0];
+    assert.ok(model && typeof model !== "string");
+    const values = model.config!.optionSpecs!.reasoningLevel!.values!;
+    assert.deepEqual(values, expected);
+    const selection = completeNewModelSelection(
+      {
+        providers: [
+          {
+            providerId: "gateway",
+            models: [
+              {
+                modelId: "opaque",
+                config: { optionSpecs: { reasoningLevel: { values } } },
+              },
+            ],
+          },
+        ],
+      },
+      { providerId: "gateway", modelId: "opaque" },
+    );
+    assert.equal(selection?.options?.reasoningLevel, expected!.at(-1));
+  }
 });
 
 test("Anthropic preserves prefix, authenticates and follows bounded cursor pages", async () => {
@@ -104,7 +282,7 @@ test("rejects malformed lists, repeated cursors and URL credentials", async () =
 async function runtimeFixture(
   discoverModels: (
     config: import("@zcode/provider").ProviderConfigObject,
-  ) => Promise<readonly string[]>,
+  ) => Promise<readonly import("@zcode/provider").DiscoveredModelInput[]>,
 ) {
   const { mkdtemp, rm } = await import("node:fs/promises");
   const { join } = await import("node:path");
@@ -243,7 +421,7 @@ test("discovered model edits accept current revisions and continue to reject sta
   }
 });
 
-test("default UCAS provider is seeded and discovered models receive fixed metadata", async () => {
+test("mapped UCAS models use built-in defaults while unlisted ID-only aliases remain unconfirmed", async () => {
   const fixture = await runtimeFixture(async (providerConfig) => {
     assert.equal(providerConfig.api?.baseUrl, "https://llm.ucas.com.cn:15000/v1");
     assert.equal(providerConfig.api?.type, "openai-chat-completions");
@@ -265,15 +443,17 @@ test("default UCAS provider is seeded and discovered models receive fixed metada
       ],
     );
     for (const model of initial.models) {
-      assert.equal(model.effectiveConfig.properties?.contextWindow, 1_000_000);
-      assert.equal(model.effectiveConfig.properties?.inputFormat?.supportsText, true);
-      assert.equal(model.effectiveConfig.properties?.inputFormat?.supportsImage, true);
-      assert.deepEqual(model.effectiveConfig.optionSpecs?.reasoningLevel?.values, [
-        "low",
-        "high",
-        "max",
-      ]);
+      assert.equal(
+        model.capabilitySource,
+        model.modelId === "ucas-gemini-flash" ? "unknown" : "builtin",
+      );
+      assert.equal(model.personalConfig?.properties?.contextWindow, undefined);
     }
+    assert.equal(
+      initial.models.find((model) => model.modelId === "ucas-gpt-max")?.effectiveConfig.properties
+        ?.contextWindow,
+      1_000_000,
+    );
 
     const imported = await fixture.service.discoverModels("ucas");
     const updated = requireProvider(imported.view, "ucas");
@@ -281,16 +461,53 @@ test("default UCAS provider is seeded and discovered models receive fixed metada
     assert.equal(imported.skipped, 1);
     const discovered = updated.models.find((model) => model.modelId === "ucas-new-model");
     assert.ok(discovered);
-    assert.equal(discovered.effectiveConfig.properties?.contextWindow, 1_000_000);
-    assert.equal(discovered.effectiveConfig.properties?.inputFormat?.supportsText, true);
-    assert.equal(discovered.effectiveConfig.properties?.inputFormat?.supportsImage, true);
-    assert.deepEqual(discovered.effectiveConfig.optionSpecs?.reasoningLevel?.values, [
-      "low",
-      "high",
-      "max",
-    ]);
+    assert.equal(discovered.capabilitySource, "unknown");
+    assert.equal(discovered.personalConfig?.properties?.contextWindow, undefined);
   } finally {
     await fixture.dispose();
+  }
+});
+
+test("rediscovery refreshes automatic capabilities while preserving manual overrides and disabled state", async () => {
+  let contextWindow = 32768;
+  let supportsImage = false;
+  const f = await runtimeFixture(async () => [
+    {
+      id: "opaque-model",
+      config: {
+        properties: { contextWindow, inputFormat: { supportsImage } },
+        optionSpecs: {
+          reasoningLevel: { values: ["low", "high"], map: '{"reasoning_effort": reasoningLevel}' },
+        },
+      },
+    },
+  ]);
+  try {
+    const first = await f.service.discoverModels(f.id);
+    const original = requireProvider(first.view, f.id).models[0]!;
+    assert.equal(original.effectiveConfig.properties?.contextWindow, 32768);
+    assert.equal(original.capabilitySource, "gateway");
+    await f.service.savePersonalModelDraft({
+      providerId: f.id,
+      originalModelId: "opaque-model",
+      nextModelId: "opaque-model",
+      personalConfig: { properties: { contextWindow: 12345 } },
+      useRecommendedConfig: true,
+      basedOnRevision: first.view.revision,
+    });
+    await f.service.setPersonalModelEnabled(f.id, "opaque-model", false);
+    contextWindow = 65536;
+    supportsImage = true;
+    const refreshed = await f.service.discoverModels(f.id);
+    assert.equal(refreshed.added, 0);
+    assert.equal(refreshed.skipped, 1);
+    const model = requireProvider(refreshed.view, f.id).models[0]!;
+    assert.equal(model.effectiveConfig.properties?.contextWindow, 12345);
+    assert.equal(model.effectiveConfig.properties?.inputFormat?.supportsImage, true);
+    assert.equal(model.effectiveConfig.enabled, false);
+    assert.equal(model.capabilitySource, "gateway");
+  } finally {
+    await f.dispose();
   }
 });
 

@@ -6,6 +6,10 @@ import {
   parsePersonalProviderConfigMap,
   extractManualModelConfig,
   manualModelConfigSchema,
+  UCAS_PROVIDER_ID,
+  UCAS_PROVIDER_NAME,
+  UCAS_PROVIDER_TEMPLATE_ID,
+  type ProviderConfigMap,
   type ProviderConfigLayerUpdate,
 } from "@zcode/provider";
 
@@ -69,10 +73,13 @@ export function decodeProviderConfigFile(input: unknown): ProviderConfigLayerUpd
     version = nextVersion;
   }
   const parsed = storedProviderConfigSchema.parse(candidate);
+  const providers = parsePersonalProviderConfigMap(parsed.config.providerConfigRules);
   return Object.freeze({
-    providers: parsePersonalProviderConfigMap(parsed.config.providerConfigRules),
+    providers,
     models: parsePersonalModelConfigRules(
-      normalizeLegacyManualRules(parsed.config.modelConfigRules),
+      normalizeLegacyManualRules(
+        normalizeLegacyUcasRules(parsed.config.modelConfigRules, providers),
+      ),
     ),
     providerOrder: parsed.config.providerOrder,
     ...(parsed.config.defaultModelSelection === undefined
@@ -109,13 +116,81 @@ function normalizeLegacyManualRules(input: unknown): unknown {
   };
 }
 
+function normalizeLegacyUcasRules(input: unknown, providers: ProviderConfigMap): unknown {
+  if (
+    !isRecord(input) ||
+    "discoveredProviderModelRules" in input ||
+    !Array.isArray(input.providerModelRules)
+  )
+    return input;
+  const ucasIds = new Set([
+    UCAS_PROVIDER_ID,
+    ...providers
+      .rules()
+      .filter(
+        (rule) =>
+          rule.templateId === UCAS_PROVIDER_TEMPLATE_ID ||
+          (rule.config.group === "standard-personal" &&
+            rule.providerName?.trim().toLocaleLowerCase() ===
+              UCAS_PROVIDER_NAME.toLocaleLowerCase()),
+      )
+      .map((rule) => rule.providerId),
+  ]);
+  return {
+    ...input,
+    providerModelRules: input.providerModelRules.map((rule: unknown) => {
+      if (!isRecord(rule) || !ucasIds.has(String(rule.providerId)) || !isRecord(rule.config))
+        return rule;
+      const config = rule.config;
+      const properties = config.properties;
+      const optionSpecs = config.optionSpecs;
+      if (
+        !isRecord(properties) ||
+        !isRecord(properties.inputFormat) ||
+        !isRecord(optionSpecs) ||
+        !isRecord(optionSpecs.reasoningLevel)
+      )
+        return rule;
+      const inputFormat = properties.inputFormat;
+      const reasoning = optionSpecs.reasoningLevel;
+      // 旧 UCAS 播种把四组叶子冻结为个人规则；只识别完整签名，保留偏离值和手动规则。
+      if (
+        !("contextWindow" in properties) ||
+        !("supportsText" in inputFormat) ||
+        !("supportsImage" in inputFormat) ||
+        !Array.isArray(reasoning.values)
+      )
+        return rule;
+      const next = structuredClone(config);
+      const nextProperties = next.properties as Record<string, unknown>;
+      const nextInput = nextProperties.inputFormat as Record<string, unknown>;
+      const nextOptions = next.optionSpecs as Record<string, unknown>;
+      const nextReasoning = nextOptions.reasoningLevel as Record<string, unknown>;
+      if (nextProperties.contextWindow === 1_000_000) delete nextProperties.contextWindow;
+      if (nextInput.supportsText === true) delete nextInput.supportsText;
+      if (nextInput.supportsImage === true) delete nextInput.supportsImage;
+      if (JSON.stringify(nextReasoning.values) === JSON.stringify(["low", "high", "max"]))
+        delete nextReasoning.values;
+      if (Object.keys(nextInput).length === 0) delete nextProperties.inputFormat;
+      if (Object.keys(nextReasoning).length === 0) delete nextOptions.reasoningLevel;
+      if (Object.keys(nextProperties).length === 0) delete next.properties;
+      if (Object.keys(nextOptions).length === 0) delete next.optionSpecs;
+      return { ...rule, config: next };
+    }),
+  };
+}
+
 export function encodeProviderConfigFile(update: ProviderConfigLayerUpdate) {
+  const modelConfigRules = update.models.toPersonalJSON();
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     config: {
       ...(update.providerOrder === undefined ? {} : { providerOrder: update.providerOrder }),
       providerConfigRules: { providerRules: update.providers.toJSON() },
-      modelConfigRules: update.models.toPersonalJSON(),
+      modelConfigRules: {
+        ...modelConfigRules,
+        discoveredProviderModelRules: modelConfigRules.discoveredProviderModelRules ?? [],
+      },
       ...(update.defaultModelSelection === undefined
         ? {}
         : { defaultModelSelection: update.defaultModelSelection }),

@@ -5,6 +5,7 @@ import {
   ProviderConfig,
   ProviderConfigMap,
   extractManualModelConfig,
+  parseModelConfig,
 } from "@zcode/provider";
 import {
   decodeProviderConfigFile,
@@ -13,6 +14,97 @@ import {
 } from "../src/provider-config-file-codec.js";
 
 describe("provider-node private config codecs", () => {
+  it("目录、网关与个人覆盖独立往返，重启后保留目录来源和优先级", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const source = {
+      source: "models.dev" as const,
+      providerId: "example",
+      modelId: "m",
+      fetchedAt: 123,
+      stale: true,
+    };
+    const models = ModelConfigRules.empty()
+      .setDiscovered("p", "m", parseModelConfig({ properties: { contextWindow: 64_000 } }), scope, {
+        config: parseModelConfig({ properties: { contextWindow: 128_000 } }),
+        source,
+      })
+      .setExact("p", "m", parseModelConfig({ properties: { contextWindow: 32_000 } }));
+    const saved = encodeProviderConfigFile({ providers: ProviderConfigMap.empty(), models });
+    const restored = decodeProviderConfigFile(JSON.parse(JSON.stringify(saved))).models;
+    expect(restored.getDiscoveredRule(input)?.catalogSource).toEqual(source);
+    expect(
+      ModelConfigRules.composeEffective(ModelConfigRules.empty(), restored).resolve(input)
+        .properties?.contextWindow,
+    ).toBe(32_000);
+    expect(
+      ModelConfigRules.composeRecommended(ModelConfigRules.empty(), restored).resolve(input)
+        .properties?.contextWindow,
+    ).toBe(64_000);
+    expect(restored.getDiscovered(input)?.properties?.contextWindow).toBe(64_000);
+  });
+
+  it("只迁移旧 UCAS 播种叶子，保留偏离值、启停和明确手动配置", () => {
+    const legacy = {
+      enabled: false,
+      properties: {
+        contextWindow: 512_000,
+        inputFormat: { supportsText: true, supportsImage: true },
+      },
+      optionSpecs: { reasoningLevel: { values: ["low", "high", "max"] } },
+    };
+    const input = {
+      schemaVersion: 1,
+      config: {
+        providerConfigRules: { providerRules: [] },
+        modelConfigRules: {
+          providerModelRules: [{ providerId: "ucas", modelId: "gpt-5.4-mini", config: legacy }],
+          manualProviderModelRules: [],
+        },
+      },
+    };
+    const output = encodeProviderConfigFile(decodeProviderConfigFile(input));
+    expect(output.config.modelConfigRules.providerModelRules[0]?.config).toEqual({
+      enabled: false,
+      properties: { contextWindow: 512_000 },
+    });
+    expect(output.config.modelConfigRules.discoveredProviderModelRules).toEqual([]);
+    expect(encodeProviderConfigFile(decodeProviderConfigFile(output))).toEqual(output);
+    for (const identity of [
+      { providerName: " UCAS " },
+      { templateId: "ucas", providerName: "Company models" },
+    ]) {
+      const alias = {
+        ...input,
+        config: {
+          ...input.config,
+          providerConfigRules: {
+            providerRules: [
+              { providerId: "legacy-id", ...identity, config: { group: "standard-personal" } },
+            ],
+          },
+          modelConfigRules: {
+            ...input.config.modelConfigRules,
+            providerModelRules: [
+              { providerId: "legacy-id", modelId: "gpt-5.4-mini", config: legacy },
+            ],
+          },
+        },
+      };
+      expect(
+        decodeProviderConfigFile(alias).models.getExact("legacy-id", "gpt-5.4-mini")?.toJSON(),
+      ).toEqual({
+        enabled: false,
+        properties: { contextWindow: 512_000 },
+      });
+    }
+    const current = structuredClone(input);
+    Object.assign(current.config.modelConfigRules, { discoveredProviderModelRules: [] });
+    expect(
+      decodeProviderConfigFile(current).models.getExact("ucas", "gpt-5.4-mini")?.toJSON(),
+    ).toEqual(legacy);
+  });
+
   it.each([true, false])("Todo134：旧手动 MFJS=%s 可读取，但不继续固化隐藏字段", (value) => {
     const config = {
       properties: {
@@ -91,6 +183,7 @@ describe("provider-node private config codecs", () => {
         ...input.config,
         modelConfigRules: {
           ...input.config.modelConfigRules,
+          discoveredProviderModelRules: [],
           manualProviderModelRules: [
             { providerId: "p", modelId: "m", config: extractManualModelConfig(legacy) },
           ],
@@ -137,7 +230,11 @@ describe("provider-node private config codecs", () => {
             },
           ],
         },
-        modelConfigRules: { providerModelRules: [], manualProviderModelRules: [] },
+        modelConfigRules: {
+          providerModelRules: [],
+          manualProviderModelRules: [],
+          discoveredProviderModelRules: [],
+        },
       },
     });
     expect(decodeProviderConfigFile(encoded).providers.keys()).toEqual(["personal"]);

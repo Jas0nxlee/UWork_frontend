@@ -6,12 +6,12 @@ import type { ProviderModelInputFormatDraft } from "@/settings/model-provider-se
 import { modelEditorControlStyle } from "@/settings/model-provider-section/modelEditorControlStyle.js";
 import { ModelOptionCheckbox } from "@/settings/model-provider-section/ProviderModelMetadataFields.js";
 
-// PDF 已经是正式的模型输入事实和可执行附件能力，旧列表漏掉它后用户无法修正该事实。
-// Audio 仍没有设置页附件入口，因此继续只在 Draft 中无损保留。
-const INPUT_MODALITY_OPTIONS = ["text", "image", "video", "pdf"] as const;
+// 能力元数据与附件执行入口分离；音频也必须可修正，不能因当前没有上传入口而丢失。
+const INPUT_MODALITY_OPTIONS = ["text", "image", "audio", "video", "pdf"] as const;
 
 const INPUT_MODALITY_FIELDS = {
   image: "supportsImage",
+  audio: "supportsAudio",
   video: "supportsVideo",
   pdf: "supportsPdf",
 } as const satisfies Record<Exclude<(typeof INPUT_MODALITY_OPTIONS)[number], "text">, string>;
@@ -78,6 +78,7 @@ export function ProviderModelInputModalityOptions({
   const selected = {
     text: value.supportsText,
     image: value.supportsImage,
+    audio: value.supportsAudio,
     video: value.supportsVideo,
     pdf: value.supportsPdf,
   };
@@ -95,14 +96,10 @@ export function ProviderModelInputModalityOptions({
           <div key={modality}>
             <ModalityOption
               modality={modality}
-              selected={disabled || selected[modality]}
+              selected={selected[modality]}
               disabled={disabled}
               overridden={overridden}
-              onToggle={
-                disabled
-                  ? undefined
-                  : () => onChange({ ...value, supportsText: true, [field]: !value[field] })
-              }
+              onToggle={disabled ? undefined : () => onChange({ ...value, [field]: !value[field] })}
             />
           </div>
         );

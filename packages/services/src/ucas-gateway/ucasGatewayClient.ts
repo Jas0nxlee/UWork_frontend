@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { DiscoveredModelInput } from "@zcode/provider";
+import { parseProviderModelListItem } from "../model-provider/providerModelDiscovery.js";
 import {
   normalizeUcasGatewayBaseUrl,
   ucasGatewayKeySchema,
@@ -121,7 +123,7 @@ const wirePlanModelsSchema = z.object({
   unrestricted: z.boolean(),
   hasSubscription: z.boolean(),
 });
-const wireEndpointModelsSchema = z.object({ data: z.array(z.object({ id: z.string().min(1) })) });
+const wireEndpointModelsSchema = z.object({ data: z.array(z.unknown()) });
 
 export interface UcasGatewayClientOptions {
   /** control-plane 根地址（与企微认证服务同源）。 */
@@ -144,7 +146,7 @@ export interface UcasGatewayClient {
     unrestricted: boolean;
     hasSubscription: boolean;
   }>;
-  listEndpointModels(baseUrl: string, apiKey: string): Promise<readonly string[]>;
+  listEndpointModels(baseUrl: string, apiKey: string): Promise<readonly DiscoveredModelInput[]>;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -320,11 +322,22 @@ export function createUcasGatewayClient(options: UcasGatewayClientOptions): Ucas
       };
     },
     async listEndpointModels(baseUrl, apiKey) {
+      // `/models` 不能作为 URL 根路径解析，否则会丢掉 `/v1` 或网关前缀。
+      const modelUrl = `${baseUrl.replace(/\/+$/, "")}/models`;
       const raw = parseWire(
         wireEndpointModelsSchema,
-        await send("GET", "/models", undefined, `Bearer ${apiKey}`, baseUrl),
+        await send("GET", modelUrl, undefined, `Bearer ${apiKey}`, baseUrl),
       );
-      return [...new Set(raw.data.map((item) => item.id.trim()).filter(Boolean))];
+      const models = new Map<string, DiscoveredModelInput>();
+      try {
+        for (const item of raw.data) {
+          const model = parseProviderModelListItem(item, "openai-chat-completions");
+          if (model !== null) models.set(typeof model === "string" ? model : model.id, model);
+        }
+      } catch {
+        throw new UcasGatewayRequestError("invalid");
+      }
+      return [...models.values()];
     },
   };
 }

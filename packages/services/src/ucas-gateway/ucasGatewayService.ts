@@ -15,7 +15,10 @@ import {
   type UcasGatewayClient,
 } from "./ucasGatewayClient.js";
 import type { UcasGatewayStore } from "./ucasGatewayStore.js";
-import { readUcasGatewayProvisioningData } from "./ucasGatewayProvisioningData.js";
+import {
+  readUcasGatewayModelsForApplication,
+  readUcasGatewayProvisioningData,
+} from "./ucasGatewayProvisioningData.js";
 import {
   matchesSessionRecord,
   type IdentitySessionRecord,
@@ -211,7 +214,7 @@ export function createUcasGatewayService(
           baseUrl: endpoint.baseUrl,
           apiKey: keyInfo.apiKey,
           ...(reason === "replace-key" ? { replaceApiKey: true } : {}),
-          modelIds: plan.ids,
+          modelIds: plan.models,
         });
         const lastSyncedAt = now();
         await options.store
@@ -226,7 +229,7 @@ export function createUcasGatewayService(
           .catch(() => log.warn(undefined, "UCAS gateway state was not persisted"));
         publish({
           ...view,
-          status: "ready",
+          status: plan.error ? "error" : "ready",
           configured: true,
           user,
           endpoint,
@@ -241,7 +244,7 @@ export function createUcasGatewayService(
             pendingCount: 0,
           }),
           lastSyncedAt,
-          error: null,
+          error: plan.error ? errorCode(plan.error) : null,
         });
         log.info(undefined, "UCAS gateway provisioning synced", {
           reason,
@@ -266,9 +269,68 @@ export function createUcasGatewayService(
       return uncommitted();
     }
   };
+  const runApplyModels = async (
+    _reason: string,
+    scope: Scope | null,
+  ): Promise<UcasGatewaySyncResult> => {
+    if (!scope?.client) return uncommitted();
+    const { record, client } = scope;
+    const snapshot = await withIdentity(record, async () => ({
+      endpoint: view.endpoint,
+      ids: view.models?.available ?? [],
+      key: view.key,
+    }));
+    if (!snapshot?.endpoint || snapshot.ids.length === 0) return uncommitted();
+    try {
+      const catalog = await readUcasGatewayModelsForApplication(
+        client,
+        snapshot.endpoint.baseUrl,
+        snapshot.ids,
+        snapshot.key?.id,
+      );
+      const result = await withIdentity(record, async () => {
+        const applied = await options.provisioning.apply({
+          baseUrl: snapshot.endpoint!.baseUrl,
+          modelsOnly: true,
+          modelIds: catalog.models,
+        });
+        // 等待目录时套餐视图可能刷新；按已提交成员重算当前名单，不能把新增 ID 标为已应用。
+        const local = new Set(await options.provisioning.listModels());
+        const pendingCount = view.models?.available.filter((id) => !local.has(id)).length ?? 0;
+        publish({
+          ...view,
+          status: catalog.error ? "error" : "ready",
+          error: catalog.error ? errorCode(catalog.error) : null,
+          models: view.models
+            ? {
+                ...view.models,
+                appliedCount: view.models.available.length - pendingCount,
+                pendingCount,
+              }
+            : null,
+        });
+        return ucasGatewaySyncResultSchema.parse({
+          view: structuredClone(view),
+          committed: true,
+          apiKeyApplied: false,
+          apiKeyReused: false,
+          providerHasApiKey: applied.hasApiKey,
+          modelsAdded: applied.modelsAdded,
+          modelsSkipped: applied.modelsSkipped,
+        });
+      });
+      return result ?? uncommitted();
+    } catch (error) {
+      await withIdentity(record, async () => {
+        publish({ ...view, status: "error", error: errorCode(error) });
+      });
+      return uncommitted();
+    }
+  };
   const serializeSync = (
     reason: string,
     captured = captureScope(),
+    operation = runSync,
   ): Promise<UcasGatewaySyncResult> => {
     const previous = syncTask ?? Promise.resolve();
     // 排队意图绑定接收时的身份，不能在 A 的 replace-key 等待期间改用 B 的身份执行。
@@ -282,7 +344,7 @@ export function createUcasGatewayService(
       .then(async () => {
         const result = await prepared;
         if (!result.ok) throw result.error;
-        return runSync(reason, result.scope);
+        return operation(reason, result.scope);
       });
     syncTask = task;
     const cleanup = () => {
@@ -338,39 +400,8 @@ export function createUcasGatewayService(
         };
       });
     },
-    async applyModels() {
-      const scope = await captureScope();
-      if (!scope?.client) return uncommitted();
-      const endpoint = view.endpoint;
-      const ids = view.models?.available ?? [];
-      if (!endpoint || ids.length === 0) return serializeSync("models", Promise.resolve(scope));
-      const result = await withIdentity(scope.record, async () => {
-        const applied = await options.provisioning.apply({
-          baseUrl: endpoint.baseUrl,
-          modelIds: ids,
-        });
-        publish({
-          ...view,
-          models: view.models
-            ? {
-                ...view.models,
-                appliedCount: ids.length,
-                pendingCount: 0,
-              }
-            : null,
-        });
-        return ucasGatewaySyncResultSchema.parse({
-          view: structuredClone(view),
-          committed: true,
-          apiKeyApplied: false,
-          apiKeyReused: false,
-          providerHasApiKey: applied.hasApiKey,
-          modelsAdded: applied.modelsAdded,
-          modelsSkipped: applied.modelsSkipped,
-        });
-      });
-      return result ?? uncommitted();
-    },
+    // 模型应用与账号同步共用 admission，副作用只限当前端点的模型成员/自动能力。
+    applyModels: () => serializeSync("models", captureScope(), runApplyModels),
     replaceApiKey: () => serializeSync("replace-key"),
     dispose() {
       if (disposed) return;

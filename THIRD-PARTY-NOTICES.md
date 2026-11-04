@@ -1100,7 +1100,7 @@ Original copyright, license and NOTICE text is retained below. Identical text is
 
 - find-up@4.1.0 — MIT
 
-- follow-redirects@1.16.1 — MIT
+- follow-redirects@1.16.2 — MIT
 
 - form-data@4.0.6 — MIT
 
@@ -15233,7 +15233,7 @@ and organizations as noted below:
 
 ### Notice bfa8a54bb952ccda79f0f1889721d108f5b605babbb2b8a3705ffb52f4132eb7
 
-- follow-redirects@1.16.1: LICENSE
+- follow-redirects@1.16.2: LICENSE
 
 
 
@@ -15261,7 +15261,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ### Notice abd3792ba3b4f3da7f4ed431de50254c3e748bba1596bc7f36937b97767e02d2
 
-- follow-redirects@1.16.1: README.md (license section)
+- follow-redirects@1.16.2: README.md (license section)
 
 
 

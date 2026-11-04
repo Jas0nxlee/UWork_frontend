@@ -12,6 +12,7 @@ export const nodeUnitTestFiles = [
   "packages/services/test/enterpriseIdentitySharedStore.test.ts",
   "packages/services/test/identityIssuerDiagnostics.test.ts",
   "packages/services/test/providerModelDiscovery.test.ts",
+  "packages/services/test/modelCatalogIntegration.test.ts",
   "packages/services/test/ucasGatewayProviderConfig.test.ts",
   "packages/services/test/ucasGatewayService.test.ts",
   "packages/services/test/uworkDataMigration.test.ts",

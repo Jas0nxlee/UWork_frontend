@@ -1,4 +1,5 @@
 import type { Event } from "@zcode/rpc";
+import type { DiscoveredModelInput } from "@zcode/provider";
 import {
   ServiceChannels,
   type UcasGatewaySyncResult,
@@ -42,7 +43,9 @@ export interface UcasGatewayProvisioningTarget {
     readonly baseUrl: string;
     readonly apiKey?: string;
     readonly replaceApiKey?: boolean;
-    readonly modelIds?: readonly string[];
+    /** 模型应用只写成员/自动能力，不执行连接或密钥配置。 */
+    readonly modelsOnly?: true;
+    readonly modelIds?: readonly DiscoveredModelInput[];
   }): Promise<{
     readonly apiKeyApplied: boolean;
     readonly hasApiKey: boolean;

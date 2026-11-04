@@ -50,7 +50,8 @@ overrides:
   "exceljs@4.4.0>unzipper": 0.12.5
   extract-zip: workspace:@uwork/safe-extract-zip@*
   fast-uri: ^3.1.7
-  follow-redirects@1.16.0: 1.16.1
+  # 跨 realm 的 sensitiveHeaders 也必须保留；仅覆盖已确认受影响的两个补丁版本。
+  "follow-redirects@>=1.16.0 <=1.16.1": 1.16.2
   form-data@^4: ^4.0.6
   hono: ^4.12.25
   ip-address: ^10.3.1

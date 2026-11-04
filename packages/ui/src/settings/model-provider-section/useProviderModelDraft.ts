@@ -62,11 +62,21 @@ export function useProviderModelDraft({
     if (resolution)
       return {
         ...model,
+        capabilitySource: resolution.capabilitySource,
+        catalogSource: resolution.catalogSource,
+        unsupportedReason: resolution.unsupportedReason,
         inheritedConfig: resolution.inheritedConfig,
         config: resolution.inheritedConfig,
       };
     if (rawDraft.idValue.trim() === model.modelId) return model;
-    return { ...model, config: {}, inheritedConfig: undefined };
+    return {
+      ...model,
+      capabilitySource: undefined,
+      catalogSource: undefined,
+      unsupportedReason: undefined,
+      config: {},
+      inheritedConfig: undefined,
+    };
   };
   const currentModel = modelWithResolution(config.resolution);
   const draft = projectModelDraft(rawDraft, currentModel);
@@ -114,6 +124,9 @@ export function useProviderModelDraft({
     commit,
     overrides: modelDraftOverrides(draft),
     inheritedConfig: currentModel.inheritedConfig,
+    capabilitySource: currentModel.capabilitySource,
+    catalogSource: currentModel.catalogSource,
+    unsupportedReason: currentModel.unsupportedReason,
     pending:
       smart &&
       Boolean(resolve) &&

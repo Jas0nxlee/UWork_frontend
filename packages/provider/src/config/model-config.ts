@@ -22,10 +22,13 @@ import { clearManualModelConfig } from "./manual-model-config.js";
 import {
   providerModelConfigRuleSchema,
   manualProviderModelConfigRuleSchema,
+  discoveredProviderModelConfigRuleSchema,
   personalModelConfigRulesSchema,
   builtinModelConfigRulesSchema,
   type ProviderModelConfigRuleData,
   type ManualProviderModelConfigRuleData,
+  type DiscoveredProviderModelConfigRuleData,
+  type ModelCatalogSource,
   type TemplateModelConfigRuleData,
   type ModelMatchConfigRuleData,
   type ModelApiMatchConfigRuleData,
@@ -337,6 +340,13 @@ export class ModelConfig extends ConfigOverlay<ModelConfig> {
 type RuleWithConfig<T> = Readonly<Omit<T, "config"> & { config: ModelConfig }>;
 export type ProviderModelConfigRule = RuleWithConfig<ProviderModelConfigRuleData>;
 export type ManualProviderModelConfigRule = RuleWithConfig<ManualProviderModelConfigRuleData>;
+export type DiscoveredProviderModelConfigRule = Readonly<
+  Omit<DiscoveredProviderModelConfigRuleData, "config" | "catalogConfig"> & {
+    config: ModelConfig;
+    catalogConfig?: ModelConfig;
+  }
+>;
+export type { ModelCatalogSource } from "./rule-data-schema.js";
 export type TemplateModelConfigRule = RuleWithConfig<TemplateModelConfigRuleData>;
 export type ModelMatchConfigRule = RuleWithConfig<ModelMatchConfigRuleData>;
 export type ModelApiMatchConfigRule = RuleWithConfig<ModelApiMatchConfigRuleData>;
@@ -346,6 +356,7 @@ export type ProviderSiteMatchConfigRule = RuleWithConfig<ProviderSiteMatchConfig
 export type ModelConfigRule =
   | (ProviderModelConfigRule & { readonly type: "provider-model" })
   | (ManualProviderModelConfigRule & { readonly type: "manual-provider-model" })
+  | (DiscoveredProviderModelConfigRule & { readonly type: "discovered-provider-model" })
   | (TemplateModelConfigRule & { readonly type: "template-model" })
   | (ModelMatchConfigRule & { readonly type: "model" })
   | (ModelApiMatchConfigRule & { readonly type: "model-api" })
@@ -363,6 +374,9 @@ export interface ModelConfigRuleResolutionInput {
   readonly baseUrl?: string | null;
 }
 
+export type ModelCapabilitySource = "catalog" | "gateway" | "builtin" | "unknown";
+export type ModelUnsupportedReason = "non-chat-model";
+
 export class ModelConfigRules {
   readonly #rules: readonly ModelConfigRule[];
 
@@ -375,9 +389,22 @@ export class ModelConfigRules {
     return new ModelConfigRules();
   }
 
-  /** Built-in 保留原层次和组内顺序；个人只包含普通/手动精确规则。 */
+  /** Built-in 保留组内顺序；网关自动能力在个人精确覆盖之前合并。 */
   static composeEffective(builtin: ModelConfigRules, personal: ModelConfigRules): ModelConfigRules {
-    return new ModelConfigRules([...builtin.rules(), ...personal.rules().filter(isExactModelRule)]);
+    return new ModelConfigRules([
+      ...ModelConfigRules.composeRecommended(builtin, personal).rules(),
+      ...personal.rules().filter(isExactModelRule),
+    ]);
+  }
+
+  static composeRecommended(
+    builtin: ModelConfigRules,
+    personal: ModelConfigRules,
+  ): ModelConfigRules {
+    return new ModelConfigRules([
+      ...builtin.rules(),
+      ...personal.rules().filter((rule) => rule.type === "discovered-provider-model"),
+    ]);
   }
 
   rules(): readonly ModelConfigRule[] {
@@ -388,14 +415,22 @@ export class ModelConfigRules {
     let result = ModelConfig.empty();
     const baseUrl = input.baseUrl == null ? undefined : normalizeBaseURLForRuleMatch(input.baseUrl);
     for (const rule of this.#rules) {
+      if (rule.type === "discovered-provider-model") {
+        if (matchesDiscovered(rule, input)) {
+          if (rule.catalogConfig) {
+            // 自动参数先继承目录，再由网关逐字段覆盖；个人值始终在下一层拥有最高优先级。
+            result = applyCatalogConfig(result, rule.catalogConfig, input.apiType);
+          }
+          result = result.overlay(rule.config);
+        }
+        continue;
+      }
       if (isExactModelRule(rule)) {
         if (rule.providerId !== input.providerId || rule.modelId !== input.modelId) continue;
         // 手动规则要求所有可编辑叶子齐全，因此可直接覆盖；系统叶子继续来自当前身份的规则。
         // 清空整份基线会既丢失系统映射，也迫使 UI 把旧模型的隐藏配置复制进个人规则。
         result = (
-          rule.type === "manual-provider-model"
-            ? ModelConfig.fromData(clearManualModelConfig(result.toJSON()))
-            : result
+          rule.type === "manual-provider-model" ? manualConfigBase(result, rule.config) : result
         ).overlay(rule.config);
         continue;
       }
@@ -420,6 +455,100 @@ export class ModelConfigRules {
       result = result.overlay(rule.config);
     }
     return result;
+  }
+
+  setDiscovered(
+    providerId: string,
+    modelId: string,
+    config: ModelConfig,
+    scope: { readonly apiType: string; readonly baseUrl: string },
+    catalog?: { readonly config: ModelConfig; readonly source: ModelCatalogSource } | null,
+  ): ModelConfigRules {
+    const previous = this.getDiscoveredRule({ providerId, modelId, ...scope });
+    const catalogFields =
+      catalog === undefined
+        ? previous?.catalogConfig
+          ? { catalogConfig: previous.catalogConfig, catalogSource: previous.catalogSource }
+          : {}
+        : catalog === null
+          ? {}
+          : { catalogConfig: catalog.config, catalogSource: Object.freeze({ ...catalog.source }) };
+    discoveredProviderModelConfigRuleSchema.parse({
+      providerId,
+      modelId,
+      config: config.toJSON(),
+      ...scope,
+      ...catalogFields,
+      ...(catalogFields.catalogConfig
+        ? { catalogConfig: catalogFields.catalogConfig.toJSON() }
+        : {}),
+    });
+    return new ModelConfigRules([
+      ...this.deleteDiscovered(providerId, modelId).rules(),
+      {
+        type: "discovered-provider-model",
+        providerId,
+        modelId,
+        config,
+        ...scope,
+        ...catalogFields,
+      },
+    ]);
+  }
+
+  getDiscovered(input: ModelConfigRuleResolutionInput): ModelConfig | undefined {
+    return this.getDiscoveredRule(input)?.config;
+  }
+
+  getDiscoveredRule(
+    input: ModelConfigRuleResolutionInput,
+  ): DiscoveredProviderModelConfigRule | undefined {
+    for (let index = this.#rules.length - 1; index >= 0; index -= 1) {
+      const rule = this.#rules[index]!;
+      if (rule.type === "discovered-provider-model" && matchesDiscovered(rule, input)) return rule;
+    }
+    return undefined;
+  }
+
+  capabilitySource(
+    input: ModelConfigRuleResolutionInput,
+    opaqueAlias = false,
+  ): ModelCapabilitySource {
+    const discovered = this.getDiscoveredRule(input);
+    if (discovered && hasConfigLeaves(discovered.config.toJSON())) return "gateway";
+    if (discovered?.catalogConfig && hasConfigLeaves(discovered.catalogConfig.toJSON()))
+      return "catalog";
+    // 路由逻辑别名只能使用明确的模板/供应商精确映射，不能从宽泛型号词推断后端。
+    // 通用兜底保证旧运行链路可用，但不能冒充已确认的型号能力。
+    for (const rule of this.#rules) {
+      if (isExactModelRule(rule)) {
+        if (rule.providerId === input.providerId && rule.modelId === input.modelId)
+          return "builtin";
+      } else if (rule.type === "template-model") {
+        if (rule.templateId === input.templateId && rule.modelId === input.modelId)
+          return "builtin";
+      } else if (
+        !opaqueAlias &&
+        rule.type !== "discovered-provider-model" &&
+        rule.modelMatch !== ".*"
+      ) {
+        const config = new ModelConfigRules([rule]).resolve(input).toJSON();
+        if (hasConfigLeaves(config.properties) || hasConfigLeaves(config.optionSpecs))
+          return "builtin";
+      }
+    }
+    return "unknown";
+  }
+
+  deleteDiscovered(providerId: string, modelId: string): ModelConfigRules {
+    return new ModelConfigRules(
+      this.#rules.filter(
+        (rule) =>
+          rule.type !== "discovered-provider-model" ||
+          rule.providerId !== providerId ||
+          rule.modelId !== modelId,
+      ),
+    );
   }
 
   setExact(
@@ -472,17 +601,25 @@ export class ModelConfigRules {
   ): ModelConfigRules {
     if (currentModelId === nextModelId) return this;
     return new ModelConfigRules(
-      this.#rules.map((rule) =>
-        isExactModelRule(rule) && rule.providerId === providerId && rule.modelId === currentModelId
-          ? { ...rule, modelId: nextModelId }
-          : rule,
-      ),
+      this.deleteDiscovered(providerId, currentModelId)
+        .rules()
+        .map((rule) =>
+          isExactModelRule(rule) &&
+          rule.providerId === providerId &&
+          rule.modelId === currentModelId
+            ? { ...rule, modelId: nextModelId }
+            : rule,
+        ),
     );
   }
 
   deleteExactForProvider(providerId: string): ModelConfigRules {
     return new ModelConfigRules(
-      this.#rules.filter((rule) => !isExactModelRule(rule) || rule.providerId !== providerId),
+      this.#rules.filter(
+        (rule) =>
+          !(isExactModelRule(rule) || rule.type === "discovered-provider-model") ||
+          rule.providerId !== providerId,
+      ),
     );
   }
 
@@ -516,10 +653,12 @@ export class ModelConfigRules {
   }
 
   toPersonalJSON(): PersonalModelConfigRulesData {
+    const discovered = this.#collect("discovered-provider-model");
     // 完整规则必须在编码边界再校验，不能把直接构造的不完整手动值写入文件。
     return personalModelConfigRulesSchema.parse({
       providerModelRules: this.#collect("provider-model"),
       manualProviderModelRules: this.#collect("manual-provider-model"),
+      ...(discovered.length ? { discoveredProviderModelRules: discovered } : {}),
     });
   }
 
@@ -527,14 +666,84 @@ export class ModelConfigRules {
     return {
       ...this.toZCodeBuiltinJSON(),
       manualProviderModelRules: this.#collect("manual-provider-model"),
+      ...(this.#collect("discovered-provider-model").length
+        ? { discoveredProviderModelRules: this.#collect("discovered-provider-model") }
+        : {}),
     };
   }
 
   #collect<T extends ModelConfigRule["type"]>(type: T) {
     return this.#rules
       .filter((rule): rule is Extract<ModelConfigRule, { type: T }> => rule.type === type)
-      .map(({ type: _type, config, ...identity }) => ({ ...identity, config: config.toJSON() }));
+      .map(({ type: _type, config, ...identity }) => ({
+        ...identity,
+        config: config.toJSON(),
+        ...("catalogConfig" in identity && identity.catalogConfig instanceof ModelConfig
+          ? { catalogConfig: identity.catalogConfig.toJSON() }
+          : {}),
+      }));
   }
+}
+
+function manualConfigBase(base: ModelConfig, manual: ModelConfig): ModelConfig {
+  const cleared = ModelConfig.fromData(clearManualModelConfig(base.toJSON()));
+  const audio =
+    manual.properties?.inputFormat?.supportsAudio === undefined
+      ? base.properties?.inputFormat?.supportsAudio
+      : undefined;
+  // 旧固定配置没有音频叶子，继续继承系统能力；新固定值与其他可编辑字段一样覆盖。
+  return audio === undefined
+    ? cleared
+    : cleared.overlay(
+        ModelConfig.fromData({ properties: { inputFormat: { supportsAudio: audio } } }),
+      );
+}
+
+function applyCatalogConfig(
+  base: ModelConfig,
+  catalog: ModelConfig,
+  apiType?: string | null,
+): ModelConfig {
+  let result = base.overlay(catalog);
+  const levels = catalog.optionSpecs?.reasoningLevel?.values;
+  if (!levels) return result;
+  const disabled = levels.length === 1 && (levels[0] === "disabled" || levels[0] === "none");
+  let map = disabled ? "{}" : undefined;
+  // 目录不携带可执行映射；只有明确effort且继承映射为空时才补当前协议的安全字段。
+  const inheritedMap = result.optionSpecs?.reasoningLevel?.map?.trim();
+  if (
+    !disabled &&
+    !levels.includes("enabled") &&
+    !levels.includes("disabled") &&
+    (!inheritedMap || inheritedMap === "{}")
+  ) {
+    if (apiType === "openai-chat-completions") map = '{"reasoning_effort": reasoningLevel}';
+    else if (apiType === "openai-responses") map = '{"reasoning": {"effort": reasoningLevel}}';
+    else if (apiType === "anthropic-messages")
+      map = '{"output_config": {"effort": reasoningLevel}}';
+  }
+  if (map !== undefined)
+    result = result.overlay(ModelConfig.fromData({ optionSpecs: { reasoningLevel: { map } } }));
+  return result;
+}
+
+function matchesDiscovered(
+  rule: DiscoveredProviderModelConfigRule,
+  input: ModelConfigRuleResolutionInput,
+): boolean {
+  return (
+    rule.providerId === input.providerId &&
+    rule.modelId === input.modelId &&
+    rule.apiType === input.apiType &&
+    input.baseUrl != null &&
+    normalizeBaseURLForRuleMatch(rule.baseUrl) === normalizeBaseURLForRuleMatch(input.baseUrl)
+  );
+}
+
+function hasConfigLeaves(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value !== "object") return true;
+  return Object.values(value).some(hasConfigLeaves);
 }
 
 function isExactModelRule(rule: ModelConfigRule): rule is ExactModelConfigRule {

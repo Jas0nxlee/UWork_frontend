@@ -6,7 +6,8 @@
     "#src/*": "./src/*"
   },
   "exports": {
-    "./paths":"./src/paths.ts",
+    "./model-catalog": "./src/model-catalog/module.ts",
+    "./paths": "./src/paths.ts",
     "./data-directory-startup": "./src/project-storage/cold-startup-entry.ts",
     "./storage-startup": "./src/project-storage/startup-entry.ts",
     ".": "./src/index.ts",
@@ -43,6 +44,7 @@
     "@pierre/diffs": "^1.1.22",
     "@types/node": "^25.5.0",
     "@types/yauzl": "^2.10.3",
+    "@zcode/model-option-map": "workspace:*",
     "esbuild": "^0.25.0",
     "typescript": "^6.0.2"
   }

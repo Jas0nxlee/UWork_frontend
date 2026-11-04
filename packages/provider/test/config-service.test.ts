@@ -126,6 +126,216 @@ function manualModelConfig(): ModelConfig {
 }
 
 describe("ProviderConfigService", () => {
+  it("发现刷新更新已有自动能力并保持个人覆盖、禁用状态和未知来源", async () => {
+    const builtin = new MutableSource(
+      layerSnapshot(
+        "builtin-1",
+        ProviderConfigMap.empty(),
+        new ModelConfigRules([{ type: "model", modelMatch: ".*", config: completeModelConfig() }]),
+      ),
+    );
+    const personal = new MemoryPersonalRepository(
+      layerSnapshot(
+        "personal-1",
+        new ProviderConfigMap([["p", personalProvider(["m"])]]),
+        ModelConfigRules.empty().setExact("p", "m", new ModelConfig({ enabled: false })),
+      ),
+    );
+    const service = new ProviderConfigService({
+      zcodeBuiltinSource: builtin,
+      personalRepository: personal,
+    });
+    const registry = new ProviderRegistryService({
+      configSource: service,
+      accountSource: new MutableSource({
+        revision: "account-1",
+        basedOnZCodeBuiltinRevision: "builtin-1",
+        providers: ProviderConfigMap.empty(),
+      }),
+    });
+    await registry.start();
+    const facade = new ProviderSettingsFacade(registry, {
+      setUcasApiKeyIfMissing: service.setUcasApiKeyIfMissing.bind(service),
+      applyUcasGatewayConfig: service.applyUcasGatewayConfig.bind(service),
+      createPersonalProvider: service.createPersonalProvider.bind(service),
+      savePersonalProviderOverlay: service.savePersonalProviderOverlay.bind(service),
+      deletePersonalProvider: service.deletePersonalProvider.bind(service),
+      reorderPersonalProviders: service.reorderPersonalProviders.bind(service),
+      reorderPersonalModels: service.reorderPersonalModels.bind(service),
+      addDiscoveredModels: service.addDiscoveredModels.bind(service),
+      addPersonalModel: service.addPersonalModel.bind(service),
+      renamePersonalModel: service.renamePersonalModel.bind(service),
+      deletePersonalModel: service.deletePersonalModel.bind(service),
+      savePersonalModelDraft: service.savePersonalModelDraft.bind(service),
+      setPersonalModelEnabled: service.setPersonalModelEnabled.bind(service),
+      refresh: registry.refresh.bind(registry),
+    });
+    try {
+      let view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", config: { properties: { contextWindow: 400_000 } } }, "opaque"],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        enabled: false,
+        capabilitySource: "gateway",
+        effectiveConfig: { properties: { contextWindow: 400_000 } },
+      });
+      expect(view.providers[0]?.models.find((m) => m.modelId === "opaque")?.capabilitySource).toBe(
+        "unknown",
+      );
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", preserveCapabilities: true }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        capabilitySource: "gateway",
+        effectiveConfig: { properties: { contextWindow: 400_000 } },
+      });
+      await expect(
+        facade.addDiscoveredModels(
+          "p",
+          [{ id: "m", preserveCapabilities: true, config: {} }],
+          facade.getView().revision,
+        ),
+      ).rejects.toThrow("不能同时声明");
+      view = await facade.addDiscoveredModels("p", ["m"], facade.getView().revision);
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        capabilitySource: "unknown",
+        effectiveConfig: { properties: { contextWindow: 200_000 } },
+      });
+      await service.setPersonalModelEnabled("p", "m", false);
+      await registry.refresh("disabled");
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", config: { properties: { contextWindow: 800_000 } } }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        enabled: false,
+        effectiveConfig: { properties: { contextWindow: 800_000 } },
+      });
+      expect(personal.current.models.getExact("p", "m")?.toJSON()).toEqual({ enabled: false });
+      expect(facade.resolveModelConfig({ providerId: "p", modelId: "m" }).capabilitySource).toBe(
+        "gateway",
+      );
+      await facade.savePersonalModelDraft({
+        providerId: "p",
+        originalModelId: "m",
+        nextModelId: "m",
+        personalConfig: { enabled: false, properties: { contextWindow: 64_000 } },
+        basedOnRevision: facade.getView().revision,
+        useRecommendedConfig: true,
+      });
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", config: { properties: { contextWindow: 900_000 } } }],
+        facade.getView().revision,
+      );
+      const resolution = facade.resolveModelConfig({ providerId: "p", modelId: "m" });
+      expect(resolution.inheritedConfig.properties?.contextWindow).toBe(900_000);
+      expect(resolution.effectiveConfig.properties?.contextWindow).toBe(64_000);
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.enabled).toBe(false);
+      const catalogSource = {
+        source: "models.dev" as const,
+        providerId: "example",
+        modelId: "m",
+        fetchedAt: 123,
+        stale: false,
+      };
+      view = await facade.addDiscoveredModels(
+        "p",
+        [
+          {
+            id: "m",
+            preserveCapabilities: true,
+            catalogConfig: {
+              properties: { contextWindow: 1_000_000, inputFormat: { supportsAudio: true } },
+            },
+            catalogSource,
+          },
+        ],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")).toMatchObject({
+        enabled: false,
+        capabilitySource: "gateway",
+        catalogSource,
+        effectiveConfig: {
+          properties: { contextWindow: 64_000, inputFormat: { supportsAudio: true } },
+        },
+      });
+      const stored = JSON.stringify(personal.current.models.toPersonalJSON());
+      const retainedCatalog = facade.resolveModelConfig(
+        { providerId: "p", modelId: "m" },
+        { id: "m", config: {} },
+      );
+      expect(retainedCatalog.capabilitySource).toBe("catalog");
+      expect(retainedCatalog.inheritedConfig.properties?.contextWindow).toBe(1_000_000);
+      const preview = facade.resolveModelConfig(
+        { providerId: "p", originalModelId: "m", modelId: "preview-model", personalConfig: {} },
+        {
+          id: "preview-model",
+          preserveCapabilities: true,
+          catalogConfig: { properties: { contextWindow: 123_000 } },
+          catalogSource: { ...catalogSource, modelId: "preview-model" },
+        },
+      );
+      expect(preview).toMatchObject({
+        capabilitySource: "catalog",
+        inheritedConfig: { properties: { contextWindow: 123_000 } },
+        effectiveConfig: { properties: { contextWindow: 123_000 } },
+      });
+      expect(JSON.stringify(personal.current.models.toPersonalJSON())).toBe(stored);
+      expect(personal.current.providers.get("p")?.personalModelIds).not.toContain("preview-model");
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", preserveCapabilities: true }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.capabilitySource).toBe(
+        "gateway",
+      );
+      view = await facade.addDiscoveredModels(
+        "p",
+        [{ id: "m", preserveCapabilities: true, catalogConfig: null }],
+        facade.getView().revision,
+      );
+      expect(view.providers[0]?.models.find((m) => m.modelId === "m")?.capabilitySource).toBe(
+        "gateway",
+      );
+      expect(
+        facade.resolveModelConfig({ providerId: "p", modelId: "m" }).inheritedConfig.properties
+          ?.contextWindow,
+      ).toBe(900_000);
+      for (const catalogConfig of [null, undefined]) {
+        const withoutGateway = facade.resolveModelConfig(
+          { providerId: "p", modelId: "m" },
+          {
+            id: "m",
+            config: {},
+            catalogConfig,
+          },
+        );
+        expect(withoutGateway.inheritedConfig.properties?.contextWindow).toBe(200_000);
+        expect(withoutGateway.effectiveConfig.properties?.contextWindow).toBe(64_000);
+        expect(withoutGateway.capabilitySource).toBe("unknown");
+      }
+      expect(
+        personal.current.models.getDiscovered({
+          providerId: "p",
+          modelId: "m",
+          apiType: "anthropic-messages",
+          baseUrl: "https://api.example.com",
+        })?.properties?.contextWindow,
+      ).toBe(900_000);
+    } finally {
+      registry.dispose();
+      service.dispose();
+    }
+  });
+
   it.each(["zai", "bigmodel"] as const)(
     "%s 账号所有模式拒绝新禁用，旧禁用不阻断普通保存",
     async (accountType) => {
