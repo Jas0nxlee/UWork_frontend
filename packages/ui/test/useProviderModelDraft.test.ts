@@ -16,12 +16,18 @@ describe("Todo90 shared draft lifecycle", () => {
     const { result } = renderHook(() =>
       useProviderModelDraft({ model, open: true, scopeKey: "p", resolve }),
     );
-    const value = { inheritedConfig: model.config, effectiveConfig: model.config, issues: [] };
+    const value: ModelConfigResolution = {
+      inheritedConfig: model.config,
+      effectiveConfig: model.config,
+      capabilitySource: "gateway",
+      issues: [],
+    };
     act(() => result.current.change({ idValue: "b" }));
     act(() => {
       void result.current.flush();
     });
     await act(async () => pending[0]!(value));
+    expect(result.current.capabilitySource).toBe("gateway");
     act(() => {
       void result.current.flush();
     });

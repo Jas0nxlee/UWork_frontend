@@ -553,6 +553,18 @@ export function ProviderModelsSection({
                         intl.formatMessage({ id: "settings.modelProvider.modelConfigIncomplete" })}
                     </div>
                   )}
+                  {model.capabilitySource ? (
+                    <p
+                      data-testid="model-provider-capability-source"
+                      data-model-capability-source={model.capabilitySource}
+                      data-capability-source={model.capabilitySource}
+                      className="px-3 pb-2 text-ui-sm text-foreground-subtle"
+                    >
+                      {intl.formatMessage({
+                        id: `settings.modelProvider.capabilitySourceLabel.${model.capabilitySource}`,
+                      })}
+                    </p>
+                  ) : null}
                 </>
               );
             }}
@@ -581,6 +593,7 @@ export function ProviderModelsSection({
           draftErrorMessage={addCommitError ?? addDraftErrorMessage}
           draftErrorField={addDraftErrorField}
           inheritedConfig={editor.inheritedConfig}
+          capabilitySource={editor.capabilitySource}
           overrideFields={editor.overrides}
           onOpenChange={handleAddDialogOpenChange}
           onDraftChange={updateAddDraft}

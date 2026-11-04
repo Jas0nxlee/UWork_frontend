@@ -56,6 +56,41 @@ function completeModelConfig(
 }
 
 describe("ProviderConfigResolver", () => {
+  it("UCAS逻辑别名误命中型号词仍标未知，标准型号和网关能力保留各自来源", () => {
+    const ids = ["ucas-deepseek-flash", "ucas-deepseek-custom", "gpt-5.4-mini", "ucas-explicit"];
+    const result = new ProviderConfigResolver().resolve({
+      zcodeBuiltinProviders: ProviderConfigMap.empty(),
+      personalProviders: new ProviderConfigMap([
+        [
+          "ucas",
+          createApiKeyProviderConfig({
+            group: "standard-personal",
+            apiFormat: "openai-chat-completions",
+            baseURL: "https://gateway.example/v1",
+            personalModels: ids,
+          }),
+        ],
+      ]),
+      accountProviders: ProviderConfigMap.empty(),
+      zcodeBuiltinModelRules: new ModelConfigRules([
+        { type: "model", modelMatch: ".*", config: completeModelConfig() },
+        { type: "model", modelMatch: ".*(?:deepseek|gpt-5\\.4).*", config: completeModelConfig() },
+      ]),
+      personalModels: ModelConfigRules.empty().setDiscovered(
+        "ucas",
+        "ucas-explicit",
+        ModelConfig.fromData({ properties: { contextWindow: 400_000 } }),
+        { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" },
+      ),
+    });
+    expect(result.resolvedProviders[0]?.models.map((m) => m.capabilitySource)).toEqual([
+      "unknown",
+      "unknown",
+      "builtin",
+      "gateway",
+    ]);
+  });
+
   it.each([
     [true, true, true, true],
     [false, true, true, true],

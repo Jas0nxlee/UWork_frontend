@@ -1,9 +1,32 @@
 import { Loader2Icon, CircleAlertIcon, CheckCircle2Icon } from "lucide-react";
 import type { ReactNode } from "react";
+import type { ModelCapabilitySource } from "@zcode/provider";
 import { Button } from "@/components/ui/button.js";
 import { Switch } from "@/components/ui/switch.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { ModelConfigHelp } from "@/settings/model-provider-section/ModelConfigHelp.js";
+
+export function ModelCapabilitySourceNotice({ source }: { source?: ModelCapabilitySource }) {
+  const { intl } = useZCodeIntl();
+  if (!source) return null;
+  // 仅有模型 ID 不等于已确认规格；保留兼容默认供编辑，但必须标明其不确定性。
+  return (
+    <div
+      data-testid="model-provider-capability-source"
+      data-model-capability-source={source}
+      data-capability-source={source}
+      role="status"
+      className="rounded-lg bg-surface px-3 py-2 text-ui-sm text-foreground-subtle"
+    >
+      <p>{intl.formatMessage({ id: `settings.modelProvider.capabilitySource.${source}` })}</p>
+      {source === "unknown" ? (
+        <p className="mt-1">
+          {intl.formatMessage({ id: "settings.modelProvider.capabilityUnconfirmed" })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function ModelConfigRestoreButton({
   disabled,

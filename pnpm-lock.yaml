@@ -1482,6 +1482,9 @@ importers:
       '@types/yauzl':
         specifier: ^2.10.3
         version: 2.10.3
+      '@zcode/model-option-map':
+        specifier: workspace:*
+        version: link:../model-option-map
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

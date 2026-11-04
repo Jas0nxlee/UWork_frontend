@@ -2,6 +2,7 @@ import { isApiKeyAccess } from "@zcode/provider";
 import type {
   ConfigValidationIssue,
   AccountProviderState,
+  ModelCapabilitySource,
   ModelConfigObject,
   ProviderConfigObject,
   ProviderSettingsProviderView,
@@ -35,6 +36,7 @@ export interface ProviderSettingsFormModel {
   kind: "candidate";
   modelId: string;
   builtin: boolean;
+  capabilitySource?: ModelCapabilitySource;
   /** Personal Rule 叠加前的 Built-in Rule 解析结果，用于编辑器表达继承与稀疏覆盖。 */
   inheritedConfig?: ModelConfigObject;
   personalConfig: ModelConfigObject;

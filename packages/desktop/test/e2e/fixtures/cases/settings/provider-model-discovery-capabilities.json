@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "caseName": "provider-model-discovery-capabilities",
+  "spec": "./test/e2e/settings/provider-model-discovery-capabilities.test.ts",
+  "providerRequestPolicy": "none",
+  "noProviderRequests": true,
+  "providerFixtures": [],
+  "fileFixtures": [
+    {
+      "kind": "app-data-seed",
+      "path": "provider_config.json",
+      "purpose": "隔离空模型供应商；本地 GET /models 返回 synthetic 名单与能力，不发推理请求。验证不同能力、重新获取、手动覆盖、重启与未知来源提示。"
+    }
+  ],
+  "requests": []
+}

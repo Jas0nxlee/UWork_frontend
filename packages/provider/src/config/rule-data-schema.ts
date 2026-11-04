@@ -51,6 +51,12 @@ export const providerModelConfigRuleSchema = templateModelConfigRuleSchema
 export const manualProviderModelConfigRuleSchema = providerModelConfigRuleSchema.extend({
   config: manualModelConfigSchema,
 });
+export const discoveredProviderModelConfigRuleSchema = providerModelConfigRuleSchema.extend({
+  apiType: idSchema,
+  baseUrl: z.url(),
+  // 网关只拥有能力元数据；用户启停状态不能由刷新覆盖。
+  config: modelConfigDataSchema.omit({ enabled: true }),
+});
 
 export const builtinModelConfigRulesSchema = z
   .object({
@@ -65,6 +71,7 @@ export const personalModelConfigRulesSchema = z
   .object({
     providerModelRules: z.array(providerModelConfigRuleSchema),
     manualProviderModelRules: z.array(manualProviderModelConfigRuleSchema),
+    discoveredProviderModelRules: z.array(discoveredProviderModelConfigRuleSchema).optional(),
   })
   .strict()
   .superRefine((rules, context) => {
@@ -179,6 +186,9 @@ export type ProviderSiteMatchConfigRuleData = z.infer<typeof providerSiteMatchCo
 export type TemplateModelConfigRuleData = z.infer<typeof templateModelConfigRuleSchema>;
 export type ProviderModelConfigRuleData = z.infer<typeof providerModelConfigRuleSchema>;
 export type ManualProviderModelConfigRuleData = z.infer<typeof manualProviderModelConfigRuleSchema>;
+export type DiscoveredProviderModelConfigRuleData = z.infer<
+  typeof discoveredProviderModelConfigRuleSchema
+>;
 export type BuiltinModelConfigRulesData = z.infer<typeof builtinModelConfigRulesSchema>;
 export type PersonalModelConfigRulesData = z.infer<typeof personalModelConfigRulesSchema>;
 export type ProviderConfigRuleData = z.infer<typeof providerConfigRuleSchema>;

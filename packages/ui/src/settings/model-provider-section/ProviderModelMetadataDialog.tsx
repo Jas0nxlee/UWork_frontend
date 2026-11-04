@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { Input } from "@/components/ui/input.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import type { ModelConfigObject } from "@zcode/provider";
+import type { ModelConfigObject, ModelCapabilitySource } from "@zcode/provider";
 import type {
   ProviderModelDraftValues,
   ProviderModelDraftCommitResult,
@@ -29,6 +29,7 @@ import {
   ModelSmartConfigSwitch,
   ModelConfigDraftFeedback,
   ModelConfigRestoreButton,
+  ModelCapabilitySourceNotice,
 } from "@/settings/model-provider-section/ProviderModelMetadataDialogActions.js";
 import { modelEditorControlStyle } from "@/settings/model-provider-section/modelEditorControlStyle.js";
 import { cn } from "@/components/lib/utils.js";
@@ -52,6 +53,7 @@ export function ProviderModelMetadataDialog({
   personalConfig,
   overrideFields,
   inheritedConfig,
+  capabilitySource,
   onOpenChange,
   onDraftChange,
   onRestore,
@@ -70,6 +72,7 @@ export function ProviderModelMetadataDialog({
   personalConfig?: ModelConfigObject;
   overrideFields?: ReadonlySet<string>;
   inheritedConfig?: ModelConfigObject;
+  capabilitySource?: ModelCapabilitySource;
   onOpenChange: (open: boolean) => void;
   onDraftChange: (patch: Partial<ProviderModelDraftValues>) => void;
   onRestore?: () => void;
@@ -172,6 +175,7 @@ export function ProviderModelMetadataDialog({
           className="min-h-0 min-w-0 -mr-3 space-y-4 overflow-y-auto pr-4"
           data-model-settings-scroll="true"
         >
+          <ModelCapabilitySourceNotice source={capabilitySource} />
           <ModelSettingsGroup group="basic">
             <div data-model-identity-row="true" className="flex flex-col gap-4">
               <div className="min-w-0 flex-1">

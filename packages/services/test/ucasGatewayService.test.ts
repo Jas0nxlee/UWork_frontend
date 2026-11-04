@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { EnterpriseIdentitySession, UcasGatewayState } from "@zcode/shared";
-import { createUcasGatewayService } from "../src/ucas-gateway/ucasGatewayService.js";
+import type { DiscoveredModelInput } from "@zcode/provider";
+import {
+  createUcasGatewayService,
+  type UcasGatewayServiceOptions,
+} from "../src/ucas-gateway/ucasGatewayService.js";
 import type { UcasGatewayProvisioningTarget } from "../src/ucas-gateway/contract.js";
 import type { UcasGatewayStore } from "../src/ucas-gateway/ucasGatewayStore.js";
 
@@ -95,7 +99,8 @@ interface ProvisioningCall {
   readonly baseUrl: string;
   readonly apiKey?: string;
   readonly replaceApiKey?: boolean;
-  readonly modelIds?: readonly string[];
+  readonly modelsOnly?: true;
+  readonly modelIds?: readonly DiscoveredModelInput[];
 }
 
 function createProvisioning(options: { hasKey?: boolean; models?: readonly string[] } = {}) {
@@ -108,7 +113,8 @@ function createProvisioning(options: { hasKey?: boolean; models?: readonly strin
       const apiKeyApplied = Boolean(input.apiKey) && (input.replaceApiKey === true || !hasKey);
       if (apiKeyApplied) hasKey = true;
       let modelsAdded = 0;
-      for (const modelId of input.modelIds ?? []) {
+      for (const model of input.modelIds ?? []) {
+        const modelId = typeof model === "string" ? model : model.id;
         if (!models.has(modelId)) {
           models.add(modelId);
           modelsAdded += 1;
@@ -131,8 +137,13 @@ function createProvisioning(options: { hasKey?: boolean; models?: readonly strin
 function setup(options: {
   readonly authenticated?: boolean;
   readonly keys?: unknown;
-  readonly provisioning?: ReturnType<typeof createProvisioning>;
+  readonly provisioning?: Pick<ReturnType<typeof createProvisioning>, "calls" | "target">;
   readonly configured?: boolean;
+  readonly endpointModels?: unknown;
+  readonly endpointStatus?: number;
+  readonly identitySessionStore?: UcasGatewayServiceOptions["identitySessionStore"];
+  readonly beforeEndpoint?: () => Promise<void>;
+  readonly planModels?: typeof planModelsBody;
 }) {
   const calls: string[] = [];
   const store = createMemoryStore();
@@ -147,6 +158,7 @@ function setup(options: {
     if (url.pathname === "/api/auth/refresh") return json(refreshBody);
     if (url.pathname === "/api/keys") return json(options.keys ?? { keys: [] });
     if (url.pathname === "/api/keys/key-1/reveal") return json({ key: "sk-existing" });
+    if (url.pathname === "/api/keys/key-2/reveal") return json({ key: "sk-generated" });
     if (url.pathname === "/api/keys/generate")
       return json(
         { id: "key-2", key: "sk-generated", masked_key: "sk-…ated", status: "active" },
@@ -158,14 +170,21 @@ function setup(options: {
         llm_base_url: PUBLIC,
         llm_base_url_internal: INTERNAL,
       });
-    if (url.pathname === "/api/usage/models") return json(planModelsBody);
+    if (url.pathname === "/api/usage/models") return json(options.planModels ?? planModelsBody);
+    if (url.pathname === "/v1/models") {
+      await options.beforeEndpoint?.();
+      return json(
+        options.endpointModels ?? { data: planModelsBody.models.map((id) => ({ id })) },
+        options.endpointStatus ?? 200,
+      );
+    }
     if (url.pathname === "/api/usage/stats") return json(statsBody);
     if (url.pathname === "/api/usage") return json(usageBody);
     return json({ error: "not found" }, 404);
   };
   const service = createUcasGatewayService({
     store,
-    identitySessionStore: {
+    identitySessionStore: options.identitySessionStore ?? {
       read: async () => ({
         revision: 0,
         session: options.authenticated === false ? null : session,
@@ -277,6 +296,281 @@ test("repeat model application is idempotent", async () => {
   assert.equal(result.modelsAdded, 0);
   assert.equal(result.modelsSkipped, 2);
   assert.equal((await service.getView()).models?.pendingCount, 0);
+});
+
+test("gateway sync and model application retain endpoint capabilities for entitled models", async () => {
+  const endpointModels = {
+    data: [
+      {
+        id: "ucas-glm",
+        context_window: 32768,
+        supports_vision: false,
+        reasoning_levels: ["low", "high"],
+      },
+      { id: "ucas-kimi", context_window: 262144, supports_vision: true, supports_reasoning: false },
+      { id: "not-in-plan", context_window: 1000000 },
+    ],
+  };
+  const { service, provisioning } = setup({ endpointModels });
+  assert.equal((await service.sync("manual")).committed, true);
+  assert.deepEqual(provisioning.calls[0]?.modelIds, [
+    {
+      id: "ucas-glm",
+      config: {
+        properties: { contextWindow: 32768, inputFormat: { supportsImage: false } },
+        optionSpecs: {
+          reasoningLevel: { values: ["low", "high"], map: '{"reasoning_effort": reasoningLevel}' },
+        },
+      },
+    },
+    {
+      id: "ucas-kimi",
+      config: {
+        properties: { contextWindow: 262144, inputFormat: { supportsImage: true } },
+        optionSpecs: { reasoningLevel: { values: ["disabled"], map: "{}" } },
+      },
+    },
+  ]);
+  endpointModels.data[0]!.context_window = 65536;
+  const reapplied = await service.applyModels();
+  assert.equal(reapplied.modelsAdded, 0);
+  assert.equal(reapplied.modelsSkipped, 2);
+  const refreshed = provisioning.calls[1]!.modelIds![0];
+  assert.ok(typeof refreshed !== "string");
+  assert.equal(refreshed.config?.properties?.contextWindow, 65536);
+  assert.deepEqual(reapplied.view.models?.available, ["ucas-glm", "ucas-kimi"]);
+});
+
+test("invalid endpoint capabilities reject gateway model application atomically", async () => {
+  const { service, provisioning } = setup({
+    endpointModels: {
+      data: [
+        { id: "ucas-glm", context_window: 32768 },
+        { id: "ucas-kimi", supports_vision: "false" },
+      ],
+    },
+  });
+  const result = await service.sync("manual");
+  assert.equal(result.committed, false);
+  assert.deepEqual(provisioning.calls, []);
+});
+
+test("model application only reads an existing key and current endpoint without full sync side effects", async () => {
+  const { service, provisioning, calls } = setup({
+    endpointModels: { data: [{ id: "ucas-glm", context_window: 32768 }, { id: "ucas-kimi" }] },
+  });
+  await service.sync("manual");
+  const before = await service.getView();
+  calls.length = 0;
+  await service.applyModels();
+  assert.deepEqual(
+    calls.map((value) => new URL(value).pathname),
+    ["/api/keys/key-2/reveal", "/v1/models"],
+  );
+  const input = provisioning.calls.at(-1)!;
+  assert.equal(input.apiKey, undefined);
+  assert.equal(input.replaceApiKey, undefined);
+  assert.equal(input.modelsOnly, true);
+  const after = await service.getView();
+  assert.deepEqual(after.endpoint, before.endpoint);
+  assert.deepEqual(after.key, before.key);
+  assert.deepEqual(after.usage, before.usage);
+  assert.equal(after.lastSyncedAt, before.lastSyncedAt);
+});
+
+test("model application without an existing key only appends IDs and preserves capabilities", async () => {
+  const { service, store, calls, provisioning } = setup({});
+  store.current = {
+    version: 1,
+    userId: session.profile.id,
+    orgId: session.profile.tenantId,
+    endpoint: {
+      baseUrl: `${PUBLIC}/v1`,
+      publicBaseUrl: `${PUBLIC}/v1`,
+      internalBaseUrl: null,
+      source: "public",
+    },
+    key: null,
+    lastSyncedAt: 1,
+  };
+  await service.refreshModels();
+  calls.length = 0;
+  const result = await service.applyModels();
+  assert.equal(result.committed, true);
+  assert.equal(result.view.error, "failed");
+  assert.deepEqual(calls, []);
+  assert.deepEqual(provisioning.calls[0], {
+    baseUrl: `${PUBLIC}/v1`,
+    modelsOnly: true,
+    modelIds: [
+      { id: "ucas-glm", preserveCapabilities: true },
+      { id: "ucas-kimi", preserveCapabilities: true },
+    ],
+  });
+});
+
+test(
+  "a refreshed model list keeps new IDs pending while an older capability application completes",
+  { timeout: 5000 },
+  async () => {
+    let enter!: () => void,
+      release!: () => void,
+      blocked = false;
+    const entered = new Promise<void>((done) => {
+      enter = done;
+    });
+    const waiting = new Promise<void>((done) => {
+      release = done;
+    });
+    const plan = { ...planModelsBody, models: ["ucas-glm"] };
+    const { service } = setup({
+      planModels: plan,
+      beforeEndpoint: async () => {
+        if (blocked) {
+          enter();
+          await waiting;
+        }
+      },
+    });
+    try {
+      await service.sync("manual");
+      blocked = true;
+      const applying = service.applyModels();
+      await entered;
+      plan.models.push("ucas-new-model");
+      const refreshed = await service.refreshModels();
+      assert.equal(refreshed.models?.pendingCount, 1);
+      release();
+      const completed = await applying;
+      assert.deepEqual(completed.view.models?.available, ["ucas-glm", "ucas-new-model"]);
+      assert.equal(completed.view.models?.appliedCount, 1);
+      assert.equal(completed.view.models?.pendingCount, 1);
+    } finally {
+      release();
+      service.dispose();
+    }
+  },
+);
+
+for (const action of ["logout", "switch"] as const) {
+  test(
+    `late model capability application cannot commit after identity ${action}`,
+    { timeout: 5000 },
+    async () => {
+      const { createLocalIdentitySessionStore } =
+        await import("../src/enterprise-identity/identitySessionStore.js");
+      const secrets = new Map<string, string>();
+      const credentials: import("../src/credential/credential.js").ICredentialService = {
+        load: async (key) => secrets.get(key) ?? null,
+        save: async (key, value) => {
+          secrets.set(key, value);
+        },
+        delete: async (key) => {
+          secrets.delete(key);
+        },
+      };
+      const identity = createLocalIdentitySessionStore(credentials);
+      await identity.write(session, undefined, () => true);
+      let enter!: () => void,
+        release!: () => void,
+        blocked = false;
+      const entered = new Promise<void>((done) => {
+        enter = done;
+      });
+      const waiting = new Promise<void>((done) => {
+        release = done;
+      });
+      const { service, provisioning } = setup({
+        identitySessionStore: identity,
+        beforeEndpoint: async () => {
+          if (blocked) {
+            enter();
+            await waiting;
+          }
+        },
+      });
+      try {
+        await service.sync("login");
+        const before = provisioning.calls.length;
+        blocked = true;
+        const pending = service.applyModels();
+        await entered;
+        await identity.write(
+          action === "logout"
+            ? null
+            : {
+                ...session,
+                profile: { ...session.profile, id: "user-2", tenantId: "org-2" },
+                token: "fixture-other-user",
+              },
+          undefined,
+          () => true,
+        );
+        await service.getView();
+        release();
+        assert.equal((await pending).committed, false);
+        assert.equal(provisioning.calls.length, before);
+      } finally {
+        release();
+        service.dispose();
+      }
+    },
+  );
+}
+
+test("a failed capability directory keeps the previously confirmed 32K automatic model", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const { createProviderRuntime } = await import("../src/model-provider/providerRuntime.js");
+  const dir = await mkdtemp(join(tmpdir(), "uwork-gateway-retain-"));
+  const runtime = createProviderRuntime({
+    zcodeBuiltinFilePath: fileURLToPath(
+      new URL("../../../config/provider/zcode-builtin.json", import.meta.url),
+    ),
+    personalFilePath: join(dir, "personal.json"),
+    personalPollingIntervalMs: false,
+    watch: false,
+  });
+  const provisioning = {
+    calls: [] as ProvisioningCall[],
+    target: {
+      apply: (input: Parameters<UcasGatewayProvisioningTarget["apply"]>[0]) =>
+        runtime.providerSettings.applyUcasGatewayProvisioning(input),
+      listModels: async () =>
+        (await runtime.providerSettings.getView()).providers
+          .find((p) => p.providerId === "ucas")!
+          .models.map((m) => m.modelId),
+    },
+  };
+  const options = {
+    provisioning,
+    endpointStatus: 200,
+    endpointModels: { data: [{ id: "ucas-glm", context_window: 32768 }, { id: "ucas-kimi" }] },
+  };
+  const { service } = setup(options);
+  try {
+    await runtime.start();
+    assert.equal((await service.sync("manual")).committed, true);
+    options.endpointStatus = 500;
+    const failed = await service.sync("manual");
+    const model = (await runtime.providerSettings.getView()).providers
+      .find((p) => p.providerId === "ucas")!
+      .models.find((m) => m.modelId === "ucas-glm")!;
+    assert.equal(model.effectiveConfig.properties?.contextWindow, 32768);
+    assert.equal(model.capabilitySource, "gateway");
+    assert.equal(failed.view.error, "failed");
+    assert.equal((await service.applyModels()).view.error, "failed");
+    const reapplied = (await runtime.providerSettings.getView()).providers
+      .find((p) => p.providerId === "ucas")!
+      .models.find((m) => m.modelId === "ucas-glm")!;
+    assert.equal(reapplied.effectiveConfig.properties?.contextWindow, 32768);
+  } finally {
+    service.dispose();
+    runtime.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("an unconfigured host reports unconfigured without network calls", async () => {

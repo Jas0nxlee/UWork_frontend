@@ -109,6 +109,11 @@ export function parseZCodeBuiltinModelConfigRules(input: unknown): ModelConfigRu
 export function parsePersonalModelConfigRules(input: unknown): ModelConfigRules {
   const parsed = personalModelConfigRulesSchema.parse(input);
   return new ModelConfigRules([
+    ...(parsed.discoveredProviderModelRules ?? []).map((rule) => ({
+      ...rule,
+      type: "discovered-provider-model" as const,
+      config: createModelConfig(rule.config),
+    })),
     ...parsed.providerModelRules.map((rule) => ({
       ...rule,
       type: "provider-model" as const,

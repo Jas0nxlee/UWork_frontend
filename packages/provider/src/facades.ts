@@ -4,6 +4,7 @@ import type {
   ProviderModelMembership,
   UcasGatewayConfigApplication,
   UcasGatewayConfigInput,
+  DiscoveredModelInput,
 } from "./config-service.js";
 import type {
   ModelConfig,
@@ -13,6 +14,7 @@ import type {
   ProviderConfigObject,
   ProviderId,
   ProviderTemplateId,
+  ModelCapabilitySource,
 } from "./config/index.js";
 import {
   ModelConfigRules,
@@ -41,7 +43,7 @@ import type {
   ProviderRegistryServiceChangedEvent,
   ProviderRegistryServiceSnapshot,
 } from "./registry-service.js";
-import { UCAS_PROVIDER_ID } from "./ucas-defaults.js";
+import { UCAS_PROVIDER_ID, isUcasLogicalModelAlias } from "./ucas-defaults.js";
 
 export interface ProviderRegistryFacadeSource {
   getSnapshot(): ProviderRegistryServiceSnapshot | null;
@@ -74,7 +76,7 @@ export interface ProviderSettingsMutationTarget {
   ): Promise<unknown>;
   addDiscoveredModels(
     providerId: ProviderId,
-    modelIds: readonly ModelId[],
+    modelIds: readonly DiscoveredModelInput[],
     membership: ProviderModelMembership,
   ): Promise<unknown>;
   addPersonalModel(
@@ -120,6 +122,7 @@ export interface ProviderSettingsModelCandidateView {
   readonly modelId: ModelId;
   readonly builtin: boolean;
   readonly effectiveBuiltinConfig: ModelConfigObject;
+  readonly capabilitySource?: ModelCapabilitySource;
   readonly personalExactConfig?: ModelConfigObject;
   readonly useRecommendedConfig?: boolean;
   readonly effectiveConfig: RegistryModelConfigObject | ModelConfigObject;
@@ -132,6 +135,7 @@ export interface ProviderSettingsModelCandidateView {
 export type ProviderSettingsModelView = ProviderSettingsModelCandidateView;
 
 export interface ModelConfigResolution {
+  readonly capabilitySource?: ModelCapabilitySource;
   readonly inheritedConfig: ModelConfigObject;
   readonly effectiveConfig: ModelConfigObject;
   readonly issues: readonly ConfigValidationIssue[];
@@ -251,6 +255,20 @@ export class ProviderSettingsFacade {
   resolveModelConfig(input: ResolveModelConfigInput): ModelConfigResolution {
     const snapshot = requireSnapshot(this.#source);
     const provider = requireEffectiveProvider(snapshot, input.providerId);
+    const recommendedRules = ModelConfigRules.composeRecommended(
+      snapshot.config.zcodeBuiltinModelRules,
+      snapshot.config.personalModels,
+    );
+    const capabilitySource = recommendedRules.capabilitySource(
+      {
+        providerId: input.providerId,
+        templateId: provider.templateId,
+        modelId: input.modelId,
+        apiType: provider.config.api?.type,
+        baseUrl: provider.config.api?.baseUrl,
+      },
+      isUcasLogicalModelAlias(input.providerId, input.modelId),
+    );
     if (!("personalConfig" in input)) {
       const modelRules = ModelConfigRules.composeEffective(
         snapshot.config.zcodeBuiltinModelRules,
@@ -264,7 +282,16 @@ export class ProviderSettingsFacade {
         baseUrl: provider.config.api?.baseUrl,
       });
       return Object.freeze({
-        inheritedConfig: config.toJSON(),
+        capabilitySource,
+        inheritedConfig: recommendedRules
+          .resolve({
+            providerId: input.providerId,
+            templateId: provider.templateId,
+            modelId: input.modelId,
+            apiType: provider.config.api?.type,
+            baseUrl: provider.config.api?.baseUrl,
+          })
+          .toJSON(),
         effectiveConfig: config.toJSON(),
         issues: Object.freeze([
           ...config.validateComplete(["providers", input.providerId, "models", input.modelId]),
@@ -273,7 +300,7 @@ export class ProviderSettingsFacade {
     }
 
     const personalConfig = parseModelConfig(input.personalConfig);
-    const inheritedConfig = snapshot.config.zcodeBuiltinModelRules.resolve({
+    const inheritedConfig = recommendedRules.resolve({
       providerId: input.providerId,
       templateId: provider.templateId,
       modelId: input.modelId,
@@ -301,6 +328,7 @@ export class ProviderSettingsFacade {
       baseUrl: provider.config.api?.baseUrl,
     });
     return Object.freeze({
+      capabilitySource,
       inheritedConfig: inheritedConfig.toJSON(),
       effectiveConfig: config.toJSON(),
       issues: Object.freeze([
@@ -385,7 +413,7 @@ export class ProviderSettingsFacade {
 
   addDiscoveredModels(
     providerId: ProviderId,
-    modelIds: readonly ModelId[],
+    modelIds: readonly DiscoveredModelInput[],
     expectedRevision: number,
   ): Promise<ProviderSettingsView> {
     return this.#mutateProvider(providerId, "discover-models", (target) => {
@@ -688,6 +716,7 @@ function createProviderSettingsView(input: {
             modelId: model.modelId,
             builtin: model.source === "builtin",
             effectiveBuiltinConfig: model.effectiveBuiltinConfig.toJSON(),
+            capabilitySource: model.capabilitySource,
             ...(personalModelConfig ? { personalExactConfig: personalModelConfig.toJSON() } : {}),
             ...(personalModelRule
               ? { useRecommendedConfig: personalModelRule.type !== "manual-provider-model" }

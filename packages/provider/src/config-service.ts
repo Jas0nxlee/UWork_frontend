@@ -2,6 +2,7 @@
 import type {
   ModelConfigRules,
   ModelId,
+  ModelConfigObject,
   ProviderConfig,
   ProviderId,
   ProviderTemplateId,
@@ -16,6 +17,7 @@ import {
   ProviderConfig as ProviderConfigValue,
   ProviderTemplateMap,
   resolveProviderTemplateName,
+  parseModelConfig,
 } from "./config/index.js";
 import { resolveOwnedOrder } from "./owned-order.js";
 import {
@@ -23,7 +25,6 @@ import {
   UCAS_BASE_URL,
   UCAS_PROVIDER_ID,
   UCAS_PROVIDER_TEMPLATE_ID,
-  createUcasDefaultModelConfig,
 } from "./ucas-defaults.js";
 import { normalizeUcasGatewayBaseUrl } from "@zcode/shared/ucas-gateway";
 import type { ModelSelection } from "@zcode/shared/model-selection";
@@ -106,6 +107,16 @@ export interface ProviderModelMembership {
   /** 在 Personal 事务内检查发布快照未过期，不触发网络请求。 */
   readonly assertCurrent: () => void;
 }
+
+/** 模型列表允许仅提供 ID；能力元数据由连接所属的自动层持有。 */
+export type DiscoveredModelInput =
+  | ModelId
+  | {
+      readonly id: ModelId;
+      readonly config?: ModelConfigObject;
+      /** 仅本地目录读取失败时使用；补成员但不撤销已确认的自动能力。 */
+      readonly preserveCapabilities?: true;
+    };
 
 function assertMembershipCurrent(
   membership: ProviderModelMembership | undefined,
@@ -625,34 +636,59 @@ export class ProviderConfigService implements ProviderSource<ProviderConfigSnaps
     });
   }
 
-  /** 完整发现列表在一个 Repository 事务内追加；已有模型及手动排序保持原样。 */
+  /** 成员追加和自动能力刷新在同一事务提交，个人覆盖与手动排序保持原样。 */
   async addDiscoveredModels(
     providerId: ProviderId,
-    modelIds: readonly ModelId[],
+    modelIds: readonly DiscoveredModelInput[],
     membership: ProviderModelMembership,
   ): Promise<ProviderConfigLayerSnapshot> {
     const id = normalizeId("providerId", providerId);
-    const incoming = [...new Set(modelIds.map((modelId) => normalizeId("modelId", modelId)))];
+    const incoming = new Map(
+      modelIds.map((model) => {
+        if (typeof model !== "string" && model.preserveCapabilities && model.config !== undefined) {
+          throw new Error("保留模型能力与覆盖模型能力不能同时声明");
+        }
+        return [
+          normalizeId("modelId", typeof model === "string" ? model : model.id),
+          {
+            config: parseModelConfig(typeof model === "string" ? {} : (model.config ?? {})),
+            preserveCapabilities: typeof model !== "string" && model.preserveCapabilities === true,
+          },
+        ] as const;
+      }),
+    );
     const builtin = await this.#zcodeBuiltinSource.read();
     return this.#updatePersonal((current) => {
       assertMembershipCurrent(membership, id, current);
       const provider = writableProviderOverlay(builtin, current, id);
+      const effectiveProvider = (
+        builtin.providers.get(id) ??
+        resolveTemplateBaseline(builtin, current.providers, id) ??
+        new ProviderConfigValue({})
+      ).overlay(provider);
+      const apiType = effectiveProvider.api?.type;
+      const baseUrl = effectiveProvider.api?.baseUrl;
+      if (!apiType || !baseUrl) throw new Error("供应商连接配置不完整，无法保存模型能力");
       const existing = new Set([
         ...membership.inheritedModelIds,
         ...(provider.personalModelIds ?? []),
       ]);
-      const added = incoming.filter((modelId) => !existing.has(modelId));
+      const added = [...incoming.keys()].filter((modelId) => !existing.has(modelId));
       const members = [...(provider.personalModelIds ?? []), ...added];
       let models = current.models;
       for (const modelId of added) {
         models = models.setExact(
           id,
           modelId,
-          id === UCAS_PROVIDER_ID
-            ? createUcasDefaultModelConfig()
-            : new ModelConfig({ enabled: true }),
+          current.models.getExact(id, modelId) ?? new ModelConfig({ enabled: true }),
           true,
         );
+      }
+      // 自动能力不能混入个人精确覆盖，否则下次刷新无法区分用户修改和网关事实。
+      for (const [modelId, discovered] of incoming) {
+        if (!discovered.preserveCapabilities) {
+          models = models.setDiscovered(id, modelId, discovered.config, { apiType, baseUrl });
+        }
       }
       return {
         providers: current.providers.set(
@@ -902,7 +938,9 @@ export class ProviderConfigService implements ProviderSource<ProviderConfigSnaps
               ),
             ),
         ),
-        models: current.models.deleteExact(normalizedProviderId, normalizedModelId),
+        models: current.models
+          .deleteExact(normalizedProviderId, normalizedModelId)
+          .deleteDiscovered(normalizedProviderId, normalizedModelId),
         providerOrder: current.providerOrder,
       };
     });

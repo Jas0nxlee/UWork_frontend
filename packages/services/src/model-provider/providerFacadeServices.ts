@@ -2,6 +2,7 @@ import type { Event } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
 import {
   UCAS_PROVIDER_ID,
+  type DiscoveredModelInput,
   type ModelConfigObject,
   type ModelId,
   type ModelSelection,
@@ -34,14 +35,17 @@ export interface ProviderModelDiscoveryResult {
   readonly added: number;
   readonly skipped: number;
 }
-export type ProviderModelDiscoverer = (config: ProviderConfigObject) => Promise<readonly string[]>;
+export type ProviderModelDiscoverer = (
+  config: ProviderConfigObject,
+) => Promise<readonly DiscoveredModelInput[]>;
 
-/** 企业网关写入 Provider 的入参/结果；模型只追加，Key 只补缺或显式替换。 */
+/** 企业网关写入 Provider；成员只追加、自动能力可刷新，Key 只补缺或显式替换。 */
 export interface UcasGatewayProvisioningInput {
   readonly baseUrl: string;
   readonly apiKey?: string;
   readonly replaceApiKey?: boolean;
-  readonly modelIds?: readonly string[];
+  readonly modelsOnly?: true;
+  readonly modelIds?: readonly DiscoveredModelInput[];
 }
 
 export interface UcasGatewayProvisioningResult {
@@ -152,11 +156,13 @@ export function createProviderSettingsService(
     if (!provider || provider.effectiveConfig.group !== "standard-personal")
       throw new Error("请选择自定义供应商");
     if (!discoverModels) throw new Error("当前 Host 不支持自动获取模型，请更新 Host");
-    const ids = await discoverModels(provider.effectiveConfig);
+    const models = await discoverModels(provider.effectiveConfig);
     const existing = new Set(provider.models.map((model) => model.modelId));
-    const added = ids.filter((id) => !existing.has(id)).length;
-    const view = await facade.addDiscoveredModels(providerId, ids, before.revision);
-    return { view, discovered: ids.length, added, skipped: ids.length - added };
+    const added = models.filter(
+      (model) => !existing.has(typeof model === "string" ? model : model.id),
+    ).length;
+    const view = await facade.addDiscoveredModels(providerId, models, before.revision);
+    return { view, discovered: models.length, added, skipped: models.length - added };
   };
   return {
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
@@ -200,22 +206,30 @@ export function createProviderSettingsService(
     applyUcasGatewayProvisioning: async (input) => {
       await ensureReady();
       await facade.waitForProviderOperations(UCAS_PROVIDER_ID);
-      const applied = await facade.applyUcasGatewayConfig({
-        baseUrl: input.baseUrl,
-        ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
-        ...(input.replaceApiKey === undefined ? {} : { replaceApiKey: input.replaceApiKey }),
-      });
+      const applied = input.modelsOnly
+        ? { view: facade.getView(), apiKeyApplied: false }
+        : await facade.applyUcasGatewayConfig({
+            baseUrl: input.baseUrl,
+            ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+            ...(input.replaceApiKey === undefined ? {} : { replaceApiKey: input.replaceApiKey }),
+          });
       const provider = applied.view.providers.find((item) => item.providerId === UCAS_PROVIDER_ID);
       if (!provider) throw new Error("UCAS 默认供应商不可用");
-      const ids = [
-        ...new Set((input.modelIds ?? []).map((modelId) => modelId.trim()).filter(Boolean)),
-      ];
+      if (input.modelsOnly && provider.effectiveConfig.api?.baseUrl !== input.baseUrl)
+        throw new Error("模型网关连接已变化，请重新获取模型");
+      const byId = new Map<string, DiscoveredModelInput>();
+      for (const model of input.modelIds ?? []) {
+        const id = (typeof model === "string" ? model : model.id).trim();
+        if (id) byId.set(id, typeof model === "string" ? id : { ...model, id });
+      }
+      const models = [...byId.values()];
       const existing = new Set(provider.models.map((model) => model.modelId));
-      const added = ids.filter((modelId) => !existing.has(modelId));
+      const added = [...byId.keys()].filter((modelId) => !existing.has(modelId));
+      // 已有成员也必须走同一事务刷新自动能力，不能被“新增为零”的幂等统计短路。
       const view =
-        added.length === 0
+        models.length === 0
           ? applied.view
-          : await facade.addDiscoveredModels(UCAS_PROVIDER_ID, ids, applied.view.revision);
+          : await facade.addDiscoveredModels(UCAS_PROVIDER_ID, models, applied.view.revision);
       const effective = view.providers.find((item) => item.providerId === UCAS_PROVIDER_ID);
       const access = effective?.effectiveConfig.access;
       return {
@@ -225,7 +239,7 @@ export function createProviderSettingsService(
           access?.type === "api-key" && typeof access.apiKey === "string" && access.apiKey.trim(),
         ),
         modelsAdded: added.length,
-        modelsSkipped: ids.length - added.length,
+        modelsSkipped: models.length - added.length,
       };
     },
     deletePersonalProvider: async (providerId) => {

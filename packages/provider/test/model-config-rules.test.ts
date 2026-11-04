@@ -40,6 +40,60 @@ const complete = {
 };
 
 describe("ModelConfigRules", () => {
+  it("网关能力按连接隔离，刷新只替换自动层，个人覆盖始终优先", () => {
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 400_000 } }),
+      scope,
+    );
+    const input = { providerId: "p", modelId: "m", ...scope };
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(400_000);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 64_000 } }),
+    );
+    personal = personal.setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 800_000 } }),
+      scope,
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(64_000);
+    const automatic = personal.deleteExact("p", "m");
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve(input).properties
+        ?.contextWindow,
+    ).toBe(800_000);
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve({
+        ...input,
+        baseUrl: "https://other.example/v1",
+      }).properties?.contextWindow,
+    ).toBe(128_000);
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve({
+        ...input,
+        apiType: "openai-responses",
+      }).properties?.contextWindow,
+    ).toBe(128_000);
+    const decoded = parsePersonalModelConfigRules(automatic.toPersonalJSON());
+    expect(
+      ModelConfigRules.composeEffective(builtin, decoded).resolve(input).properties?.contextWindow,
+    ).toBe(800_000);
+    expect(automatic.renameExactModel("p", "m", "renamed").getDiscovered(input)).toBeUndefined();
+  });
+
   it("Todo90：固定配置不从推荐补缺；enabled 仍独立继承", () => {
     const rules = new ModelConfigRules([
       {

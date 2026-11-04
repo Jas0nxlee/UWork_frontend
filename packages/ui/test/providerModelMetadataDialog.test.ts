@@ -102,6 +102,32 @@ vi.mock("@/i18n/IntlProvider.js", () => ({
 }));
 
 describe("ProviderModelMetadataDialog", () => {
+  it.each(["gateway", "builtin", "unknown"] as const)(
+    "shows capability provenance and identifies unconfirmed defaults: %s",
+    (capabilitySource) => {
+      const html = renderToStaticMarkup(
+        createElement(ProviderModelMetadataDialog, {
+          open: true,
+          capabilitySource,
+          draft: {
+            ...MODEL_FORMAT_DRAFT,
+            idValue: "gateway-alias",
+            contextWindowValue: "",
+            maxOutputTokensValue: "",
+          },
+          draftErrorMessage: null,
+          onOpenChange: vi.fn(),
+          onDraftChange: vi.fn(),
+          onCommit: () => true,
+        }),
+      );
+      expect(html).toContain(`data-model-capability-source="${capabilitySource}"`);
+      expect(html).toContain(`settings.modelProvider.capabilitySource.${capabilitySource}`);
+      expect(html.includes("settings.modelProvider.capabilityUnconfirmed")).toBe(
+        capabilitySource === "unknown",
+      );
+    },
+  );
   it.each([true, false])("Todo134：模型 ID 只读权限不随布局改变：%s", (modelIdReadOnly) => {
     const html = renderToStaticMarkup(
       createElement(ProviderModelMetadataDialog, {

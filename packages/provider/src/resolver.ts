@@ -11,6 +11,7 @@ import {
   type ApiKeyAccessConfig,
   ModelConfig,
   ModelConfigRules,
+  type ModelCapabilitySource,
   type ZhipuAccountAccessConfig,
   type ModelId,
   type ProviderConfig,
@@ -21,6 +22,7 @@ import {
 } from "./config/index.js";
 import { resolveOwnedOrder } from "./owned-order.js";
 import type { AccountProviderStates } from "./account-provider-state.js";
+import { isUcasLogicalModelAlias } from "./ucas-defaults.js";
 
 export type RegistryZhipuAccountAccessConfig = ZhipuAccountAccessConfig &
   z.infer<typeof completeZhipuAccountAccessDataSchema>;
@@ -142,6 +144,7 @@ export interface ResolvedProviderModelCandidate {
   readonly source: "builtin" | "personal";
   readonly config: ModelConfig;
   readonly effectiveBuiltinConfig: ModelConfig;
+  readonly capabilitySource?: ModelCapabilitySource;
   readonly issues: readonly ConfigValidationIssue[];
   readonly enabled: boolean;
   readonly executable: boolean;
@@ -210,6 +213,10 @@ export class ProviderConfigResolver {
       input.zcodeBuiltinModelRules,
       input.personalModels,
     );
+    const recommendedModelRules = ModelConfigRules.composeRecommended(
+      input.zcodeBuiltinModelRules,
+      input.personalModels,
+    );
     const issues: ConfigValidationIssue[] = [];
     const resolvedProviders: ResolvedProvider[] = [];
     const registryProviders: Provider[] = [];
@@ -261,13 +268,14 @@ export class ProviderConfigResolver {
           apiType: config.api?.type,
           baseUrl: config.api?.baseUrl,
         });
-        const effectiveBuiltinConfig = input.zcodeBuiltinModelRules.resolve({
+        const resolutionInput = {
           providerId,
           templateId,
           modelId,
           apiType: config.api?.type,
           baseUrl: config.api?.baseUrl,
-        });
+        };
+        const effectiveBuiltinConfig = recommendedModelRules.resolve(resolutionInput);
         const registryModelResult = createRegistryModelConfig(modelConfig, [
           ...providerPath,
           "models",
@@ -284,6 +292,10 @@ export class ProviderConfigResolver {
           source: builtinIds.has(modelId) ? "builtin" : "personal",
           config: modelConfig,
           effectiveBuiltinConfig,
+          capabilitySource: recommendedModelRules.capabilitySource(
+            resolutionInput,
+            isUcasLogicalModelAlias(providerId, modelId),
+          ),
           issues: Object.freeze(modelIssues),
           enabled: modelEnabled,
           executable,

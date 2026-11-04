@@ -38,6 +38,7 @@ describe("providerSettingsFormProjection", () => {
               kind: "candidate",
               modelId: "model-a",
               builtin: false,
+              capabilitySource: "gateway",
               personalConfig: { properties: { contextWindow: 128_000 } },
               effectiveConfig: {
                 properties: {
@@ -145,6 +146,7 @@ describe("providerSettingsFormProjection", () => {
     });
     expect(result[0]?.models[0]).toMatchObject({
       modelId: "model-a",
+      capabilitySource: "gateway",
       config: {
         properties: { contextWindow: 128_000 },
         optionSpecs: {

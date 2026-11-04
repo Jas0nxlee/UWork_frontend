@@ -3329,13 +3329,16 @@ const enUS: Record<string, string> = {
   "settings.dataBaseDirBrowse": "Choose folder",
   "settings.dataBaseDirSave": "Save",
   "settings.dataBaseDirCopying": "Saving the migration request…",
-  "settings.dataBaseDirCopyFailed": "The migration request was not saved. The active directory is unchanged.",
+  "settings.dataBaseDirCopyFailed":
+    "The migration request was not saved. The active directory is unchanged.",
   "settings.dataBaseDirForbiddenInstallDir":
     "The data directory cannot be the UWork installation folder on Windows. Choose a folder outside the app install location.",
   "settings.dataBaseDirRestartRequired": "Migration scheduled. Restart the app to move your data.",
   "settings.dataBaseDirPendingTarget": "Active: {active}; destination after restart: {target}",
-  "settings.dataBaseDirMigrationCancelled": "The pending migration was cancelled. The active directory is unchanged.",
-  "settings.dataBaseDirInfoUnavailable": "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
+  "settings.dataBaseDirMigrationCancelled":
+    "The pending migration was cancelled. The active directory is unchanged.",
+  "settings.dataBaseDirInfoUnavailable":
+    "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
   "settings.locale.system": "System default",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",
@@ -4435,6 +4438,16 @@ const enUS: Record<string, string> = {
     "Matches recommended configuration using the model ID, Base URL, and API format. UWork continually updates recommendations and automatically syncs them to you.\nWhen you manually change a setting, that setting becomes manually managed and stops following recommendation updates; other settings remain managed by smart configuration.",
   "settings.modelProvider.modelDefaultsLoaded": "Smart configuration matched for this model",
   "settings.modelProvider.modelConfigIncomplete": "Model configuration is incomplete",
+  "settings.modelProvider.capabilitySource.gateway":
+    "Capabilities from the gateway. Missing values use model recommendations or compatibility defaults. Manual settings take priority.",
+  "settings.modelProvider.capabilitySource.builtin":
+    "Capabilities from built-in model recommendations. Gateway limits may differ. Manual settings take priority.",
+  "settings.modelProvider.capabilitySource.unknown": "Model capabilities unconfirmed",
+  "settings.modelProvider.capabilityUnconfirmed":
+    "The gateway returned a model ID without a recognized model or capability details. Values without manual settings are compatibility defaults, not confirmed context, input types, or reasoning levels. Confirm them against the gateway specifications.",
+  "settings.modelProvider.capabilitySourceLabel.gateway": "Gateway capabilities",
+  "settings.modelProvider.capabilitySourceLabel.builtin": "Built-in model recommendations",
+  "settings.modelProvider.capabilitySourceLabel.unknown": "Model capabilities unconfirmed",
   "settings.modelProvider.models": "Model list",
   "settings.modelProvider.modelsEmpty": "No models are configured. Add a model to use it in chat.",
   "settings.modelProvider.addModel": "Add model",
@@ -8485,9 +8498,9 @@ const enUS: Record<string, string> = {
   "settings.usage.gateway.models.unrestricted": "Unrestricted",
   "settings.usage.gateway.models.empty": "The plan returned no model list.",
   "settings.usage.gateway.models.hint":
-    "Sync only appends missing models and keeps existing settings.",
+    "Add missing models and refresh automatic capabilities while preserving manual settings.",
   "settings.usage.gateway.models.refresh": "Reload",
-  "settings.usage.gateway.models.apply": "Add to model list",
+  "settings.usage.gateway.models.apply": "Apply models and capabilities",
   "settings.plugins.store.subtitle":
     "Extend UWork with skills, commands, and MCP servers from plugins",
   "settings.plugins.store.segment.company": "Company",
