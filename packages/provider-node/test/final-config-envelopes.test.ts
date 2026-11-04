@@ -15,7 +15,11 @@ describe("Todo104 最终文件外壳", () => {
     const config = {
       providerOrder: ["p"],
       providerConfigRules: { providerRules: [{ providerId: "p", providerName: "P", config: {} }] },
-      modelConfigRules: { providerModelRules: [], manualProviderModelRules: [] },
+      modelConfigRules: {
+        providerModelRules: [],
+        manualProviderModelRules: [],
+        discoveredProviderModelRules: [],
+      },
       defaultModelSelection: { providerId: "p", modelId: "m", options: { reasoningLevel: "high" } },
     };
     const file = { schemaVersion: 1, config };
@@ -31,7 +35,11 @@ describe("Todo104 最终文件外壳", () => {
       schemaVersion: 1,
       config: {
         providerConfigRules: { providerRules: [] },
-        modelConfigRules: { providerModelRules: [], manualProviderModelRules: [] },
+        modelConfigRules: {
+          providerModelRules: [],
+          manualProviderModelRules: [],
+          discoveredProviderModelRules: [],
+        },
       },
     });
   });

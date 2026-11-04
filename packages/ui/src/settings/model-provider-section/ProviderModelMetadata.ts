@@ -10,6 +10,13 @@ import {
 
 export type ProviderModelInputFormatDraft = ModelInputFormatData;
 
+const EDITABLE_INPUT_FIELDS = [
+  "supportsImage",
+  "supportsVideo",
+  "supportsAudio",
+  "supportsPdf",
+] as const;
+
 export interface ProviderModelDraftValues {
   idValue: string;
   contextWindowValue: string;
@@ -141,7 +148,11 @@ export function resolveProviderModelDraftCommit({
     return { status: "invalid", field: "maxOutputTokens" };
   }
 
-  if (!draft.inputFormatValue.supportsText) {
+  // Text 是只读能力事实；非聊天模型可以保留 false，但编辑不得凭空改变该事实。
+  if (
+    draft.inputFormatValue.supportsText !==
+    (currentModel.config.properties?.inputFormat?.supportsText ?? true)
+  ) {
     return { status: "invalid", field: "inputFormat" };
   }
 
@@ -175,6 +186,7 @@ export function resolveProviderModelDraftCommit({
       ...currentModel.config.properties?.inputFormat,
       supportsImage: draft.inputFormatValue.supportsImage,
       supportsVideo: draft.inputFormatValue.supportsVideo,
+      supportsAudio: draft.inputFormatValue.supportsAudio,
       supportsPdf: draft.inputFormatValue.supportsPdf,
     },
     outputFormat: currentModel.config.properties?.outputFormat,
@@ -210,7 +222,7 @@ export function resolveProviderModelDraftCommit({
     if (draft.overriddenFieldsValue?.includes(`${key}Value`))
       assignMutable(personalProperties, key, effectiveProperties[key]);
   }
-  for (const key of ["supportsImage", "supportsVideo", "supportsPdf"] as const) {
+  for (const key of EDITABLE_INPUT_FIELDS) {
     if (
       draft.overriddenFieldsValue?.includes(`inputFormatValue.${key}`) ||
       draft.inputFormatValue[key] !== currentModel.config.properties?.inputFormat?.[key]
@@ -387,20 +399,15 @@ function buildPersonalProperties({
     );
   }
   const input = { ...current?.inputFormat } as Record<string, unknown>;
-  applyInteractiveSparseLeaf(
-    input,
-    "supportsImage",
-    effective.inputFormat?.supportsImage,
-    currentEffective?.inputFormat?.supportsImage,
-    inherited?.inputFormat?.supportsImage,
-  );
-  applyInteractiveSparseLeaf(
-    input,
-    "supportsVideo",
-    effective.inputFormat?.supportsVideo,
-    currentEffective?.inputFormat?.supportsVideo,
-    inherited?.inputFormat?.supportsVideo,
-  );
+  for (const key of EDITABLE_INPUT_FIELDS) {
+    applyInteractiveSparseLeaf(
+      input,
+      key,
+      effective.inputFormat?.[key],
+      currentEffective?.inputFormat?.[key],
+      inherited?.inputFormat?.[key],
+    );
+  }
   if (Object.keys(input).length > 0) result.inputFormat = input;
   else delete result.inputFormat;
   return result as NonNullable<ModelConfigObject["properties"]>;

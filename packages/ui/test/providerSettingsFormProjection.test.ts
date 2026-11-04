@@ -38,6 +38,14 @@ describe("providerSettingsFormProjection", () => {
               kind: "candidate",
               modelId: "model-a",
               builtin: false,
+              capabilitySource: "catalog",
+              catalogSource: {
+                source: "models.dev",
+                providerId: "openai",
+                modelId: "model-a",
+                fetchedAt: 1234,
+                stale: false,
+              },
               personalConfig: { properties: { contextWindow: 128_000 } },
               effectiveConfig: {
                 properties: {
@@ -145,6 +153,14 @@ describe("providerSettingsFormProjection", () => {
     });
     expect(result[0]?.models[0]).toMatchObject({
       modelId: "model-a",
+      capabilitySource: "catalog",
+      catalogSource: {
+        source: "models.dev",
+        providerId: "openai",
+        modelId: "model-a",
+        fetchedAt: 1234,
+        stale: false,
+      },
       config: {
         properties: { contextWindow: 128_000 },
         optionSpecs: {

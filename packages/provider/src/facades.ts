@@ -4,6 +4,7 @@ import type {
   ProviderModelMembership,
   UcasGatewayConfigApplication,
   UcasGatewayConfigInput,
+  DiscoveredModelInput,
 } from "./config-service.js";
 import type {
   ModelConfig,
@@ -13,6 +14,9 @@ import type {
   ProviderConfigObject,
   ProviderId,
   ProviderTemplateId,
+  ModelCapabilitySource,
+  ModelCatalogSource,
+  ModelUnsupportedReason,
 } from "./config/index.js";
 import {
   ModelConfigRules,
@@ -26,6 +30,7 @@ import {
 import type { ProviderRegistryView } from "./registry.js";
 import {
   serializeRegistryModelConfig,
+  getModelUnsupportedReason,
   serializeRegistryProviderConfig,
   type ProviderConfigResolution,
   type RegistryModelConfigObject,
@@ -41,7 +46,7 @@ import type {
   ProviderRegistryServiceChangedEvent,
   ProviderRegistryServiceSnapshot,
 } from "./registry-service.js";
-import { UCAS_PROVIDER_ID } from "./ucas-defaults.js";
+import { UCAS_PROVIDER_ID, isUcasLogicalModelAlias } from "./ucas-defaults.js";
 
 export interface ProviderRegistryFacadeSource {
   getSnapshot(): ProviderRegistryServiceSnapshot | null;
@@ -74,7 +79,7 @@ export interface ProviderSettingsMutationTarget {
   ): Promise<unknown>;
   addDiscoveredModels(
     providerId: ProviderId,
-    modelIds: readonly ModelId[],
+    modelIds: readonly DiscoveredModelInput[],
     membership: ProviderModelMembership,
   ): Promise<unknown>;
   addPersonalModel(
@@ -120,6 +125,9 @@ export interface ProviderSettingsModelCandidateView {
   readonly modelId: ModelId;
   readonly builtin: boolean;
   readonly effectiveBuiltinConfig: ModelConfigObject;
+  readonly capabilitySource?: ModelCapabilitySource;
+  readonly catalogSource?: ModelCatalogSource;
+  readonly unsupportedReason?: ModelUnsupportedReason;
   readonly personalExactConfig?: ModelConfigObject;
   readonly useRecommendedConfig?: boolean;
   readonly effectiveConfig: RegistryModelConfigObject | ModelConfigObject;
@@ -132,6 +140,9 @@ export interface ProviderSettingsModelCandidateView {
 export type ProviderSettingsModelView = ProviderSettingsModelCandidateView;
 
 export interface ModelConfigResolution {
+  readonly capabilitySource?: ModelCapabilitySource;
+  readonly catalogSource?: ModelCatalogSource;
+  readonly unsupportedReason?: ModelUnsupportedReason;
   readonly inheritedConfig: ModelConfigObject;
   readonly effectiveConfig: ModelConfigObject;
   readonly issues: readonly ConfigValidationIssue[];
@@ -248,13 +259,73 @@ export class ProviderSettingsFacade {
     return this.getView();
   }
 
-  resolveModelConfig(input: ResolveModelConfigInput): ModelConfigResolution {
+  resolveModelConfig(
+    input: ResolveModelConfigInput,
+    catalogInput?: DiscoveredModelInput,
+  ): ModelConfigResolution {
     const snapshot = requireSnapshot(this.#source);
     const provider = requireEffectiveProvider(snapshot, input.providerId);
+    let personalModels = snapshot.config.personalModels;
+    if (
+      catalogInput &&
+      typeof catalogInput !== "string" &&
+      (catalogInput.catalogConfig !== undefined || catalogInput.config !== undefined)
+    ) {
+      if (catalogInput.id !== input.modelId) throw new Error("目录预览模型身份不一致");
+      const apiType = provider.config.api?.type;
+      const baseUrl = provider.config.api?.baseUrl;
+      if (!apiType || !baseUrl) throw new Error("供应商连接配置不完整");
+      if ((catalogInput.catalogConfig != null) !== (catalogInput.catalogSource !== undefined))
+        throw new Error("目录配置与来源必须成对提供");
+      if (catalogInput.preserveCapabilities && catalogInput.config !== undefined)
+        throw new Error("保留模型能力与覆盖模型能力不能同时声明");
+      const scope = { apiType, baseUrl };
+      // 预览只变更目标ID的临时自动层；显式空config清掉旧网关值，不落盘且不串型号。
+      personalModels = personalModels.setDiscovered(
+        input.providerId,
+        input.modelId,
+        catalogInput.config !== undefined
+          ? parseModelConfig(catalogInput.config)
+          : (personalModels.getDiscovered({
+              providerId: input.providerId,
+              modelId: input.modelId,
+              ...scope,
+            }) ?? parseModelConfig({})),
+        scope,
+        catalogInput.catalogConfig === undefined
+          ? undefined
+          : catalogInput.catalogConfig === null
+            ? null
+            : {
+                config: parseModelConfig(catalogInput.catalogConfig),
+                source: catalogInput.catalogSource!,
+              },
+      );
+    }
+    const recommendedRules = ModelConfigRules.composeRecommended(
+      snapshot.config.zcodeBuiltinModelRules,
+      personalModels,
+    );
+    const catalogSource = recommendedRules.getDiscoveredRule({
+      providerId: input.providerId,
+      modelId: input.modelId,
+      apiType: provider.config.api?.type,
+      baseUrl: provider.config.api?.baseUrl,
+    })?.catalogSource;
+    const capabilitySource = recommendedRules.capabilitySource(
+      {
+        providerId: input.providerId,
+        templateId: provider.templateId,
+        modelId: input.modelId,
+        apiType: provider.config.api?.type,
+        baseUrl: provider.config.api?.baseUrl,
+      },
+      isUcasLogicalModelAlias(input.providerId, input.modelId),
+    );
     if (!("personalConfig" in input)) {
       const modelRules = ModelConfigRules.composeEffective(
         snapshot.config.zcodeBuiltinModelRules,
-        snapshot.config.personalModels,
+        personalModels,
       );
       const config = modelRules.resolve({
         providerId: input.providerId,
@@ -264,7 +335,18 @@ export class ProviderSettingsFacade {
         baseUrl: provider.config.api?.baseUrl,
       });
       return Object.freeze({
-        inheritedConfig: config.toJSON(),
+        capabilitySource,
+        catalogSource,
+        unsupportedReason: getModelUnsupportedReason(config),
+        inheritedConfig: recommendedRules
+          .resolve({
+            providerId: input.providerId,
+            templateId: provider.templateId,
+            modelId: input.modelId,
+            apiType: provider.config.api?.type,
+            baseUrl: provider.config.api?.baseUrl,
+          })
+          .toJSON(),
         effectiveConfig: config.toJSON(),
         issues: Object.freeze([
           ...config.validateComplete(["providers", input.providerId, "models", input.modelId]),
@@ -273,14 +355,14 @@ export class ProviderSettingsFacade {
     }
 
     const personalConfig = parseModelConfig(input.personalConfig);
-    const inheritedConfig = snapshot.config.zcodeBuiltinModelRules.resolve({
+    const inheritedConfig = recommendedRules.resolve({
       providerId: input.providerId,
       templateId: provider.templateId,
       modelId: input.modelId,
       apiType: provider.config.api?.type,
       baseUrl: provider.config.api?.baseUrl,
     });
-    let personalRules = snapshot.config.personalModels;
+    let personalRules = personalModels;
     if (input.originalModelId !== input.modelId) {
       personalRules = personalRules.renameExactModel(
         input.providerId,
@@ -301,6 +383,9 @@ export class ProviderSettingsFacade {
       baseUrl: provider.config.api?.baseUrl,
     });
     return Object.freeze({
+      capabilitySource,
+      catalogSource,
+      unsupportedReason: getModelUnsupportedReason(config),
       inheritedConfig: inheritedConfig.toJSON(),
       effectiveConfig: config.toJSON(),
       issues: Object.freeze([
@@ -385,7 +470,7 @@ export class ProviderSettingsFacade {
 
   addDiscoveredModels(
     providerId: ProviderId,
-    modelIds: readonly ModelId[],
+    modelIds: readonly DiscoveredModelInput[],
     expectedRevision: number,
   ): Promise<ProviderSettingsView> {
     return this.#mutateProvider(providerId, "discover-models", (target) => {
@@ -688,6 +773,9 @@ function createProviderSettingsView(input: {
             modelId: model.modelId,
             builtin: model.source === "builtin",
             effectiveBuiltinConfig: model.effectiveBuiltinConfig.toJSON(),
+            capabilitySource: model.capabilitySource,
+            catalogSource: model.catalogSource,
+            unsupportedReason: model.unsupportedReason,
             ...(personalModelConfig ? { personalExactConfig: personalModelConfig.toJSON() } : {}),
             ...(personalModelRule
               ? { useRecommendedConfig: personalModelRule.type !== "manual-provider-model" }

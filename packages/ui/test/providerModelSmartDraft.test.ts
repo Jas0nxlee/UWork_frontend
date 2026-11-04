@@ -11,6 +11,53 @@ import {
 } from "@/settings/model-provider-section/ProviderModelDraftState.js";
 
 describe("Todo90/92 common model draft", () => {
+  it.each(["supportsImage", "supportsVideo", "supportsAudio", "supportsPdf"] as const)(
+    "手动修改 %s 持久化并重开保留，未修改输入能力仍跟随推荐",
+    (field) => {
+      const model = smartDraftModel();
+      const draft = createProviderModelDraftValues(model);
+      const value = !draft.inputFormatValue[field];
+      const edited = updateModelDraft(
+        draft,
+        {
+          inputFormatValue: { ...draft.inputFormatValue, [field]: value },
+        },
+        model,
+      );
+      const result = resolveProviderModelDraftCommit({ currentModel: model, draft: edited });
+      expect(result.status).toBe("commit");
+      if (result.status !== "commit") throw new Error("expected commit");
+      expect(result.model.personalConfig.properties?.inputFormat?.[field]).toBe(value);
+      expect(result.model.config.properties?.inputFormat?.[field]).toBe(value);
+      expect(createProviderModelDraftValues(result.model).inputFormatValue[field]).toBe(value);
+      for (const other of [
+        "supportsImage",
+        "supportsVideo",
+        "supportsAudio",
+        "supportsPdf",
+      ] as const) {
+        if (other !== field)
+          expect(result.model.personalConfig.properties?.inputFormat?.[other]).toBeUndefined();
+      }
+    },
+  );
+
+  it("固定模式完整保留显式音频能力，非聊天型号不伪造 Text", () => {
+    const model = smartDraftModel();
+    model.config.properties!.inputFormat!.supportsText = false;
+    const draft = updateModelDraft(
+      createProviderModelDraftValues(model),
+      { useRecommendedConfigValue: false },
+      model,
+    );
+    const result = resolveProviderModelDraftCommit({ currentModel: model, draft });
+    expect(result.status).toBe("commit");
+    if (result.status !== "commit") throw new Error("expected commit");
+    expect(result.model.config.properties?.inputFormat?.supportsText).toBe(false);
+    expect(result.model.personalConfig.properties?.inputFormat?.supportsText).toBeUndefined();
+    expect(result.model.personalConfig.properties?.inputFormat?.supportsAudio).toBe(true);
+  });
+
   it.each([true, false])("隐藏的 MFJS=%s 不参与编辑，已有覆盖在智能模式保持", (value) => {
     const model = smartDraftModel();
     model.personalConfig.properties = { requiresMfjsToolSchema: value };

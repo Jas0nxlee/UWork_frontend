@@ -1,10 +1,4 @@
-import {
-  EnumOptionSpecConfig,
-  ModelConfig,
-  ModelInputFormatConfig,
-  ModelOptionSpecsConfig,
-  ModelPropertiesConfig,
-} from "./config/model-config.js";
+import { ModelConfig } from "./config/model-config.js";
 
 export const UCAS_PROVIDER_ID = "ucas";
 export const UCAS_PROVIDER_TEMPLATE_ID = "ucas";
@@ -21,18 +15,11 @@ export const UCAS_DEFAULT_MODEL_IDS = Object.freeze([
   "ucas-gemini-flash",
 ]);
 
+export function isUcasLogicalModelAlias(providerId: string, modelId: string): boolean {
+  return providerId === UCAS_PROVIDER_ID && /^ucas-/i.test(modelId);
+}
+
 export function createUcasDefaultModelConfig(): ModelConfig {
-  return new ModelConfig({
-    enabled: true,
-    properties: new ModelPropertiesConfig({
-      contextWindow: 1_000_000,
-      inputFormat: new ModelInputFormatConfig({
-        supportsText: true,
-        supportsImage: true,
-      }),
-    }),
-    optionSpecs: new ModelOptionSpecsConfig({
-      reasoningLevel: new EnumOptionSpecConfig({ values: ["low", "high", "max"] }),
-    }),
-  });
+  // UCAS 别名不能证明后端型号能力；仅初始化启用，能力由网关元数据或型号规则提供。
+  return new ModelConfig({ enabled: true });
 }

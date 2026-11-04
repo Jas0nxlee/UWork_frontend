@@ -64,7 +64,11 @@ describe("NodeModelSelectionConfigRepository", () => {
       schemaVersion: 1,
       config: {
         providerConfigRules: { providerRules: [] },
-        modelConfigRules: { providerModelRules: [], manualProviderModelRules: [] },
+        modelConfigRules: {
+          providerModelRules: [],
+          manualProviderModelRules: [],
+          discoveredProviderModelRules: [],
+        },
         defaultModelSelection: { providerId: "provider-a", modelId: "model-a" },
       },
     });

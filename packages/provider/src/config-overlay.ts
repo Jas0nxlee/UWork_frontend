@@ -8,6 +8,7 @@ export interface ConfigValidationIssue {
     | "invalid-reasoning-mapping"
     | "invalid-pattern"
     | "invalid-url"
+    | "unsupported-model-output"
     | "missing-template";
   readonly path: readonly string[];
   readonly message: string;

@@ -1,5 +1,6 @@
 import type { UcasGatewayEndpoint, UcasGatewayUsageRequest, UcasGatewayView } from "@zcode/shared";
-import type { UcasGatewayClient } from "./ucasGatewayClient.js";
+import type { DiscoveredModelInput } from "@zcode/provider";
+import { UcasGatewayRequestError, type UcasGatewayClient } from "./ucasGatewayClient.js";
 
 /** 企业账号没有 Key 时生成的别名，沿用服务端长度限制。 */
 const GATEWAY_KEY_ALIAS = "UWork";
@@ -26,27 +27,59 @@ const ensureKey = async (
   const generated = await client.generateKey(GATEWAY_KEY_ALIAS);
   return { key: generated.key, apiKey: generated.apiKey, reused: false };
 };
-const readPlanModels = async (
+/** 目录失败与成功的 ID-only 是不同事实：失败只能补成员，不能清掉已确认能力。 */
+export const readUcasGatewayModelCatalog = async (
   client: UcasGatewayClient,
-  endpoint: UcasGatewayEndpoint,
-  apiKey: string,
-): Promise<{ ids: readonly string[]; unrestricted: boolean; hasSubscription: boolean }> => {
-  const plan = await client.readPlanModels();
-  if (plan.models.length > 0) {
-    return {
-      ids: plan.models,
-      unrestricted: plan.unrestricted,
-      hasSubscription: plan.hasSubscription,
-    };
+  baseUrl: string,
+  apiKey: string | undefined,
+  modelIds?: readonly string[],
+): Promise<{
+  ids: readonly string[];
+  models: readonly DiscoveredModelInput[];
+  error: unknown;
+}> => {
+  let catalog: readonly DiscoveredModelInput[] = [];
+  let error: unknown = apiKey ? null : new UcasGatewayRequestError("invalid");
+  // 套餐接口只说明可见性；能力从同一端点的协议目录读取，不按逻辑别名猜测。
+  if (apiKey) {
+    try {
+      catalog = await client.listEndpointModels(baseUrl, apiKey);
+    } catch (failure) {
+      // 错误能力整包拒绝；网络/旧网关不支持目录时保留既有能力并显示错误。
+      if (failure instanceof UcasGatewayRequestError && failure.kind === "invalid") throw failure;
+      error = failure;
+    }
   }
-  // 套餐不限模型时回退到协议级 `/models`；读取失败不阻断 Key 与端点配置。
-  try {
-    const ids = await client.listEndpointModels(endpoint.baseUrl, apiKey);
-    return { ids, unrestricted: plan.unrestricted, hasSubscription: plan.hasSubscription };
-  } catch {
-    return { ids: [], unrestricted: plan.unrestricted, hasSubscription: plan.hasSubscription };
-  }
+  const byId = new Map(
+    catalog.map((model) => [typeof model === "string" ? model : model.id, model]),
+  );
+  const ids = modelIds ?? [...byId.keys()];
+  return {
+    ids,
+    models: ids.map((id) => byId.get(id) ?? { id, preserveCapabilities: true }),
+    error,
+  };
 };
+
+/** 模型应用只读取既有 Key，不走账号同步的 list/generate 与端点发现。 */
+export async function readUcasGatewayModelsForApplication(
+  client: UcasGatewayClient,
+  baseUrl: string,
+  modelIds: readonly string[],
+  keyId?: string,
+) {
+  let apiKey: string | undefined;
+  let keyError: unknown;
+  if (keyId) {
+    try {
+      apiKey = await client.revealKey(keyId);
+    } catch (error) {
+      keyError = error;
+    }
+  }
+  const catalog = await readUcasGatewayModelCatalog(client, baseUrl, apiKey, modelIds);
+  return { ...catalog, error: keyError ?? catalog.error };
+}
 
 /** 仅收集 API 数据；身份 admission、本机写入与视图提交由 Gateway Service 唯一持有。 */
 export async function readUcasGatewayProvisioningData(
@@ -55,7 +88,18 @@ export async function readUcasGatewayProvisioningData(
 ) {
   const keyInfo = await ensureKey(client);
   const endpoint = resolveEndpoint(await client.readGatewayEndpoints());
-  const plan = await readPlanModels(client, endpoint, keyInfo.apiKey);
+  const subscription = await client.readPlanModels();
+  const catalog = await readUcasGatewayModelCatalog(
+    client,
+    endpoint.baseUrl,
+    keyInfo.apiKey,
+    subscription.models.length ? subscription.models : undefined,
+  );
+  const plan = {
+    ...catalog,
+    unrestricted: subscription.unrestricted,
+    hasSubscription: subscription.hasSubscription,
+  };
   const subscriptions = [...(await client.readSubscriptions().catch(() => []))];
   const usage = await client.readUsage(usageRequest).catch(() => null);
   return { keyInfo, endpoint, plan, subscriptions, usage };

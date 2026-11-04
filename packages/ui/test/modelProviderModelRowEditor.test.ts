@@ -171,6 +171,43 @@ function createModelProviderModelConfig(input: {
   };
 }
 
+describe("non-chat model metadata", () => {
+  it.each([undefined, 200_000])(
+    "非聊天型号禁止连接测试，不显示缺失或兼容容量：%s",
+    (contextWindow) => {
+      const base = createModelProviderModelConfig({ id: "image-only-model" });
+      const model = {
+        ...base,
+        unsupportedReason: "non-chat-model" as const,
+        executable: false,
+        selectable: false,
+        config: {
+          ...base.config,
+          properties: {
+            ...base.config.properties,
+            contextWindow,
+            outputFormat: { supportsText: false },
+          },
+        },
+      };
+      const onTest = vi.fn();
+      const { container } = renderWithProviderFeedback(
+        createElement(ModelRowInput, {
+          providerId: "provider-demo",
+          model,
+          onCommit: vi.fn(),
+          onTest,
+        }),
+      );
+      const button = container.querySelector<HTMLButtonElement>("button:has(svg.lucide-unplug)");
+      expect(button?.disabled).toBe(true);
+      fireEvent.click(button!);
+      expect(onTest).not.toHaveBeenCalled();
+      expect(container.querySelector('[aria-label^="上下文窗口："]')).toBeNull();
+    },
+  );
+});
+
 function createProvider(
   overrides: Partial<ProviderSettingsFormProvider> = {},
 ): ProviderSettingsFormProvider {

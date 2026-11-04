@@ -40,6 +40,246 @@ const complete = {
 };
 
 describe("ModelConfigRules", () => {
+  it("网关按字段优先于models.dev，刷新网关保持目录，明确无匹配只清目录", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const source = {
+      source: "models.dev" as const,
+      providerId: "openai",
+      modelId: "m",
+      fetchedAt: 123,
+      stale: false,
+    };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 64_000, inputFormat: { supportsImage: true } },
+      }),
+      scope,
+      { config: parseModelConfig({ properties: { contextWindow: 128_000 } }), source },
+    );
+    let effective = ModelConfigRules.composeEffective(builtin, personal);
+    expect(effective.resolve(input).properties).toMatchObject({
+      contextWindow: 64_000,
+      inputFormat: { supportsImage: true },
+    });
+    expect(effective.capabilitySource(input)).toBe("gateway");
+    personal = personal.setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 256_000 } }),
+      scope,
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(256_000);
+    const roundTrip = parsePersonalModelConfigRules(personal.toPersonalJSON());
+    expect(roundTrip.getDiscoveredRule(input)?.catalogSource).toEqual(source);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 32_000 } }),
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(32_000);
+    personal = personal
+      .deleteExact("p", "m")
+      .setDiscovered("p", "m", personal.getDiscovered(input)!, scope, null);
+    effective = ModelConfigRules.composeEffective(builtin, personal);
+    expect(effective.resolve(input).properties?.contextWindow).toBe(256_000);
+    expect(effective.capabilitySource(input)).toBe("gateway");
+  });
+
+  it("稀疏网关只覆盖明确字段，其余继承目录再内置，个人覆盖仍最高", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 64_000, inputFormat: { supportsImage: false } },
+        optionSpecs: {
+          reasoningLevel: { values: ["high"], map: '{"reasoning_effort": reasoningLevel}' },
+        },
+      }),
+      scope,
+      {
+        config: parseModelConfig({
+          properties: {
+            contextWindow: 128_000,
+            inputFormat: { supportsImage: true, supportsAudio: true },
+          },
+          optionSpecs: {
+            reasoningLevel: { values: ["low", "high", "xhigh"] },
+            maxOutputTokens: { max: 4096 },
+          },
+        }),
+        source: {
+          source: "models.dev",
+          providerId: "example",
+          modelId: "m",
+          fetchedAt: 123,
+          stale: false,
+        },
+      },
+    );
+    let resolved = ModelConfigRules.composeEffective(builtin, personal).resolve(input);
+    expect(resolved.properties).toMatchObject({
+      contextWindow: 64_000,
+      inputFormat: { supportsImage: false, supportsAudio: true, supportsVideo: false },
+    });
+    expect(resolved.optionSpecs?.reasoningLevel?.values).toEqual(["high"]);
+    expect(resolved.optionSpecs?.maxOutputTokens?.max).toBe(4096);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({
+        properties: { contextWindow: 32_000, inputFormat: { supportsAudio: false } },
+      }),
+    );
+    resolved = ModelConfigRules.composeEffective(builtin, personal).resolve(input);
+    expect(resolved.properties).toMatchObject({
+      contextWindow: 32_000,
+      inputFormat: { supportsAudio: false },
+    });
+  });
+
+  it("UCAS逻辑别名可用明确模板映射，仍不把宽泛型号词匹配当作确认", () => {
+    const rules = new ModelConfigRules([
+      {
+        type: "model",
+        modelMatch: ".*deepseek.*",
+        config: parseModelConfig({ properties: { contextWindow: 64_000 } }),
+      },
+      {
+        type: "template-model",
+        templateId: "ucas",
+        modelId: "ucas-deepseek-flash",
+        config: parseModelConfig({ properties: { contextWindow: 128_000 } }),
+      },
+    ]);
+    expect(
+      rules.capabilitySource(
+        { providerId: "ucas", templateId: "ucas", modelId: "ucas-deepseek-flash" },
+        true,
+      ),
+    ).toBe("builtin");
+    expect(
+      rules.capabilitySource(
+        { providerId: "ucas", templateId: "ucas", modelId: "ucas-deepseek-unknown" },
+        true,
+      ),
+    ).toBe("unknown");
+  });
+
+  it("目录禁用推理不发送effort，明确effort仅为空映射补协议而保留复杂型号映射", () => {
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    const input = { providerId: "p", modelId: "m", ...scope };
+    const source = {
+      source: "models.dev" as const,
+      providerId: "openai",
+      modelId: "m",
+      fetchedAt: 123,
+      stale: false,
+    };
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    let personal = ModelConfigRules.empty().setDiscovered("p", "m", parseModelConfig({}), scope, {
+      config: parseModelConfig({ optionSpecs: { reasoningLevel: { values: ["low", "high"] } } }),
+      source,
+    });
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).optionSpecs
+        ?.reasoningLevel?.map,
+    ).toBe('{"reasoning_effort": reasoningLevel}');
+    const complex = builtin.rules().map((rule) => ({
+      ...rule,
+      config: rule.config.overlay(
+        parseModelConfig({
+          optionSpecs: { reasoningLevel: { map: '{"thinking":{"effort":reasoningLevel}}' } },
+        }),
+      ),
+    }));
+    expect(
+      ModelConfigRules.composeEffective(new ModelConfigRules(complex), personal).resolve(input)
+        .optionSpecs?.reasoningLevel?.map,
+    ).toBe('{"thinking":{"effort":reasoningLevel}}');
+    personal = personal.setDiscovered("p", "m", parseModelConfig({}), scope, {
+      config: parseModelConfig({ optionSpecs: { reasoningLevel: { values: ["disabled"] } } }),
+      source,
+    });
+    expect(
+      ModelConfigRules.composeEffective(new ModelConfigRules(complex), personal).resolve(input)
+        .optionSpecs?.reasoningLevel?.map,
+    ).toBe("{}");
+  });
+
+  it("网关能力按连接隔离，刷新只替换自动层，个人覆盖始终优先", () => {
+    const builtin = parseZCodeBuiltinModelConfigRules({
+      ...emptyBuiltin,
+      modelRules: [{ modelMatch: ".*", config: complete }],
+    });
+    const scope = { apiType: "openai-chat-completions", baseUrl: "https://gateway.example/v1" };
+    let personal = ModelConfigRules.empty().setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 400_000 } }),
+      scope,
+    );
+    const input = { providerId: "p", modelId: "m", ...scope };
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(400_000);
+    personal = personal.setExact(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 64_000 } }),
+    );
+    personal = personal.setDiscovered(
+      "p",
+      "m",
+      parseModelConfig({ properties: { contextWindow: 800_000 } }),
+      scope,
+    );
+    expect(
+      ModelConfigRules.composeEffective(builtin, personal).resolve(input).properties?.contextWindow,
+    ).toBe(64_000);
+    const automatic = personal.deleteExact("p", "m");
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve(input).properties
+        ?.contextWindow,
+    ).toBe(800_000);
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve({
+        ...input,
+        baseUrl: "https://other.example/v1",
+      }).properties?.contextWindow,
+    ).toBe(128_000);
+    expect(
+      ModelConfigRules.composeEffective(builtin, automatic).resolve({
+        ...input,
+        apiType: "openai-responses",
+      }).properties?.contextWindow,
+    ).toBe(128_000);
+    const decoded = parsePersonalModelConfigRules(automatic.toPersonalJSON());
+    expect(
+      ModelConfigRules.composeEffective(builtin, decoded).resolve(input).properties?.contextWindow,
+    ).toBe(800_000);
+    expect(automatic.renameExactModel("p", "m", "renamed").getDiscovered(input)).toBeUndefined();
+  });
+
   it("Todo90：固定配置不从推荐补缺；enabled 仍独立继承", () => {
     const rules = new ModelConfigRules([
       {

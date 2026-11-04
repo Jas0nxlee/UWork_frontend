@@ -11,6 +11,9 @@ import {
   type ApiKeyAccessConfig,
   ModelConfig,
   ModelConfigRules,
+  type ModelCapabilitySource,
+  type ModelCatalogSource,
+  type ModelUnsupportedReason,
   type ZhipuAccountAccessConfig,
   type ModelId,
   type ProviderConfig,
@@ -21,6 +24,7 @@ import {
 } from "./config/index.js";
 import { resolveOwnedOrder } from "./owned-order.js";
 import type { AccountProviderStates } from "./account-provider-state.js";
+import { isUcasLogicalModelAlias } from "./ucas-defaults.js";
 
 export type RegistryZhipuAccountAccessConfig = ZhipuAccountAccessConfig &
   z.infer<typeof completeZhipuAccountAccessDataSchema>;
@@ -119,10 +123,23 @@ export function createRegistryModelConfig(
   config: ModelConfig,
   path: readonly string[] = ["model"],
 ): RegistryConfigResult<RegistryModelConfig> {
-  const issues = config.validateComplete(path);
+  const issues = [...config.validateComplete(path)];
+  if (getModelUnsupportedReason(config))
+    issues.push({
+      code: "unsupported-model-output",
+      path: [...path, "properties"],
+      message: "该模型不支持文本输入或文本输出，不适用于当前聊天入口",
+    });
   return issues.length > 0
     ? { ok: false, issues: Object.freeze([...issues]) }
     : { ok: true, config: config as RegistryModelConfig };
+}
+
+export function getModelUnsupportedReason(config: ModelConfig): ModelUnsupportedReason | undefined {
+  return config.properties?.inputFormat?.supportsText === false ||
+    config.properties?.outputFormat?.supportsText === false
+    ? "non-chat-model"
+    : undefined;
 }
 
 export interface ProviderConfigResolverInput {
@@ -142,6 +159,9 @@ export interface ResolvedProviderModelCandidate {
   readonly source: "builtin" | "personal";
   readonly config: ModelConfig;
   readonly effectiveBuiltinConfig: ModelConfig;
+  readonly capabilitySource?: ModelCapabilitySource;
+  readonly catalogSource?: ModelCatalogSource;
+  readonly unsupportedReason?: ModelUnsupportedReason;
   readonly issues: readonly ConfigValidationIssue[];
   readonly enabled: boolean;
   readonly executable: boolean;
@@ -210,6 +230,10 @@ export class ProviderConfigResolver {
       input.zcodeBuiltinModelRules,
       input.personalModels,
     );
+    const recommendedModelRules = ModelConfigRules.composeRecommended(
+      input.zcodeBuiltinModelRules,
+      input.personalModels,
+    );
     const issues: ConfigValidationIssue[] = [];
     const resolvedProviders: ResolvedProvider[] = [];
     const registryProviders: Provider[] = [];
@@ -261,13 +285,14 @@ export class ProviderConfigResolver {
           apiType: config.api?.type,
           baseUrl: config.api?.baseUrl,
         });
-        const effectiveBuiltinConfig = input.zcodeBuiltinModelRules.resolve({
+        const resolutionInput = {
           providerId,
           templateId,
           modelId,
           apiType: config.api?.type,
           baseUrl: config.api?.baseUrl,
-        });
+        };
+        const effectiveBuiltinConfig = recommendedModelRules.resolve(resolutionInput);
         const registryModelResult = createRegistryModelConfig(modelConfig, [
           ...providerPath,
           "models",
@@ -284,6 +309,12 @@ export class ProviderConfigResolver {
           source: builtinIds.has(modelId) ? "builtin" : "personal",
           config: modelConfig,
           effectiveBuiltinConfig,
+          capabilitySource: recommendedModelRules.capabilitySource(
+            resolutionInput,
+            isUcasLogicalModelAlias(providerId, modelId),
+          ),
+          catalogSource: recommendedModelRules.getDiscoveredRule(resolutionInput)?.catalogSource,
+          unsupportedReason: getModelUnsupportedReason(modelConfig),
           issues: Object.freeze(modelIssues),
           enabled: modelEnabled,
           executable,

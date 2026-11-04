@@ -135,7 +135,7 @@ export function ModelRowInput({
   }, [commitDraft]);
 
   const handleTest = useCallback(async () => {
-    if (!onTest || isTesting || !providerEnabled) {
+    if (!onTest || isTesting || !providerEnabled || model.unsupportedReason === "non-chat-model") {
       return;
     }
 
@@ -216,6 +216,7 @@ export function ModelRowInput({
     providerId,
     providerName,
     providerEnabled,
+    model.unsupportedReason,
     showFeedback,
   ]);
 
@@ -232,14 +233,21 @@ export function ModelRowInput({
         })
       : null);
   const shouldShowTestButton = Boolean(onTest);
-  const testDisabled = !providerEnabled || isTesting || !draft.idValue.trim() || !onTest;
-  const contextWindowLabel = formatModelContextWindowLabel(
-    model.config.properties?.contextWindow ?? 0,
-    locale,
-  );
+  const testDisabled =
+    !providerEnabled ||
+    isTesting ||
+    !draft.idValue.trim() ||
+    !onTest ||
+    model.unsupportedReason === "non-chat-model";
+  const contextWindow = model.config.properties?.contextWindow;
+  // 目录允许没有聊天容量的型号存在；缺失值不应伪装成真实的 0 Token 上限。
+  const contextWindowLabel =
+    model.unsupportedReason !== "non-chat-model" && contextWindow != null && contextWindow > 0
+      ? formatModelContextWindowLabel(contextWindow, locale)
+      : null;
   const contextWindowAccessibleLabel = intl.formatMessage(
     { id: "settings.modelProvider.contextWindowBadgeLabel" },
-    { value: contextWindowLabel },
+    { value: contextWindowLabel ?? "" },
   );
 
   return (
@@ -252,13 +260,15 @@ export function ModelRowInput({
           >
             {model.modelId}
           </span>
-          <span
-            className="inline-flex h-5 max-w-20 shrink-0 items-center truncate rounded-md border border-border bg-surface px-1.5 font-mono text-ui-sm text-foreground-subtle"
-            aria-label={contextWindowAccessibleLabel}
-            title={contextWindowAccessibleLabel}
-          >
-            {contextWindowLabel}
-          </span>
+          {contextWindowLabel ? (
+            <span
+              className="inline-flex h-5 max-w-20 shrink-0 items-center truncate rounded-md border border-border bg-surface px-1.5 font-mono text-ui-sm text-foreground-subtle"
+              aria-label={contextWindowAccessibleLabel}
+              title={contextWindowAccessibleLabel}
+            >
+              {contextWindowLabel}
+            </span>
+          ) : null}
           {shouldShowModelVisionBadge(
             model.modelId,
             model.config.properties?.inputFormat?.supportsImage,
@@ -275,9 +285,12 @@ export function ModelRowInput({
             className="shrink-0 p-0"
             disabled={testDisabled}
             title={intl.formatMessage({
-              id: providerEnabled
-                ? "settings.modelProvider.testModel"
-                : "settings.modelProvider.testModel.enableProviderFirst",
+              id:
+                model.unsupportedReason === "non-chat-model"
+                  ? "settings.modelProvider.nonChatModel"
+                  : providerEnabled
+                    ? "settings.modelProvider.testModel"
+                    : "settings.modelProvider.testModel.enableProviderFirst",
             })}
             onMouseDown={(event) => {
               event.preventDefault();
@@ -304,6 +317,9 @@ export function ModelRowInput({
           draftErrorField={draftErrorField}
           overrideFields={editor.overrides}
           inheritedConfig={editor.inheritedConfig}
+          capabilitySource={editor.capabilitySource}
+          catalogSource={editor.catalogSource}
+          unsupportedReason={editor.unsupportedReason}
           onOpenChange={handleMetadataDialogOpenChange}
           onDraftChange={updateDraft}
           onCommit={handleMetadataDialogCommit}

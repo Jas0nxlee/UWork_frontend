@@ -196,7 +196,8 @@ export function ModelsSection({
           <Button
             type="button"
             size="sm"
-            disabled={gateway.busy || models.pendingCount === 0}
+            // 成员已经添加也可能有新的能力参数，不能用待新增数量阻断自动能力刷新。
+            disabled={gateway.busy || models.available.length === 0}
             onClick={() => void gateway.applyModels()}
             data-testid="ucas-gateway-apply-models"
           >

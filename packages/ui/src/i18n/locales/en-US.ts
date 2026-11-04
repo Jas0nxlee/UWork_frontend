@@ -3329,13 +3329,16 @@ const enUS: Record<string, string> = {
   "settings.dataBaseDirBrowse": "Choose folder",
   "settings.dataBaseDirSave": "Save",
   "settings.dataBaseDirCopying": "Saving the migration request…",
-  "settings.dataBaseDirCopyFailed": "The migration request was not saved. The active directory is unchanged.",
+  "settings.dataBaseDirCopyFailed":
+    "The migration request was not saved. The active directory is unchanged.",
   "settings.dataBaseDirForbiddenInstallDir":
     "The data directory cannot be the UWork installation folder on Windows. Choose a folder outside the app install location.",
   "settings.dataBaseDirRestartRequired": "Migration scheduled. Restart the app to move your data.",
   "settings.dataBaseDirPendingTarget": "Active: {active}; destination after restart: {target}",
-  "settings.dataBaseDirMigrationCancelled": "The pending migration was cancelled. The active directory is unchanged.",
-  "settings.dataBaseDirInfoUnavailable": "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
+  "settings.dataBaseDirMigrationCancelled":
+    "The pending migration was cancelled. The active directory is unchanged.",
+  "settings.dataBaseDirInfoUnavailable":
+    "The default data directory is unavailable. Reset is disabled; you can still choose an explicit directory for validation.",
   "settings.locale.system": "System default",
   "settings.locale.zh-CN": "中文简体",
   "settings.locale.en-US": "English",
@@ -4420,7 +4423,7 @@ const enUS: Record<string, string> = {
   "settings.modelProvider.help.maxOutputTokens":
     "The maximum number of tokens a single model request may generate.\nDo not exceed the model's actual limit.",
   "settings.modelProvider.help.inputModalities":
-    "Set the content types the model can receive:\n\n- **Text**: Receives text content. Required.\n- **Images**: Receives image content.\n- **Video**: Receives video content.\n- **PDF**: Receives PDF documents directly.",
+    "Set the content types the model can receive:\n\n- **Text**: Receives text content. A read-only capability flag.\n- **Images**: Receives image content.\n- **Audio**: Marks model audio input support; this client does not yet support audio attachments.\n- **Video**: Receives video content.\n- **PDF**: Receives PDF documents directly.",
   "settings.modelProvider.help.outputModalities":
     "The content type of the model's replies. Only text is currently supported.",
   "settings.modelProvider.help.capabilities":
@@ -4435,6 +4438,24 @@ const enUS: Record<string, string> = {
     "Matches recommended configuration using the model ID, Base URL, and API format. UWork continually updates recommendations and automatically syncs them to you.\nWhen you manually change a setting, that setting becomes manually managed and stops following recommendation updates; other settings remain managed by smart configuration.",
   "settings.modelProvider.modelDefaultsLoaded": "Smart configuration matched for this model",
   "settings.modelProvider.modelConfigIncomplete": "Model configuration is incomplete",
+  "settings.modelProvider.capabilitySource.catalog":
+    "Capabilities recommended by the models.dev catalog. Gateway metadata and manual settings take priority. Missing values use built-in configuration.",
+  "settings.modelProvider.capabilitySource.gateway":
+    "Capabilities from the gateway. Missing values use the models.dev catalog first, then built-in configuration. Manual settings take priority.",
+  "settings.modelProvider.capabilitySource.builtin":
+    "Capabilities from built-in model recommendations. Gateway limits may differ. Manual settings take priority.",
+  "settings.modelProvider.capabilitySource.unknown": "Model capabilities unconfirmed",
+  "settings.modelProvider.capabilityUnconfirmed":
+    "Neither the gateway nor models.dev provided usable capability metadata. Using built-in default configuration, which you can override manually. These compatibility defaults do not confirm the model’s actual context, input types, or reasoning levels; check the provider specifications.",
+  "settings.modelProvider.capabilitySourceLabel.catalog": "models.dev catalog recommendations",
+  "settings.modelProvider.nonChatModel": "This model is not suitable for chat",
+  "settings.modelProvider.audioInputNotice":
+    "Audio is a model capability flag. This client does not yet support audio attachments.",
+  "settings.modelProvider.catalogFetchedAt": "Catalog fetched: {time}",
+  "settings.modelProvider.catalogStale": "Using the cached catalog. It will update when online.",
+  "settings.modelProvider.capabilitySourceLabel.gateway": "Gateway capabilities",
+  "settings.modelProvider.capabilitySourceLabel.builtin": "Built-in model recommendations",
+  "settings.modelProvider.capabilitySourceLabel.unknown": "Model capabilities unconfirmed",
   "settings.modelProvider.models": "Model list",
   "settings.modelProvider.modelsEmpty": "No models are configured. Add a model to use it in chat.",
   "settings.modelProvider.addModel": "Add model",
@@ -8485,9 +8506,9 @@ const enUS: Record<string, string> = {
   "settings.usage.gateway.models.unrestricted": "Unrestricted",
   "settings.usage.gateway.models.empty": "The plan returned no model list.",
   "settings.usage.gateway.models.hint":
-    "Sync only appends missing models and keeps existing settings.",
+    "Add missing models and refresh automatic capabilities while preserving manual settings.",
   "settings.usage.gateway.models.refresh": "Reload",
-  "settings.usage.gateway.models.apply": "Add to model list",
+  "settings.usage.gateway.models.apply": "Apply models and capabilities",
   "settings.plugins.store.subtitle":
     "Extend UWork with skills, commands, and MCP servers from plugins",
   "settings.plugins.store.segment.company": "Company",
