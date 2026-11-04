@@ -13,6 +13,14 @@ PR #8 的 GitHub Actions run `41763837430` 与 PR #9 的 run `41803555736` 均�
 - 同步实际安装图的第三方 notices/inventory；保留既有补丁、安装脚本允许列表和审计范围。
 - 保留 CI 的 `pnpm audit --prod --audit-level=high` 门槛，不忽略公告、不降低严重级别、不跳过检查。
 
+## 合并后的复制资源登记
+
+PR #8 的 Share 构建通过 `packages/web-share/vite.config.ts` 的 `publicDir` 复用受版本控制的 `packages/web/public`，不再持有 `packages/web-share/public` 副本。合入 PR #9 后，`third-party/copied-components.json` 与生成 inventory 仍引用旧副本路径，导致没有本地图标镜像的检出执行 `node scripts/licenses.mjs check` 时出现 `ENOENT`。CI 的临时 fixture 测试与仅复制声明正文的打包路径不执行仓库 inventory 输入核验，不能据此认定该路径有效。
+
+复制资源来源由 `third-party/copied-components.json` 唯一登记，notices 和 inventory 通过既有生成器派生；Material Icon Theme 只登记真实受版本控制的 Desktop、Web 图标根。Share 继续消费 Web 资源，不新增镜像、生成步骤或准入例外。
+
+验收：在没有 `packages/web-share/public` 的检出中，Material Icon Theme 的每个登记根均包含受版本控制且可读取的资源；重新生成 notices/inventory 后执行 `node scripts/licenses.mjs check` 与 `readVerifiedNotices` 成功，inventory 不再含旧 Share 图标路径。保留既有 36 项材料核验限制与全部 CI 门槛。
+
 ## 回归与验收
 
 复用现有两 origin 的 loopback 重定向测试，增加 `node:vm` 创建的真实跨 realm `sensitiveHeaders` 数组：分别验证对象头与数组头的自定义凭据在目标 origin 缺失，非敏感 `X-Public` 仍被转发。旧版本应失败，修复版应通过；不向第三方发送请求或真实凭据。
