@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { parse as parseYaml } from "yaml";
 import { resolvePackagedDesktopExecutable } from "../../packages/desktop/scripts/packaged-desktop-executable.mjs";
 import { resolveDesktopProductIdentity } from "../../packages/desktop/scripts/desktop-product-identity.mjs";
 import {
@@ -16,6 +17,38 @@ import {
 
 const version = "3.14.4";
 const sha = "a".repeat(40);
+test("each release job prepares Electron serially before parallel tests and native consumers", async () => {
+  const workflow = parseYaml(
+    await readFile(new URL("../../.github/workflows/desktop-release.yml", import.meta.url), "utf8"),
+  );
+  for (const name of ["checks", "build"]) {
+    const { steps } = workflow.jobs[name];
+    const dependencies = steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile");
+    const ready = steps.findIndex((step) => step.run === "node node_modules/electron/install.js");
+    assert.ok(dependencies >= 0, `${name} must retain its frozen dependency install`);
+    // Electron 无 postinstall，多个 worker 首次 import 会竞争解压；只允许安装就绪后并行消费。
+    assert.equal(ready, dependencies + 1, `${name} must finish Electron installation first`);
+    assert.equal(
+      steps[ready].if,
+      undefined,
+      `${name} cannot conditionally skip Electron readiness`,
+    );
+    assert.ok(
+      [undefined, false].includes(steps[ready]["continue-on-error"]),
+      `${name} must fail on install errors`,
+    );
+    const consumers = steps.flatMap((step, index) =>
+      /vitest|(?:node|tsx)\s+--test|test:unit:node|native-enterprise-login-smoke|scripts\/bundle\.mjs|build-desktop-agent-cli/.test(
+        step.run ?? "",
+      )
+        ? [index]
+        : [],
+    );
+    assert.ok(consumers.length > 0, `${name} must retain its real runtime consumers`);
+    for (const index of consumers)
+      assert.ok(ready < index, `${name}: ${steps[index].name} ran before Electron readiness`);
+  }
+});
 test("packaged upgrade evidence survives the hidden artifact directory", async () => {
   const workflow = await readFile(
     new URL("../../.github/workflows/desktop-release.yml", import.meta.url),

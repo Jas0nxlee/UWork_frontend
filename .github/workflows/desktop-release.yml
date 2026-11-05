@@ -40,6 +40,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm install --frozen-lockfile
+      # 当前 Electron 无 postinstall；并行 worker 首次导入会竞争解压同一 dist，先串行准备。
+      - name: Prepare Electron binary before runtime consumers
+        run: node node_modules/electron/install.js
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm architecture:check
@@ -172,6 +175,8 @@ jobs:
         if: matrix.platform == 'linux'
         run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools zstd libfuse2t64 xvfb
       - run: pnpm install --frozen-lockfile
+      - name: Prepare Electron binary before runtime consumers
+        run: node node_modules/electron/install.js
       - name: Stage default public WeCom configuration
         env:
           UWORK_ENTERPRISE_IDENTITY_CONFIG: ${{ secrets.UWORK_ENTERPRISE_IDENTITY_CONFIG }}

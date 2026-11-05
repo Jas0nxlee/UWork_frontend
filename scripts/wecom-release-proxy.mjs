@@ -13,6 +13,25 @@ const execFile = promisify(execFileCallback);
 const gunzip = promisify(gunzipCallback);
 const PROXY_URL = "http://127.0.0.1:17890";
 const VERSION = "v1.19.33";
+const PROBE_NETWORK_CODES = [
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "CERT_HAS_EXPIRED",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+];
 const ARCHIVES = {
   "linux-x64": [
     "linux-amd64-compatible",
@@ -161,32 +180,105 @@ async function waitForProxy(child, signal) {
   throw new Error("微盘代理未能开启本地入口");
 }
 
-async function probeEgress(env, _child, signal) {
+function decodeProbeResult(raw) {
+  const invalid = () => new Error("代理探测响应无效；停止同步，不回退直连");
+  if (typeof raw !== "string" || Buffer.byteLength(raw) > 4096) throw invalid();
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw invalid();
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw invalid();
+  const keysAre = (...keys) =>
+    Object.keys(data).length === keys.length && keys.every((key) => Object.hasOwn(data, key));
+  if (data.ok === true) {
+    if (
+      !keysAre("ok", "ip") ||
+      typeof data.ip !== "string" ||
+      data.ip.length > 45 ||
+      data.ip.includes("%") ||
+      !isIP(data.ip)
+    )
+      throw invalid();
+  } else {
+    if (data.ok !== false || !["ip-query", "wecom-api"].includes(data.stage)) throw invalid();
+    if (data.kind === "http") {
+      if (
+        !keysAre("ok", "stage", "kind", "status") ||
+        !Number.isInteger(data.status) ||
+        data.status < 100 ||
+        data.status > 599
+      )
+        throw invalid();
+    } else if (data.kind === "network") {
+      if (
+        !keysAre("ok", "stage", "kind") &&
+        !(keysAre("ok", "stage", "kind", "code") && PROBE_NETWORK_CODES.includes(data.code))
+      )
+        throw invalid();
+    } else if (
+      !["timeout", "invalid-response"].includes(data.kind) ||
+      !keysAre("ok", "stage", "kind")
+    )
+      throw invalid();
+  }
+  return data;
+}
+
+export async function probeEgress(env, _child, signal, { execute = execFile } = {}) {
   // 只读探测先于凭据调用。使用新 Node 进程，使内置 fetch 在启动时载入代理设置。
+  // 原实现合并了两个阶段的异常且直接解析 stdout；固定分类可定位边界，严格解码避免外露原始错误。
   const source = `
     import { isIP } from 'node:net';
+    const networkCodes = new Set(${JSON.stringify(PROBE_NETWORK_CODES)});
+    let stage = 'ip-query';
+    let result;
+    const invalid = () => Object.assign(new Error(), {invalidResponse:true});
+    async function json(url) {
+      const signal = AbortSignal.timeout(20000);
+      try {
+        const response = await fetch(url, {signal,redirect:'error'});
+        if (!response.ok) throw Object.assign(new Error(), {httpStatus:response.status});
+        return await response.json();
+      } catch (error) {
+        if (signal.aborted && signal.reason?.name === 'TimeoutError') throw signal.reason;
+        if (error instanceof SyntaxError) throw invalid();
+        throw error;
+      }
+    }
     try {
-      const ipResponse = await fetch('https://api.ipify.org?format=json', {signal:AbortSignal.timeout(20000),redirect:'error'});
-      if (!ipResponse.ok) throw new Error();
-      const {ip} = await ipResponse.json();
-      if (!isIP(ip)) throw new Error();
-      const response = await fetch('https://qyapi.weixin.qq.com/cgi-bin/gettoken', {signal:AbortSignal.timeout(20000),redirect:'error'});
-      if (!response.ok || !Number.isInteger((await response.json()).errcode)) throw new Error();
-      process.stdout.write(JSON.stringify({ip}));
-    } catch { process.exitCode=1; }
+      const ip = (await json('https://api.ipify.org?format=json'))?.ip;
+      if (typeof ip !== 'string' || ip.length > 45 || ip.includes('%') || !isIP(ip)) throw invalid();
+      stage = 'wecom-api';
+      if (!Number.isInteger((await json('https://qyapi.weixin.qq.com/cgi-bin/gettoken'))?.errcode)) throw invalid();
+      result = {ok:true,ip};
+    } catch (error) {
+      const code = error?.cause?.code ?? error?.code;
+      result = {ok:false,stage,kind:'network'};
+      if (error?.httpStatus) result = {ok:false,stage,kind:'http',status:error.httpStatus};
+      else if (error?.invalidResponse) result.kind = 'invalid-response';
+      else if (error?.name === 'TimeoutError') result.kind = 'timeout';
+      else if (networkCodes.has(code)) result.code = code;
+    }
+    process.stdout.write(JSON.stringify(result));
   `;
   let result;
   try {
-    result = await execFile(
+    result = await execute(
       process.execPath,
       ["--use-env-proxy", "--input-type=module", "-e", source],
       { env, signal, timeout: 45_000, maxBuffer: 4096 },
     );
   } catch {
-    throw new Error("固定代理出口或企业微信连通性检查失败；停止同步，不回退直连");
+    throw new Error("固定代理探测进程失败；停止同步，不回退直连");
   }
-  const data = JSON.parse(result.stdout);
-  if (!isIP(data.ip)) throw new Error("代理出口响应无效");
+  const data = decodeProbeResult(result?.stdout);
+  if (!data.ok) {
+    const detail =
+      data.kind === "http" ? `http=${data.status}` : data.code ? `code=${data.code}` : data.kind;
+    throw new Error(`固定代理探测失败（stage=${data.stage}，${detail}）；停止同步，不回退直连`);
+  }
   console.log(`固定代理出口已验证：${data.ip}；企业微信 API 连通`);
 }
 
