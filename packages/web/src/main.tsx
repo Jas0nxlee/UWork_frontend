@@ -1153,6 +1153,9 @@ async function bootstrapExternalRelayWebRemoteControl(
 ): Promise<void> {
   if (connection.signal.aborted) return;
   const { params: relayParams, getToken } = connection;
+  const hasEnterpriseAdmission =
+    connection.protocol === "hmac-v1" &&
+    Boolean(relayParams.enterpriseAuth && relayParams.enterpriseOrg);
   // 修复原因：自建 HMAC 构建必须显式配置 relay，不能把配对密钥送往默认官方 V2 服务。
   if (
     connection.protocol === "hmac-v1" &&
@@ -1640,13 +1643,11 @@ async function bootstrapExternalRelayWebRemoteControl(
   };
 
   const requestBootstrap = async (): Promise<WebRemoteControlWindowBootstrapResult> => {
-    // 企业准入校验是异步的，桌面端在校验通过前会丢弃 bootstrap-request（上游安全用例锁死了这个语义）。
-    // 因此这里超时后**换一个新的 requestId 重试**：校验通过后的新请求可正常接收，既不削弱准入，也不必让用户等满
-    // 10 秒看到"桌面端响应超时"再重连（实测：2026-11-04 手机侧就是这么卡住的）。
+    // 企业身份校验在途时桌面会丢弃 bootstrap；只能在同一配对内重发只读请求。
+    // paired 状态下 recoverConnection 会重建 socket 并撤销该终端的准入，不能靠重配对等待校验。
+    const attempts = hasEnterpriseAdmission ? 4 : 1;
     let lastError: unknown;
-    // 3 秒一轮：企业准入是异步的，第一轮可能正好落在"闸门还没开"的窗口里被桌面丢弃；
-    // 短超时 + 快速重试能在闸门打开后立刻接上（旧实现首轮等满 10 秒，用户就是卡在这 5–10 秒）。
-    for (let attempt = 1; attempt <= 4; attempt += 1) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
       const requestId = createWebRemoteControlRequestId("bootstrap");
       try {
         const response = await requestAppPayload(
@@ -1655,14 +1656,20 @@ async function bootstrapExternalRelayWebRemoteControl(
             payload,
           ): payload is Extract<WebRemoteControlAppPayload, { zcode_type: "bootstrap-response" }> =>
             payload.zcode_type === "bootstrap-response" && payload.requestId === requestId,
-          { timeoutMs: 3_000 },
+          hasEnterpriseAdmission ? { timeoutMs: 3_000 } : undefined,
         );
         return response.result;
       } catch (error) {
         lastError = error;
-        if (terminated || versionGuard.isBlocked() || terminalTransportState !== "paired")
+        const failure = error as Partial<WebRemoteControlFailure> | undefined;
+        if (
+          !hasEnterpriseAdmission ||
+          failure?.reason !== "desktop-bootstrap-timeout" ||
+          terminated ||
+          versionGuard.isBlocked() ||
+          terminalTransportState !== "paired"
+        )
           throw error;
-        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
       }
     }
     throw lastError;
@@ -1684,11 +1691,12 @@ async function bootstrapExternalRelayWebRemoteControl(
       }
       return result;
     };
-    const request = requestWithRelayRecovery(readCurrentVersion, { recoverTimeout: true }).finally(
-      () => {
-        if (pendingVersionCheck === request) pendingVersionCheck = undefined;
-      },
-    );
+    // 企业准入读取已在同一配对内消耗有界预算；纯超时不能再重复整组并重置刚通过的准入。
+    const request = requestWithRelayRecovery(readCurrentVersion, {
+      recoverTimeout: !hasEnterpriseAdmission,
+    }).finally(() => {
+      if (pendingVersionCheck === request) pendingVersionCheck = undefined;
+    });
     pendingVersionCheck = request;
     return request;
   };

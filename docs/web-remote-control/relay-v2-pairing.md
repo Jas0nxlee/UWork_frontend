@@ -280,6 +280,20 @@ E1 迟到响应/错误 → generation 不匹配 → 忽略（版本导航开关�
 
 回归同时覆盖版本导航开启和关闭：并发合并、断连后旧成功/旧错误、当前错误，以及重配对后查看 epoch 只接受当前代。
 
+#### 企业准入窗口内的 bootstrap 读取
+
+企业 HMAC 的身份 HTTP 校验与 relay 配对不是同一事件；Main 在校验前丢弃 bootstrap，不排队。手机在同一 paired generation 内最多读取 4 次，每次 3 秒，超时后直接换 requestId 重发；不增加 sleep、传输恢复状态或业务缓存。12 秒内仍无回应则按原错误视图结束，不再由外层 timeout 恢复重复整组。`relay-unavailable` 立即交给既有 relay recovery owner；鉴权/协议拒绝不作为准入超时重试。
+
+普通 HMAC 和显式 OAuth V2 没有这道企业准入窗口，保持既有单次 10 秒请求与外层最多一次恢复，20 秒无回应时终止。HMAC 的正常 paired 超时调用 `recoverConnection` 会重建 socket，从而撤销旧 terminal_sid 的企业准入，因此企业 admission 的短暂等待只能重发同 socket 的只读 bootstrap，不能用反复重配对代替校验完成。
+
+```text
+企业 HMAC: paired E1 → 身份帧 → bootstrap #1 被 pending gate 丢弃
+Main 校验完成（保持 E1）→ bootstrap #2/#3/#4 读取 → 接受当前 epoch
+4 次纯超时 → 终止（零 timeout 触发的 socket 重建）
+链路不可用 → 既有 relay recovery owner → 新 generation 仍由 guard 丢弃旧结果
+```
+
+
 
 ### 浏览器 HTTP 取消兼容
 

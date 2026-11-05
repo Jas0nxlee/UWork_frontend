@@ -385,14 +385,8 @@ describe("UWork HMAC 双端真实 loopback 配对", () => {
 
 describe("手机远控的企业身份准入（方案 A）", () => {
   it("二维码带组织与准入基址；校验通过前丢弃其它 payload，通过后才放行", async () => {
-    const refresh = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        token: "phone-token-2",
-        user: { id: "user-1", org_id: "org-a", wecom_userid: "wx-1", name: "张三" },
-      }),
-    }));
+    const identityResponse = Promise.withResolvers<Response>();
+    const refresh = vi.fn(async (_url: string) => identityResponse.promise);
     vi.stubGlobal("fetch", refresh);
     cleanups.push(() => vi.unstubAllGlobals());
     const f = await fixture({
@@ -412,13 +406,16 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     expect(params.enterpriseAuth).toBe("https://pivot.example.com");
 
     const received: WebRemoteControlAppPayload[] = [];
+    const paired = vi.fn();
     const terminal = new WebRemoteControlHmacTerminalTransport({
       relayWsUrl: f.relay.wsUrl,
       deviceSid: params.deviceSid,
       passHash: params.passHash,
       authProvider: createBrowserWebRemoteControlRelayAuthProvider(),
       WebSocketCtor: WebSocket as unknown as typeof globalThis.WebSocket,
-      onStateChange: () => {},
+      onStateChange: (state) => {
+        if (state === "paired") paired();
+      },
       onFailure: vi.fn(),
       onError: vi.fn(),
       reloadPage: vi.fn(),
@@ -429,16 +426,28 @@ describe("手机远控的企业身份准入（方案 A）", () => {
     await vi.waitFor(() => expect(received.length).toBeGreaterThanOrEqual(0));
     await vi.waitFor(() => expect(f.manager.getStatus(1).mobileConnected).toBe(true));
 
-    // 校验前：bootstrap-request 必须被丢弃（桌面不回应，也不排队）。
+    // 首轮按手机真实顺序先发身份、立即 bootstrap；HTTP 校验在途时必须丢弃请求且不排队。
+    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
     terminal.sendPayload({ zcode_type: "bootstrap-request", requestId: "req-1" });
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(received.filter((payload) => payload.zcode_type === "bootstrap-response")).toHaveLength(
       0,
     );
 
-    // 带上身份后：桌面向 control-plane 校验一次，随后放行。
-    terminal.sendPayload({ zcode_type: "enterprise-identity", token: "phone-token" });
-    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    // 只完成一次在途校验，不调用 recoverConnection 或重新配对；下一次同 socket 读取才能收到响应。
+    identityResponse.resolve(
+      new Response(
+        JSON.stringify({
+          token: "phone-token-2",
+          user: { id: "user-1", org_id: "org-a", wecom_userid: "wx-1", name: "张三" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(received.some((p) => p.zcode_type === "mobile-task-view-request")).toBe(true),
+    );
     expect(String(refresh.mock.calls[0]?.[0])).toBe("https://pivot.example.com/api/auth/refresh");
     await vi.waitFor(() =>
       expect(
@@ -451,6 +460,11 @@ describe("手机远控的企业身份准入（方案 A）", () => {
         received.filter((payload) => payload.zcode_type === "bootstrap-response"),
       ).toHaveLength(1),
     );
+    expect(paired).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(received.filter((p) => p.zcode_type === "bootstrap-response")).toEqual([
+      expect.objectContaining({ requestId: "req-2" }),
+    ]);
   });
 
   it("backend=uwork 且登录在 pivot 时：身份证校验打 pivot，设备登记仍打自建后台", async () => {

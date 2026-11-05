@@ -88,7 +88,7 @@ describe("Web OAuth callback entry", () => {
     it.each(["authCode=bigmodel-code", "code=zai-code", "error=access_denied"])(
       `默认 HMAC ${path} 不消费官方 OAuth 回调：%s`,
       async (result) => {
-        const fetchMock = vi.fn();
+        const fetchMock = vi.fn(async () => new Response("not found", { status: 404 }));
         vi.stubGlobal("fetch", fetchMock);
         const { WebAuthService } = await import("@web/auth/webAuthService.js");
         const startLogin = vi.spyOn(WebAuthService.prototype, "startLogin");
@@ -97,7 +97,11 @@ describe("Web OAuth callback entry", () => {
         expect(document.body.textContent).not.toContain("Finishing Sign-In");
         expect(handleCallback).not.toHaveBeenCalled();
         expect(startLogin).not.toHaveBeenCalled();
-        expect(fetchMock).not.toHaveBeenCalled();
+        // 企业干净入口允许固定同源的公开能力探测；它不能消费或转发官方 OAuth 参数。
+        expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+          new URL("/api/auth/wecom/web-config", window.location.origin),
+          { method: "GET", credentials: "omit", redirect: "error" },
+        );
       },
     );
   }
