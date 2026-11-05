@@ -151,7 +151,7 @@ jobs:
           version="${RELEASE_TAG#v}"
           changelog_file="docs/releases/${version}-changelog.txt"
           if [[ -f "$changelog_file" ]]; then
-            cp "$changelog_file" "$RUNNER_TEMP/wecom-release-assets/"
+            cp "$changelog_file" "$RUNNER_TEMP/wecom-release-assets/更新日志-${RELEASE_TAG}.txt"
             echo "已复制更新日志: $changelog_file"
           else
             echo "警告: 更新日志文件不存在: $changelog_file"
