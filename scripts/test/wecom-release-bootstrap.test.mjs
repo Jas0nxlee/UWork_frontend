@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, privateDecrypt, constants, createDecipheriv } from "node:crypto";
 import test from "node:test";
-import { bootstrapWecomSpace, resolveBootstrapConfig } from "../wecom-release-bootstrap.mjs";
+import {
+  bootstrapWecomSpace,
+  encryptWecomTarget,
+  resolveBootstrapConfig,
+  validateWecomTargetPublicKey,
+} from "../wecom-release-bootstrap.mjs";
 import { createWecomClient } from "../wecom-release-client.mjs";
 
 const { publicKey, privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -20,6 +25,54 @@ function decryptHandoff(handoff) {
     Buffer.concat([decipher.update(Buffer.from(envelope.ciphertext, "base64")), decipher.final()]),
   );
 }
+
+test("复用目标加密保留 version 1 合同，独立目录往返且交接不含明文标识", () => {
+  const target = {
+    space: "synthetic-private-space",
+    folder: "synthetic-private-folder",
+    name: "UWork 发布包/发布包",
+  };
+  const encrypted = encryptWecomTarget(target, key);
+  const serialized = Buffer.from(encrypted, "base64").toString("utf8");
+  const envelope = JSON.parse(serialized);
+  assert.deepEqual(Object.keys(envelope).sort(), [
+    "ciphertext",
+    "iv",
+    "tag",
+    "version",
+    "wrappedKey",
+  ]);
+  assert.equal(envelope.version, 1);
+  assert.equal(Buffer.from(envelope.wrappedKey, "base64").length, 256);
+  assert.equal(Buffer.from(envelope.iv, "base64").length, 12);
+  assert.equal(Buffer.from(envelope.tag, "base64").length, 16);
+  assert.deepEqual(decryptHandoff(encrypted), target);
+  for (const value of Object.values(target)) assert.ok(!serialized.includes(value));
+  const repeated = encryptWecomTarget(target, key);
+  assert.notEqual(repeated, encrypted);
+  assert.deepEqual(decryptHandoff(repeated), target);
+});
+
+test("公钥校验和独立加密均拒绝无效 PEM、弱 RSA 和其它算法", () => {
+  const weak = generateKeyPairSync("rsa", { modulusLength: 1024 }).publicKey;
+  const other = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).publicKey;
+  for (const invalid of [
+    "invalid-private-value",
+    weak.export({ type: "spki", format: "pem" }).toString(),
+    other.export({ type: "spki", format: "pem" }).toString(),
+  ]) {
+    for (const operation of [
+      () => validateWecomTargetPublicKey(invalid),
+      () => encryptWecomTarget({ space: "private-space", folder: "private-folder" }, invalid),
+    ])
+      assert.throws(operation, (error) => {
+        assert.match(error.message, /公钥/);
+        assert.doesNotMatch(error.message, /private-|BEGIN PUBLIC KEY/);
+        return true;
+      });
+  }
+  assert.equal(validateWecomTargetPublicKey(key).asymmetricKeyDetails.modulusLength, 2048);
+});
 
 function fixture({
   members = [admin],

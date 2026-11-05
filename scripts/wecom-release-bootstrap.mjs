@@ -16,7 +16,7 @@ import {
 
 const SPACE_NAME = "UWork 发布包";
 
-function checkedKey(value) {
+export function validateWecomTargetPublicKey(value) {
   let key;
   try {
     key = createPublicKey(value);
@@ -26,6 +26,31 @@ function checkedKey(value) {
   if (key.asymmetricKeyType !== "rsa" || key.asymmetricKeyDetails?.modulusLength < 2048)
     throw new Error("初始化交接公钥必须是至少 2048 位的 RSA 公钥");
   return key;
+}
+
+export function encryptWecomTarget(target, publicKeyPem) {
+  const key = validateWecomTargetPublicKey(publicKeyPem);
+  const symmetric = randomBytes(32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", symmetric, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(Buffer.from(JSON.stringify(target))),
+    cipher.final(),
+  ]);
+  // 只用 RSA 封装随机密钥，避免把不透明标识长度误当作 RSA 明文长度约束。
+  const wrappedKey = publicEncrypt(
+    { key, oaepHash: "sha256", padding: constants.RSA_PKCS1_OAEP_PADDING },
+    symmetric,
+  );
+  return Buffer.from(
+    JSON.stringify({
+      version: 1,
+      wrappedKey: wrappedKey.toString("base64"),
+      iv: iv.toString("base64"),
+      tag: cipher.getAuthTag().toString("base64"),
+      ciphertext: ciphertext.toString("base64"),
+    }),
+  ).toString("base64");
 }
 
 export function resolveBootstrapConfig(env) {
@@ -38,7 +63,7 @@ export function resolveBootstrapConfig(env) {
   ];
   if (required.some((key) => !env[key]?.trim())) throw new Error("缺少应用空间初始化配置");
   const publicKey = Buffer.from(env.WECOM_BOOTSTRAP_PUBLIC_KEY, "base64").toString("utf8");
-  checkedKey(publicKey);
+  validateWecomTargetPublicKey(publicKey);
   return {
     corpId: env.WECOM_CORP_ID.trim(),
     secret: env.WECOM_SECRET.trim(),
@@ -92,7 +117,7 @@ export async function bootstrapWecomSpace({
   client = createWecomClient({ config }),
   saveHandoff,
 }) {
-  const key = checkedKey(config.publicKey);
+  validateWecomTargetPublicKey(config.publicKey);
   if (typeof saveHandoff !== "function") throw new Error("缺少加密配置交接通道");
   const user = await findAdministrator(client, config.adminName);
   let space;
@@ -122,27 +147,10 @@ export async function bootstrapWecomSpace({
       throw new Error("应用空间创建响应无效，停止并核查，禁止盲目重新创建");
     space = created.spaceid;
   }
-  const symmetric = randomBytes(32);
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", symmetric, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(Buffer.from(JSON.stringify({ space, folder: space, name: SPACE_NAME }))),
-    cipher.final(),
-  ]);
-  // 只用 RSA 封装随机密钥，避免把不透明标识长度误当作 RSA 明文长度约束。
-  const wrappedKey = publicEncrypt(
-    { key, oaepHash: "sha256", padding: constants.RSA_PKCS1_OAEP_PADDING },
-    symmetric,
+  const encrypted = encryptWecomTarget(
+    { space, folder: space, name: SPACE_NAME },
+    config.publicKey,
   );
-  const encrypted = Buffer.from(
-    JSON.stringify({
-      version: 1,
-      wrappedKey: wrappedKey.toString("base64"),
-      iv: iv.toString("base64"),
-      tag: cipher.getAuthTag().toString("base64"),
-      ciphertext: ciphertext.toString("base64"),
-    }),
-  ).toString("base64");
   await saveHandoff(encrypted);
   const { space_info: info } = await client.request("new_space_info", { spaceid: space });
   if (info?.spaceid !== space || info.space_name !== SPACE_NAME)
