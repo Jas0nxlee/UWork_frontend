@@ -29,6 +29,7 @@ const TOKEN_CODES = new Set([40001, 40014, 42001]);
 const REPLAYABLE = new Set([
   "file_list",
   "file_info",
+  "file_share",
   "file_upload_part",
   "new_space_info",
   "agent_list",
@@ -120,7 +121,7 @@ export function createWecomClient({
   return {
     async request(operation, body) {
       if (
-        !/^(file_list|file_info|file_create|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list|agent_get|tag_get|user_simplelist|user_get|space_create)$/.test(
+        !/^(file_list|file_info|file_create|file_move|file_delete|file_share|file_upload_init|file_upload_part|file_upload_finish|new_space_info|agent_list|agent_get|tag_get|user_simplelist|user_get|space_create)$/.test(
           operation,
         )
       )

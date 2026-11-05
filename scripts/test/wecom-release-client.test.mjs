@@ -75,8 +75,14 @@ test("重试耗尽必须失败；认证和权限失败不做临时错误重试",
   }
 });
 
-test("写入结果不明不会盲目重试目录创建、初始化或完成提交", async () => {
-  for (const operation of ["file_create", "file_upload_init", "file_upload_finish"]) {
+test("写入结果不明不会盲目重试目录创建、移动、删除、初始化或完成提交", async () => {
+  for (const operation of [
+    "file_create",
+    "file_move",
+    "file_delete",
+    "file_upload_init",
+    "file_upload_finish",
+  ]) {
     let calls = 0;
     const client = createWecomClient({
       config,
@@ -90,6 +96,30 @@ test("写入结果不明不会盲目重试目录创建、初始化或完成提�
     await assert.rejects(client.request(operation, {}), /网络异常/);
     assert.equal(calls, 1);
   }
+});
+
+test("分享只通过固定 file_share 获取链接，可只读重试且不能设置 ACL", async () => {
+  let calls = 0;
+  const sleeps = [];
+  const body = { fileid: "synthetic-target-folder" };
+  const shareUrl = "https://share.example.invalid/synthetic-link";
+  const client = createWecomClient({
+    config,
+    sleepImpl: async (delay) => sleeps.push(delay),
+    fetchImpl: async (url, options) => {
+      if (url.pathname.endsWith("gettoken")) return issued();
+      calls++;
+      assert.equal(url.pathname, "/cgi-bin/wedrive/file_share");
+      assert.equal(options.method, "POST");
+      assert.deepEqual(JSON.parse(options.body), body);
+      return calls === 1 ? response({}, 503) : response({ share_url: shareUrl });
+    },
+  });
+  assert.equal((await client.request("file_share", body)).share_url, shareUrl);
+  assert.equal(calls, 2);
+  assert.deepEqual(sleeps, [1000]);
+  await assert.rejects(client.request("file_setting", body), /不支持/);
+  assert.equal(calls, 2);
 });
 
 test("token 只缓存于进程，失效刷新一次后继续原操作", async () => {

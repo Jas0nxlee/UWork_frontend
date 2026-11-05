@@ -1,50 +1,65 @@
-name: Prepare one-time WeCom release target directory
-
+name: Plan or apply bounded WeCom release relocation
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        type: choice
+        options: [plan, apply]
+        default: plan
+        required: true
+      expected_plan_digest:
+        type: string
+        required: false
+      source_sync_verified:
+        description: Confirm the old automatic v0.1.8 sync completed successfully
+        type: boolean
+        default: false
       public_key:
-        description: Base64 PEM RSA public key for encrypted target handoff
         type: string
         required: true
-
 permissions:
   contents: read
-
 concurrency:
   group: wecom-release-sync
   cancel-in-progress: false
-
 jobs:
-  prepare:
-    if: github.ref == 'refs/heads/codex/wecom-target-directory-20261105'
+  relocate:
+    if: github.ref == 'refs/heads/codex/wecom-release-relocate-20261105'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - name: Validate the bounded target preparation contract
-        run: node --test scripts/test/wecom-target-directory.test.mjs scripts/test/wecom-release-bootstrap.test.mjs scripts/test/wecom-release-client.test.mjs scripts/test/wecom-release-proxy.test.mjs
-      - name: Prepare the existing space child directory and safe inventory
+      - name: Validate bounded relocation contracts
+        run: node --test scripts/test/wecom-release-relocate.test.mjs scripts/test/wecom-release-bootstrap.test.mjs scripts/test/wecom-release-client.test.mjs scripts/test/wecom-release-proxy.test.mjs
+      - name: Read the fixed published release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.1.8" > "$RUNNER_TEMP/wecom-relocate-release.json"
+      - name: Plan or apply only the approved release relocation
         env:
           WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
           WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
           WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
           WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
           WECOM_TARGET_PUBLIC_KEY: ${{ inputs.public_key }}
-          TARGET_HANDOFF: ${{ runner.temp }}/wecom-target-encrypted.json
-          TARGET_REPORT: ${{ runner.temp }}/wecom-target-inventory.json
-        run: node scripts/wecom-target-directory.mjs
-      - name: Preserve the encrypted target and safe inventory
+          MODE: ${{ inputs.mode }}
+          EXPECTED_PLAN_DIGEST: ${{ inputs.expected_plan_digest }}
+          SOURCE_SYNC_VERIFIED: ${{ inputs.source_sync_verified }}
+          RELEASE_JSON: ${{ runner.temp }}/wecom-relocate-release.json
+          TARGET_HANDOFF: ${{ runner.temp }}/wecom-relocate-encrypted.json
+          TARGET_REPORT: ${{ runner.temp }}/wecom-relocate-report.json
+        run: node scripts/wecom-release-relocate-cli.mjs
+      - name: Preserve safe progress and encrypted target
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wecom-target-directory-${{ github.run_id }}
+          name: wecom-release-relocate-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/wecom-target-encrypted.json
-            ${{ runner.temp }}/wecom-target-inventory.json
+            ${{ runner.temp }}/wecom-relocate-encrypted.json
+            ${{ runner.temp }}/wecom-relocate-report.json
           if-no-files-found: ignore
           retention-days: 1

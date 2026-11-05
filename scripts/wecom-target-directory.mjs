@@ -39,7 +39,7 @@ export function resolveTargetDirectoryConfig(env) {
   return { corpId: env.WECOM_CORP_ID.trim(), secret: env.WECOM_SECRET.trim(), space, publicKey };
 }
 
-async function listDirectory(client, space, folder) {
+export async function listDirectory(client, space, folder) {
   const files = [];
   const identifiers = new Set();
   let start = 0;
@@ -78,7 +78,7 @@ async function listDirectory(client, space, folder) {
   throw new Error("目标目录分页未完成");
 }
 
-function uniqueTarget(files) {
+export function uniqueTarget(files) {
   const matches = files.filter((file) => file.file_name === FOLDER_NAME);
   if (matches.length > 1 || (matches[0] && matches[0].file_type !== 1))
     throw new Error("目标目录同名或类型冲突");
@@ -160,11 +160,16 @@ export async function prepareWecomTargetDirectory({ config, client, saveHandoff 
   }
 }
 
-async function runChild(env, signal) {
+export async function runChild(
+  env,
+  signal,
+  scriptUrl = import.meta.url,
+  childFlag = "--target-directory-child",
+) {
   return new Promise((resolveCode, reject) => {
     const child = spawn(
       process.execPath,
-      ["--use-env-proxy", fileURLToPath(import.meta.url), "--target-directory-child"],
+      ["--use-env-proxy", fileURLToPath(scriptUrl), childFlag],
       { env, signal, stdio: "inherit" },
     );
     child.once("error", () => reject(new Error("目标目录子进程失败")));
