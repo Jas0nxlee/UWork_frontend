@@ -72,3 +72,24 @@ jobs:
             for (const result of results) console.log(JSON.stringify(result));
           }});
           JS
+      - name: Inspect configured app using the isolated candidate
+        env:
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CANDIDATE }}
+          WECOM_INSPECT_ONLY: "true"
+          WECOM_BOOTSTRAP_SPACE: "false"
+          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
+          WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
+          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
+          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
+          RELEASE_TAG: v0.1.7
+          ASSET_DIR: ${{ runner.temp }}/candidate-readonly
+          SYNC_REPORT: ${{ runner.temp }}/candidate-readonly-report.json
+        run: node scripts/wecom-release-proxy.mjs
+      - name: Preserve only the safe read-only permission report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: candidate-readonly-permission-report
+          path: ${{ runner.temp }}/candidate-readonly-report.json
+          if-no-files-found: ignore
+          retention-days: 1
