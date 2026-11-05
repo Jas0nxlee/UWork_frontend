@@ -419,10 +419,8 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
       "../../../zcode-cua-plugin",
     ],
     requiredSeedPaths: OFFICIAL_CUA_REQUIRED_SEED_PATHS,
-    // Bug 根因：迁移 node_repl 时把旧 MCP launcher 与 SDK 仍需的 Sharp runtime 一并裁掉了。
-    // Dev/desktop 只在真实 producer 可用时暂存 Sharp，正式包还暂存 Koffi。
-    // 只沿这些已暂存根的生产依赖收集，避免触碰开发依赖中的 dataless 文件而阻塞 CLI 首发。
-    runtimeDependencyRoots: ["sharp", "koffi"],
+    // 当前 SDK producer 不再声明 Sharp/Koffi，打包器也不再暂存它们。
+    // 升级遗留的空 native 目录不是运行依赖；继续读取旧清单会以 ENOENT 阻塞草稿创建。
     // 这里的 version 追踪上游 zcode-cua runtime 版本，使插件 UI 展示、缓存路径、
     // marketplace 条目都对齐；具体版本由原子 producer bump 工作流维护。
     version: "0.6.5",
