@@ -54,6 +54,15 @@ test("下载和上传共用全部架构安装包选择器且下载有重试", as
   assert.doesNotMatch(workflow, /--pattern ['"]\*['"]/);
 });
 
+test("更新说明从发布文档交接到同步脚本读取的附件目录", async () => {
+  const workflow = await read(".github/workflows/wecom-release-sync.yml");
+  assert.match(workflow, /changelog_file="docs\/releases\/\$\{version\}-changelog\.txt"/);
+  assert.match(
+    workflow,
+    /cp "\$changelog_file" "\$RUNNER_TEMP\/wecom-release-assets\/更新日志-\$\{RELEASE_TAG\}\.txt"/,
+  );
+});
+
 test("固定代理配置只从 Secret 注入，上传前先探测出口，凭据不写入 workflow", async () => {
   const workflow = await read(".github/workflows/wecom-release-sync.yml");
   assert.equal(

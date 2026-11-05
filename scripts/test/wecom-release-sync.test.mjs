@@ -174,6 +174,45 @@ test("完整四平台八包上传、分页核对与重跑零重复", async (t) =
   assert.ok(!report.includes("upload-"));
 });
 
+test("附件目录内的更新说明复用分块校验并可幂等补传", async (t) => {
+  const f = await fixture(t);
+  const name = `更新日志-${env.RELEASE_TAG}.txt`;
+  const content = Buffer.alloc(BLOCK_SIZE + 1, 97);
+  await writeFile(join(f.dir, name), content);
+  const client = disk();
+  const result = await syncWecomRelease({ ...f, client, log() {} });
+  const remote = [...client.files.values()].find((file) => file.file_name === name);
+  assert.ok(remote, "更新说明必须上传到同一版本目录");
+  assert.equal(remote.file_size, content.length);
+  assert.equal(remote.sha, sha("sha1", content));
+  assert.equal(result.changelog.action, "uploaded");
+  const upload = [...client.uploads.values()].find((item) => item.file_name === name);
+  assert.equal(upload.parts.size, 2);
+  assert.equal(upload.parts.get(1).length, BLOCK_SIZE);
+  const writes = client.writes;
+  const replay = await syncWecomRelease({ ...f, client, log() {} });
+  assert.equal(replay.changelog.action, "skipped");
+  assert.equal(client.writes, writes);
+  remote.sha = "0".repeat(40);
+  await assert.rejects(syncWecomRelease({ ...f, client, log() {} }), /校验/);
+  assert.equal(JSON.parse(await readFile(f.env.SYNC_REPORT, "utf8")).status, "failed");
+});
+
+test("更新说明上传失败不能被吞掉并报告成功", async (t) => {
+  const f = await fixture(t);
+  const name = `更新日志-${env.RELEASE_TAG}.txt`;
+  await writeFile(join(f.dir, name), "release notes");
+  const client = disk();
+  const request = client.request;
+  client.request = async (operation, payload) => {
+    if (operation === "file_upload_init" && payload.file_name === name)
+      throw new Error("changelog upload failed");
+    return request(operation, payload);
+  };
+  await assert.rejects(syncWecomRelease({ ...f, client, log() {} }), /changelog upload failed/);
+  assert.equal(JSON.parse(await readFile(f.env.SYNC_REPORT, "utf8")).status, "failed");
+});
+
 test("草稿、缺包、重复包和损坏附件在任何写入前失败", async (t) => {
   const f = await fixture(t);
   const client = disk();

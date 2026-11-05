@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { selectWecomReleaseAssets, validateLocalAssets } from "./release-installer-assets.mjs";
@@ -138,62 +138,19 @@ async function uploadFile(client, config, folder, asset, hashes) {
   return fileid;
 }
 
-async function uploadChangelog(client, config, folder, changelogPath, log) {
+async function prepareChangelog(config) {
+  // workflow 已把说明放入附件目录；旧路径错误且另写上传流程会绕过分块和回读合同。
+  const name = `更新日志-${config.tag}.txt`;
+  const path = join(config.assetDir, name);
+  let info;
   try {
-    const changelogContent = await readFile(changelogPath, "utf-8");
-    const changelogName = `更新日志-${config.tag}.txt`;
-    const buffer = Buffer.from(changelogContent, "utf-8");
-    const hashes = await blockDigests(buffer);
-    const sha1 = hashes.at(-1);
-    
-    // 检查是否已存在
-    const actual = await listFiles(client, config, folder);
-    const existing = named(actual, changelogName, 3);
-    if (existing) {
-      log(`更新日志 ${changelogName} 已存在，跳过上传`);
-      return existing.fileid;
-    }
-    
-    // 上传更新日志
-    const init = await client.request("file_upload_init", {
-      spaceid: config.space,
-      fatherid: folder,
-      file_name: changelogName,
-      size: buffer.length,
-      block_sha: hashes,
-      skip_push_card: true,
-    });
-    
-    let fileid;
-    if (init.hit_exist === true) {
-      fileid = init.fileid;
-    } else {
-      if (init.hit_exist !== false || typeof init.upload_key !== "string" || !init.upload_key)
-        throw new Error("微盘上传初始化响应无效");
-      
-      // 分块上传
-      let index = 0;
-      const BLOCK_SIZE = 512 * 1024;
-      for (let offset = 0; offset < buffer.length; offset += BLOCK_SIZE) {
-        const block = buffer.subarray(offset, Math.min(offset + BLOCK_SIZE, buffer.length));
-        await client.request("file_upload_part", {
-          upload_key: init.upload_key,
-          index: ++index,
-          file_base64_content: block.toString("base64"),
-        });
-      }
-      
-      const finish = await client.request("file_upload_finish", { upload_key: init.upload_key });
-      fileid = finish.fileid;
-    }
-    
-    if (typeof fileid !== "string" || !fileid) throw new Error("微盘上传未返回文件凭证");
-    log(`更新日志 ${changelogName} 上传成功`);
-    return fileid;
+    info = await stat(path);
   } catch (error) {
-    log(`警告：更新日志上传失败 - ${error.message}`);
-    return undefined;
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
   }
+  if (!info.isFile() || info.size <= 0) throw new Error("微盘更新说明必须是非空文件");
+  return { asset: { name, size: info.size }, hashes: await blockDigests(path) };
 }
 
 export async function syncWecomRelease({
@@ -215,6 +172,7 @@ export async function syncWecomRelease({
     const hashes = new Map();
     for (const asset of selected.assets)
       hashes.set(asset.name, await blockDigests(join(config.assetDir, asset.name)));
+    const changelog = await prepareChangelog(config);
     client ??= createWecomClient({ config });
     const folder = await ensureFolder(client, config);
     for (const asset of selected.assets) {
@@ -230,20 +188,35 @@ export async function syncWecomRelease({
       report.files.push(file);
       log(`微盘安装包已校验：${asset.name}（${existing ? "已存在，跳过" : "已上传"}）`);
     }
-    
-    // 上传更新日志文本文件
-    const changelogPath = join(config.assetDir, "..", "docs", "releases", `${config.tag.replace(/^v/, "")}-changelog.txt`);
-    try {
-      await uploadChangelog(client, config, folder, changelogPath, log);
-    } catch (error) {
-      log(`警告：更新日志处理失败 - ${error.message}`);
+    if (changelog) {
+      const { asset, hashes: blocks } = changelog;
+      const existing = await findVerified(client, config, folder, asset, blocks.at(-1));
+      if (!existing) await uploadFile(client, config, folder, asset, blocks);
+      report.changelog = {
+        name: asset.name,
+        size: asset.size,
+        sha1: blocks.at(-1),
+        action: existing ? "skipped" : "uploaded",
+      };
+      log(`微盘更新说明已校验：${asset.name}（${existing ? "已存在，跳过" : "已上传"}）`);
     }
-    
     const actual = await listFiles(client, config, folder);
     for (const asset of selected.assets) {
       const file = named(actual, asset.name, 2);
       if (!file) throw new Error(`微盘最终检查缺少安装包：${asset.name}`);
       await verifyFile(client, config, folder, asset, hashes.get(asset.name).at(-1), file.fileid);
+    }
+    if (changelog) {
+      const file = named(actual, changelog.asset.name, 2);
+      if (!file) throw new Error("微盘最终检查缺少更新说明");
+      await verifyFile(
+        client,
+        config,
+        folder,
+        changelog.asset,
+        changelog.hashes.at(-1),
+        file.fileid,
+      );
     }
     report.status = "success";
     log(`微盘 ${config.tag} 的 ${selected.assets.length} 个安装包同步完成`);
