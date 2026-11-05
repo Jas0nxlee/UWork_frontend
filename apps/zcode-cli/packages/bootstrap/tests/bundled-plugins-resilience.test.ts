@@ -148,6 +148,7 @@ const ANDROID_MANIFEST_SUFFIX = join(ANDROID_CACHE_SUFFIX, ".zcode-plugin", "plu
 const CUA_DEFINITION = OFFICIAL_PLUGIN_DEFINITIONS.find(({ name }) => name === "computer-use");
 if (!CUA_DEFINITION) throw new Error("computer-use official plugin definition is missing");
 const CUA_CACHE_SUFFIX = join(OFFICIAL_CACHE_ROOT, CUA_DEFINITION.name, CUA_DEFINITION.version);
+const ORIGINAL_CUA_RUNTIME_ROOTS = CUA_DEFINITION.runtimeDependencyRoots;
 
 describe("bundled official plugin cache resilience", () => {
   const cleanups: string[] = [];
@@ -155,6 +156,8 @@ describe("bundled official plugin cache resilience", () => {
 
   afterEach(async () => {
     process.argv[1] = originalEntrypoint;
+    if (ORIGINAL_CUA_RUNTIME_ROOTS === undefined) delete CUA_DEFINITION.runtimeDependencyRoots;
+    else CUA_DEFINITION.runtimeDependencyRoots = ORIGINAL_CUA_RUNTIME_ROOTS;
     faults.moveTargetSuffix = undefined;
     faults.promoteCurrentTargetSuffix = undefined;
     faults.promoteTargetSuffix = undefined;
@@ -170,7 +173,7 @@ describe("bundled official plugin cache resilience", () => {
   });
 
   it("seeds only the declared Sharp runtime closure without reading unrelated development modules", async () => {
-    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups, true);
     const unrelated = join(sourceRoot, "node_modules", "unrelated-dev", "cache.d 3.ts");
     await writeFixtureFile(unrelated, "unrelated development content");
     faults.unreadableModuleFile = unrelated;
@@ -200,7 +203,7 @@ describe("bundled official plugin cache resilience", () => {
   });
 
   it("rejects a missing required Sharp dependency instead of borrowing workspace hoisted modules", async () => {
-    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups, true);
     await rm(join(sourceRoot, "node_modules", "detect-libc"), { recursive: true });
     await writeFixtureFile(
       join(dirname(dirname(sourceRoot)), "node_modules", "detect-libc", "package.json"),
@@ -225,7 +228,7 @@ describe("bundled official plugin cache resilience", () => {
   });
 
   it("rejects scoped traversal segments before resolving a runtime dependency directory", async () => {
-    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups, true);
     await writeFixtureFile(
       join(sourceRoot, "node_modules", "sharp", "package.json"),
       JSON.stringify({ dependencies: { "@scope/..": "1" } }),
@@ -234,6 +237,45 @@ describe("bundled official plugin cache resilience", () => {
     expect(() => resolveOfficialPluginRoots({ storageRoot })).toThrow(
       "Invalid runtime dependency @scope/..",
     );
+  });
+
+  it.each(["sharp", "koffi"])(
+    "ignores an obsolete empty %s directory left by an upgraded Computer Use producer",
+    async (name) => {
+      const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+      for (const legacy of ["sharp", "koffi"])
+        await rm(join(sourceRoot, "node_modules", legacy), { recursive: true });
+      await mkdir(join(sourceRoot, "node_modules", name));
+
+      expect(() => resolveOfficialPluginRoots({ storageRoot })).not.toThrow();
+
+      const cacheRoot = join(storageRoot, CUA_CACHE_SUFFIX);
+      expect(await readFile(join(cacheRoot, "scripts/computer-use-client.mjs"), "utf8")).toBe(
+        "fixture",
+      );
+      expect(existsSync(join(cacheRoot, "node_modules"))).toBe(false);
+    },
+  );
+
+  it("keeps ordinary plugin discovery available with both obsolete native dependency directories empty", async () => {
+    const { storageRoot, sourceRoot } = await createCuaRuntimeFixture(cleanups);
+    for (const legacy of ["sharp", "koffi"]) {
+      const path = join(sourceRoot, "node_modules", legacy);
+      await rm(path, { recursive: true });
+      await mkdir(path);
+    }
+
+    expect(() =>
+      resolveZCodePlugins({
+        logger: createLogger(),
+        pluginStorageRoot: storageRoot,
+        skipUserConfig: true,
+        workingDirectory: dirname(storageRoot),
+      }),
+    ).not.toThrow();
+    expect(
+      existsSync(join(storageRoot, CUA_CACHE_SUFFIX, "scripts/computer-use-client.mjs")),
+    ).toBe(true);
   });
 
   it("degrades a persistent transient seed failure when the target is absent", async () => {
@@ -661,7 +703,9 @@ async function writeFixtureFile(path: string, content: string): Promise<void> {
   await writeFile(path, content);
 }
 
-async function createCuaRuntimeFixture(cleanups: string[]) {
+async function createCuaRuntimeFixture(cleanups: string[], declareNativeRuntime = false) {
+  // 这组闭包安全测试显式提供依赖合同；不把已退役的 native 根重新加到真实默认定义中。
+  if (declareNativeRuntime) CUA_DEFINITION!.runtimeDependencyRoots = ["sharp", "koffi"];
   const root = await mkdtemp(join(tmpdir(), "uwork-cua-runtime-seed-"));
   cleanups.push(root);
   process.argv[1] = join(root, "zcode.cjs");

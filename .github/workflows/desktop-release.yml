@@ -82,6 +82,7 @@ jobs:
           --root "$PWD/apps/zcode-cli"
           packages/bootstrap/src/session-storage-migration
           packages/bootstrap/tests/storage-startup.test.ts
+          packages/bootstrap/tests/bundled-plugins-resilience.test.ts
           packages/adapters/tests/config.test.ts
       - name: Validate cold data directory and writer gates
         run: >-
