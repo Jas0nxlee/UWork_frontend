@@ -1,194 +1,74 @@
 name: Sync release to WeCom Drive
-
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: Release tag to backfill (defaults to latest published release)
-        required: false
+      candidates:
+        description: Non-reversible fingerprints of existing local subscription nodes
+        required: true
         type: string
-      inspect_only:
-        description: Read application and target space permissions without downloading or uploading installers
-        type: boolean
-        default: false
-      bootstrap_space:
-        description: Explicit one-time creation of the application-owned release space and its administrator
-        type: boolean
-        default: false
-      bootstrap_public_key:
-        description: Base64 PEM RSA public key for encrypted target handoff (bootstrap only)
-        required: false
-        type: string
-      bootstrap_reuse_only:
-        description: Bootstrap recovery must only reuse the configured application space and never create another
-        type: boolean
-        default: false
-
 permissions:
   contents: read
-
-concurrency:
-  group: wecom-release-sync
-  cancel-in-progress: false
-
 jobs:
-  contract:
-    name: Validate installer sync contract
+  inspect:
+    name: Read-only fixed proxy connectivity investigation
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      run_sync: ${{ steps.gate.outputs.run_sync }}
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
           persist-credentials: false
       - uses: ./.github/actions/setup-workspace
-      - run: node --test scripts/test/wecom-release-*.test.mjs
-      - name: Resolve automatic sync gate
-        id: gate
+      - name: Compare configuration fingerprints and independently probe both public endpoints
         env:
-          SYNC_ENABLED: ${{ vars.WECOM_SYNC_ENABLED || secrets.WECOM_SYNC_ENABLED }}
-        run: |
-          # Secrets 不能用于 job if；只传固定控制结果，不传出开关原值。
-          if [[ "$SYNC_ENABLED" == true ]]; then
-            echo 'run_sync=yes' >> "$GITHUB_OUTPUT"
-          else
-            echo 'run_sync=no' >> "$GITHUB_OUTPUT"
-          fi
-
-  sync:
-    name: Upload and verify all installers in WeCom Drive
-    needs: contract
-    if: github.event_name == 'workflow_dispatch' || needs.contract.outputs.run_sync == 'yes'
-    runs-on: ${{ vars.WECOM_SYNC_RUNNER || 'ubuntu-24.04' }}
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.repository.default_branch }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-workspace
-
-      - name: Resolve the published release tag
-        id: options
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
-          INPUT_TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          tag="${INPUT_TAG:-$EVENT_TAG}"
-          if [[ -z "$tag" ]]; then
-            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          fi
-          if [[ ! "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo 'A stable Release tag is required' >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Check required WeCom settings
-        env:
-          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
-          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
-          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
-          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
-          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
-          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
-          WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
-          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
-          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
-          RELEASE_TAG: ${{ steps.options.outputs.tag }}
-          ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+          PROXY_CANDIDATES: ${{ inputs.candidates }}
         run: |
           node --input-type=module <<'JS'
-          import { resolveWecomConfig } from './scripts/sync-wecom-release.mjs';
-          import { resolveBootstrapConfig } from './scripts/wecom-release-bootstrap.mjs';
-          try {
-            if (process.env.WECOM_BOOTSTRAP_SPACE === 'true') resolveBootstrapConfig(process.env);
-            else resolveWecomConfig(process.env);
-          }
-          catch (error) { console.error(error.message); process.exitCode = 1; }
+          import { createHash } from 'node:crypto';
+          import { createConnection } from 'node:net';
+          import { execFile as callbackExec } from 'node:child_process';
+          import { promisify } from 'node:util';
+          import { withWecomProxy, buildProxyConfig } from './scripts/wecom-release-proxy.mjs';
+          const execFile = promisify(callbackExec);
+          const config = JSON.parse(process.env.WECOM_PROXY_CONFIG);
+          buildProxyConfig(process.env.WECOM_PROXY_CONFIG);
+          const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+          const identity = node => [node.type,node.uuid,node['reality-opts']['public-key'],node['reality-opts']['short-id']];
+          const key = hash(identity(config));
+          const endpoint = hash([...identity(config),config.server,config.port]);
+          const candidates = JSON.parse(process.env.PROXY_CANDIDATES);
+          if (!Array.isArray(candidates) || candidates.length !== 3 || candidates.some(c => !['SG-vless','JP-vless','US-vless'].includes(c.name) || !/^[a-f0-9]{64}$/.test(c.key) || !/^[a-f0-9]{64}$/.test(c.endpoint))) throw new Error('Invalid comparison metadata');
+          const match = candidates.find(c => c.key === key);
+          console.log(JSON.stringify({knownSubscriptionNode:match?.name ?? 'unmatched',endpointMatchesCurrentSubscription:match ? match.endpoint === endpoint : null,configuredPortMatchesCurrentSubscription:config.port === 24567}));
+          const codes = new Set(['ECONNREFUSED','ECONNRESET','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','EHOSTUNREACH','ENETUNREACH','UND_ERR_CONNECT_TIMEOUT','UND_ERR_SOCKET']);
+          const nodeTcp = await new Promise(resolve => {
+            const socket = createConnection({host:config.server,port:config.port});
+            let settled = false;
+            const finish = result => { if(settled) return; settled=true;socket.destroy();resolve(result); };
+            socket.setTimeout(5000,()=>finish({target:'configured-node-tcp',result:'timeout'}));
+            socket.once('connect',()=>finish({target:'configured-node-tcp',result:'connected'}));
+            socket.once('error',error=>finish({target:'configured-node-tcp',result:'network',...(codes.has(error.code)?{code:error.code}:{})}));
+          });
+          console.log(JSON.stringify(nodeTcp));
+          await withWecomProxy({probeOnly:true,probe:async (env,_child,signal)=>{
+            const source = `
+              const codes = new Set(${JSON.stringify([...codes])});
+              const targets = [['ip-query','https://api.ipify.org?format=json'],['wecom-api','https://qyapi.weixin.qq.com/cgi-bin/gettoken']];
+              const results = [];
+              for (const [stage,url] of targets) {
+                try {
+                  const response=await fetch(url,{signal:AbortSignal.timeout(12000),redirect:'error'});
+                  const body=await response.json();
+                  results.push({stage,result:'http',status:response.status,validShape:stage==='ip-query'?typeof body?.ip==='string':Number.isInteger(body?.errcode)});
+                } catch(error) {
+                  const code=error?.cause?.code ?? error?.code;
+                  results.push({stage,result:error?.name==='TimeoutError'?'timeout':'network',...(codes.has(code)?{code}:{})});
+                }
+              }
+              process.stdout.write(JSON.stringify(results));
+            `;
+            const {stdout}=await execFile(process.execPath,['--use-env-proxy','--input-type=module','-e',source],{env,signal,timeout:30000,maxBuffer:4096});
+            const results=JSON.parse(stdout);
+            for (const result of results) console.log(JSON.stringify(result));
+          }});
           JS
-
-      - name: Check fixed proxy egress before downloading installers
-        env:
-          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
-        run: node scripts/wecom-release-proxy.mjs --probe-only
-
-      - name: Download all release installers with retries
-        if: inputs.inspect_only != true && inputs.bootstrap_space != true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.options.outputs.tag }}
-        run: |
-          set -euo pipefail
-          # 元数据读取和附件下载都允许重试；任何失败都阻止目标微盘写入。
-          for attempt in 1 2 3 4; do
-            if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/wecom-release.json"; then break; fi
-            if [[ "$attempt" == 4 ]]; then exit 1; fi
-            sleep "$((2 ** attempt))"
-          done
-          mkdir -p "$RUNNER_TEMP/wecom-release-assets"
-          node --input-type=module <<'JS' > "$RUNNER_TEMP/wecom-selected-assets.txt"
-          import { readFile } from 'node:fs/promises';
-          import { selectWecomReleaseAssets } from './scripts/release-installer-assets.mjs';
-          const release = JSON.parse(await readFile(`${process.env.RUNNER_TEMP}/wecom-release.json`, 'utf8'));
-          for (const asset of selectWecomReleaseAssets(release, process.env.RELEASE_TAG).assets) console.log(asset.name);
-          JS
-          while IFS= read -r asset; do
-            for attempt in 1 2 3 4; do
-              if gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/wecom-release-assets" --pattern "$asset" --clobber; then break; fi
-              if [[ "$attempt" == 4 ]]; then exit 1; fi
-              sleep "$((2 ** attempt))"
-            done
-          done < "$RUNNER_TEMP/wecom-selected-assets.txt"
-          
-          # 复制更新日志文件到资源目录
-          version="${RELEASE_TAG#v}"
-          changelog_file="docs/releases/${version}-changelog.txt"
-          if [[ -f "$changelog_file" ]]; then
-            cp "$changelog_file" "$RUNNER_TEMP/wecom-release-assets/"
-            echo "已复制更新日志: $changelog_file"
-          else
-            echo "警告: 更新日志文件不存在: $changelog_file"
-          fi
-
-      - name: Inspect access or upload and verify all installers
-        env:
-          WECOM_BOOTSTRAP_SPACE: ${{ inputs.bootstrap_space || false }}
-          WECOM_BOOTSTRAP_REUSE_ONLY: ${{ inputs.bootstrap_reuse_only || false }}
-          WECOM_BOOTSTRAP_PUBLIC_KEY: ${{ inputs.bootstrap_public_key }}
-          WECOM_SPACE_ADMIN_NAME: ${{ secrets.WECOM_SPACE_ADMIN_NAME }}
-          BOOTSTRAP_HANDOFF: ${{ runner.temp }}/wecom-encrypted-target.json
-          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
-          WECOM_INSPECT_ONLY: ${{ inputs.inspect_only || false }}
-          WECOM_CORP_ID: ${{ secrets.WECOM_CORP_ID }}
-          WECOM_SECRET: ${{ secrets.WECOM_SECRET }}
-          WECOM_SPACE_ID: ${{ vars.WECOM_SPACE_ID || secrets.WECOM_SPACE_ID }}
-          WECOM_FOLDER_ID: ${{ vars.WECOM_FOLDER_ID || secrets.WECOM_FOLDER_ID }}
-          RELEASE_TAG: ${{ steps.options.outputs.tag }}
-          RELEASE_JSON: ${{ runner.temp }}/wecom-release.json
-          ASSET_DIR: ${{ runner.temp }}/wecom-release-assets
-          SYNC_REPORT: ${{ runner.temp }}/wecom-release-verification.json
-        run: node scripts/wecom-release-proxy.mjs
-
-      - name: Preserve the verification and partial progress report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wecom-release-verification-${{ github.run_id }}
-          path: ${{ runner.temp }}/wecom-release-verification.json
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Preserve encrypted bootstrap configuration handoff
-        if: always() && inputs.bootstrap_space == true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: wecom-encrypted-target-${{ github.run_id }}
-          path: ${{ runner.temp }}/wecom-encrypted-target.json
-          if-no-files-found: ignore
-          retention-days: 1
