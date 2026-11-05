@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import {
   buildProxyConfig,
+  probeEgress,
   proxyEnvironment,
   verifyProxyArchive,
   withWecomProxy,
@@ -111,6 +112,106 @@ test("Node 24 fetch 的 HTTPS 请求确实经过本地 CONNECT，不受 NO_PROXY
   assert.deepEqual(connected, ["qyapi.weixin.qq.com:443"]);
 });
 
+async function probeWithFetch(t, fetchSource) {
+  const directory = await mkdtemp(join(tmpdir(), "wecom-probe-fetch-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const preload = join(directory, "fetch.mjs");
+  await writeFile(preload, `let calls=0;globalThis.fetch=${fetchSource};`);
+  return probeEgress({ ...process.env }, undefined, undefined, {
+    execute: (binary, args, options) => execFile(binary, ["--import", preload, ...args], options),
+  });
+}
+
+test("真实探测子进程只返回固定阶段和安全分类，不外露响应或原始异常", async (t) => {
+  const cases = [
+    ["async()=>new Response('private-body',{status:503})", /stage=ip-query.*http=503/],
+    [
+      "async()=>++calls===1?Response.json({ip:'192.0.2.1'}):new Response('private-body',{status:407})",
+      /stage=wecom-api.*http=407/,
+    ],
+    ["async()=>{throw new DOMException('private-body','TimeoutError')}", /stage=ip-query.*timeout/],
+    [
+      "async()=>{if(++calls===1)return Response.json({ip:'192.0.2.1'});throw new TypeError('private-body',{cause:{code:'ECONNRESET',hostname:'private-host'}})}",
+      /stage=wecom-api.*code=ECONNRESET/,
+    ],
+    [
+      "async()=>{throw new TypeError('private-body',{cause:{code:'private-code',hostname:'private-host'}})}",
+      /stage=ip-query.*network/,
+    ],
+    ["async()=>new Response('private-body')", /stage=ip-query.*invalid-response/],
+    ["async()=>Response.json({ip:'fe80::1%private-host'})", /stage=ip-query.*invalid-response/],
+    [
+      "async()=>++calls===1?Response.json({ip:'192.0.2.1'}):new Response(new ReadableStream({start(c){c.error(new DOMException('private-body','TimeoutError'))}}))",
+      /stage=wecom-api.*timeout/,
+    ],
+    [
+      "async()=>++calls===1?Response.json({ip:'192.0.2.1'}):new Response(new ReadableStream({start(c){c.error(new TypeError('private-body',{cause:{code:'UND_ERR_SOCKET'}}))}}))",
+      /stage=wecom-api.*code=UND_ERR_SOCKET/,
+    ],
+    [
+      "async()=>++calls===1?Response.json({ip:'192.0.2.1'}):Response.json({errcode:'private-body'})",
+      /stage=wecom-api.*invalid-response/,
+    ],
+  ];
+  for (const [source, expected] of cases) {
+    await assert.rejects(probeWithFetch(t, source), (error) => {
+      assert.match(error.message, expected);
+      assert.match(error.message, /不回退直连/);
+      assert.doesNotMatch(error.message, /private-|https?:\/\//);
+      return true;
+    });
+  }
+  t.mock.method(console, "log", () => {});
+  await probeWithFetch(
+    t,
+    "async()=>++calls===1?Response.json({ip:'192.0.2.1'}):Response.json({errcode:40013})",
+  );
+});
+
+test("拒绝伪造、未知字段和超长探测 JSON，子进程异常也不输出原始信息", async () => {
+  const malformed = [
+    "private-not-json",
+    " ".repeat(4097),
+    "null",
+    "[]",
+    { ok: true, ip: "private-host" },
+    { ok: true, ip: "fe80::1%private-host" },
+    { ok: true, ip: "192.0.2.1", cause: "private-body" },
+    { ok: false, stage: "private-stage", kind: "timeout" },
+    { ok: false, stage: "ip-query", kind: "http", status: "503" },
+    { ok: false, stage: "ip-query", kind: "http", status: 700 },
+    { ok: false, stage: "ip-query", kind: "network", code: "private-code" },
+    { ok: false, stage: "wecom-api", kind: "timeout", hostname: "private-host" },
+    { ok: false, stage: "wecom-api", kind: "network", status: 503 },
+  ];
+  for (const output of malformed) {
+    await assert.rejects(
+      probeEgress({}, undefined, undefined, {
+        execute: async () => ({
+          stdout: typeof output === "string" ? output : JSON.stringify(output),
+        }),
+      }),
+      (error) => {
+        assert.match(error.message, /探测响应无效/);
+        assert.doesNotMatch(error.message, /private-|192\.0\.2/);
+        return true;
+      },
+    );
+  }
+  await assert.rejects(
+    probeEgress({}, undefined, undefined, {
+      execute: async () => {
+        throw new Error("private-body");
+      },
+    }),
+    (error) => {
+      assert.match(error.message, /探测进程失败/);
+      assert.doesNotMatch(error.message, /private-body/);
+      return true;
+    },
+  );
+});
+
 test("无代理配置保持原有执行路径；配置错误时不得回退直连", async () => {
   let calls = 0;
   assert.equal(
@@ -159,7 +260,7 @@ test("代理成功/失败后均关闭子进程并删除权限受控的临时配�
     '#!/usr/bin/env node\nrequire("node:net").createServer(s=>s.end()).listen(17890,"127.0.0.1");\n',
     { mode: 0o700 },
   );
-  for (const fail of [false, true]) {
+  for (const failure of ["none", "probe", "sync"]) {
     let configPath;
     let proxyPid;
     const task = withWecomProxy({
@@ -170,18 +271,24 @@ test("代理成功/失败后均关闭子进程并删除权限受控的临时配�
       },
       probe: async (_env, child) => {
         proxyPid = child.pid;
+        if (failure === "probe") throw new Error("synthetic probe failure");
       },
       runSync: async (env) => {
+        assert.notEqual(failure, "probe", "探测失败不得执行同步");
         assert.equal((await stat(configPath)).mode & 0o777, 0o600);
         assert.equal((await stat(join(configPath, ".."))).mode & 0o777, 0o700);
         assert.ok((await readFile(configPath, "utf8")).includes("wecom-egress"));
         assert.equal(env.NODE_USE_ENV_PROXY, "1");
-        if (fail) throw new Error("synthetic upload failure");
+        if (failure === "sync") throw new Error("synthetic upload failure");
         return 0;
       },
     });
-    if (fail) await assert.rejects(task, /synthetic upload failure/);
-    else assert.equal(await task, 0);
+    if (failure === "none") assert.equal(await task, 0);
+    else
+      await assert.rejects(
+        task,
+        failure === "probe" ? /synthetic probe failure/ : /synthetic upload failure/,
+      );
     await assert.rejects(stat(configPath), /ENOENT/);
     assert.throws(() => process.kill(proxyPid, 0), /ESRCH/);
   }

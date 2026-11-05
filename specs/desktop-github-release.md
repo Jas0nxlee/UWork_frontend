@@ -64,20 +64,25 @@ sequenceDiagram
 ## 所有者和事件顺序
 
 - 根版本和 Git 提交唯一决定构建身份。平台 build job 只产生当前提交的安装包与带 SHA256 的 manifest；publish job 唯一拥有 Release 创建与公开操作。
+- `checks` 与每个原生 `build` job 分别拥有本 job 的 Electron 安装就绪步骤：`pnpm install --frozen-lockfile` 完成后，立即串行执行当前固定 Electron 包的 `node node_modules/electron/install.js`，成功后才允许并行测试、原生 smoke 或构建消费二进制。Electron 42.11.16 没有 postinstall，首次导入会懒安装；依赖安装允许名单不能保证二进制已准备好。PR #11 的 CI 曾在模块收集时并发解压同一 `dist` 路径而触发 `he.pak` 的 EEXIST，导致 HMAC 集成用例尚未注册就失败。安装失败直接阻断该 job，不增加重试、跳过、Electron mock 或 Node 版本变化。
 - `electron-builder.config.js` 唯一持有企业公开配置的随包映射和 Windows 安装所有权清单；Windows `afterPack` 先完成运行时资源校验、按需完成真实 Helper 校验，再写入最终文件清单，随后才签名和生成 NSIS 产物。
-- publish 必须等待检查、审计策略和全部五个平台构建完成。汇总时重新验证版本、提交、平台矩阵、必需文件和校验和；任一目标失败不发布完整 Release。
+- publish 必须等待检查、审计策略和当前全部四个平台构建完成。汇总时重新验证版本、提交、平台矩阵、必需文件和校验和；任一目标失败不发布完整 Release。
 - 构建 job 仅有 contents read；publish job 才有 contents write。输入先校验，再通过环境变量和独立脚本传递，不把用户输入插入 shell 代码。
 - 发布先创建 draft，再上传全部已核验文件，最后公开；重跑只能补齐同一版本、同一提交的 draft。已公开 Release 不自动覆盖。保留旧版本和本机替换前的 `.app` 备份作为回退路径。
 - 手工 publish 只允许从 `main` 分支的当前提交执行。版本 tag 必须在发布前存在且精确指向当前提交；publish job 不创建或移动 tag。tag push 也必须满足 tag 与根版本一致、指向当前提交。
 
 ```mermaid
 flowchart LR
-  Commit[版本和不可变 Git 提交] --> Check[类型 / lint / 架构 / 服务测试]
+  Commit[版本和不可变 Git 提交] --> CheckDeps[checks：frozen 依赖安装]
+  CheckDeps --> CheckElectron[checks：串行 Electron 安装就绪]
+  CheckElectron --> Check[类型 / lint / 架构 / 并行服务测试]
   Commit --> Audit[依赖审计及发布策略]
-  Check --> Mac[macOS arm64 / x64]
-  Check --> Win[Windows x64]
-  Check --> Linux[Linux x64 / arm64]
-  Mac --> Validate[校验五平台 manifest 和 SHA256]
+  Check --> BuildDeps[各平台 job：frozen 依赖安装]
+  BuildDeps --> BuildElectron[各平台 job：串行 Electron 安装就绪]
+  BuildElectron --> Mac[macOS arm64]
+  BuildElectron --> Win[Windows x64]
+  BuildElectron --> Linux[Linux x64 / arm64]
+  Mac --> Validate[校验四平台 manifest 和 SHA256]
   Win --> WinRuntime[运行时资源校验 / 按需 Helper 校验]
   WinRuntime --> WinOwnership[写入最终 Windows 文件所有权清单]
   WinOwnership --> Validate
@@ -89,13 +94,14 @@ flowchart LR
 
 ## 验收
 
-1. 五个平台 workflow 实际运行成功，Release 包含所有必需格式、源码提交和 SHA256SUMS。
+1. 当前四个平台 workflow 实际运行成功，Release 包含所有必需格式、源码提交和 SHA256SUMS。
 2. 文件被修改、缺少目标、版本或提交不一致时，汇总脚本失败且不发布。
 3. macOS 安装副本的签名、版本和源码提交通过核验，主进程实际启动；Windows/Linux 分别记录构建及可用的运行验证，不能用 macOS 启动代替它们。
 4. CI 的未执行、失败、依赖审计发现和签名限制如实记录。
 5. 从其它分支手工 publish、缺失 tag、tag 指向另一提交或版本不一致均在创建 Release 前失败。
 6. 打包配置在企业身份配置缺失且非必需时正常加载；配置存在时正确映射随包路径，必需但缺失时立即失败。Electron runtime 版本始终等于 desktop manifest 固定版本。
 7. 开源占位 CUA 的 Windows `afterPack` 仍生成包含实际安装文件的 `.zcode-install-manifest`；真实 producer 完成 Helper 校验后也生成同一清单。
+8. workflow 合同检查 `checks`、`build` 均在 frozen 安装后立即执行无条件、不可忽略失败的串行 Electron 安装，且早于所有测试、native smoke 和构建消费步骤。实际安装使用固定包自带的版本和摘要核验；保留真实 HMAC 集成测试及并行回归，不能以 mock 代替环境就绪。
 
 ## 安装包验收的进程收尾顺序
 
