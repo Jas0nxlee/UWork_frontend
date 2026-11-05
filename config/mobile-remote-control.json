@@ -4,7 +4,6 @@
   "enterpriseAuth": {
     "apiBaseUrl": "https://pivot.ucas.com.cn:23090",
     "allowSameOrgAnyUser": false,
-    "backend": "uwork",
-    "identityApiBaseUrl": "https://aihub.ucas.com.cn/uwork-auth"
+    "backend": "uwork"
   }
 }

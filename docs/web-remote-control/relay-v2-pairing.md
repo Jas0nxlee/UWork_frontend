@@ -265,6 +265,22 @@ HTTP401 或重连前 JWT 缺失：关闭连接、清除本地会话、回登录�
 
 前后台恢复继续先探测同一 socket，必要时重新申请 token；重配对后按原顺序校验桌面版本、恢复 bootstrap/mobile-view-state、bridge、ACK 未确认帧与 snapshot/gap。桌面 `desktop-continuous`、手机 `web-remote-replayable` 的业务 owner、workspaceIdentity 和恢复顺序不变。
 
+#### 部署关闭版本导航时的请求代际
+
+默认开启导航时仍以当前 URL 和桌面返回版本判断，不使用跨页面的 localStorage 历史协商记录证明当前资源版本；确认前的页面或另一页面也不能为当前页面免除版本检查。自托管只分发单一构建时，可通过显式部署开关关闭导航。
+
+`VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD=off` 只关闭 URL 版本比较、导航和确认提示；仍由同一个 version guard 读取 bootstrap、合并并发请求并同步提交 `onAccepted`。重配对/断连调用 `invalidate()` 后，无论开关是否开启，上一代响应和错误均作废：不能返回旧 bootstrap、写入旧查看 epoch 或触发当前连接恢复。释放后同样忽略迟到响应；当前代的错误仍向上传递。
+
+```text
+paired E1 → guard.check(request generation 1)
+waiting   → guard.invalidate(generation 2)
+paired E2 → guard.check(request generation 2) → onAccepted(E2)
+E1 迟到响应/错误 → generation 不匹配 → 忽略（版本导航开关不改变此顺序）
+```
+
+回归同时覆盖版本导航开启和关闭：并发合并、断连后旧成功/旧错误、当前错误，以及重配对后查看 epoch 只接受当前代。
+
+
 ### 浏览器 HTTP 取消兼容
 
 terminal token 与设备列表 HTTP adapter 不依赖 `AbortSignal.any()`、`AbortSignal.timeout()` 或 `throwIfAborted()`。缺少这些方法时，仍须完成真实请求和配对，不能在构造请求参数时抛错并持续重连。

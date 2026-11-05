@@ -17,27 +17,25 @@ function harness(
     url?: string;
     ready?: boolean;
     version?: string;
-    agreed?: string;
+    enabled?: boolean;
   } = {},
 ) {
   const requestBootstrap = vi.fn(async () => bootstrap(options.version));
   const navigate = vi.fn();
   const onMismatch = vi.fn();
   const onAccepted = vi.fn();
-  const remembered: string[] = [];
   const url =
     options.url ?? "https://zcode.z.ai/remote/v4?sid=a&hash=x%2By&t=1&app_version=3.12.1#task";
   const guard = createWebRemoteControlVersionGuard({
     requestBootstrap,
+    enabled: options.enabled,
     getUrl: () => url,
     isPageReady: () => options.ready ?? false,
     navigate,
     onMismatch,
     onAccepted,
-    readAgreedVersion: () => options.agreed,
-    rememberAgreedVersion: (version) => remembered.push(version),
   });
-  return { guard, requestBootstrap, navigate, onMismatch, onAccepted, url, remembered };
+  return { guard, requestBootstrap, navigate, onMismatch, onAccepted, url };
 }
 
 describe("remote v4 desktop version guard", () => {
@@ -73,23 +71,28 @@ describe("remote v4 desktop version guard", () => {
     expect(guard.isBlocked()).toBe(false);
   });
 
-  it("会话内已协商过同一版本时不再导航（企微把页面以裸 URL 重开也不会重载循环）", async () => {
-    // 这一轮 URL 没有 app_version（企微重开丢了参数），但本会话已经和 3.12.2 协商过。
-    const h = harness({
-      url: "https://zcode.z.ai/remote/v4?sid=a",
-      version: "3.12.2",
-      agreed: "3.12.2",
-    });
-    expect(await h.guard.check()).toEqual(bootstrap("3.12.2"));
-    expect(h.navigate).not.toHaveBeenCalled();
-    expect(h.guard.isBlocked()).toBe(false);
+  it("新页面没有版本参数时仍需导航，不把上次导航当作当前资源版本的证明", async () => {
+    const first = harness({ url: "https://example.test/remote/v4?sid=a", version: "3.12.2" });
+    await first.guard.check();
+    first.guard.dispose();
+    const reopened = harness({ url: "https://example.test/remote/v4?sid=a", version: "3.12.2" });
+    expect(await reopened.guard.check()).toBeUndefined();
+    expect(reopened.navigate).toHaveBeenCalledExactlyOnceWith(
+      "https://example.test/remote/v4?sid=a&app_version=3.12.2",
+    );
+    expect(reopened.onAccepted).not.toHaveBeenCalled();
   });
 
-  it("首次导航时记住版本，后续同一版本不再重载", async () => {
-    const h = harness({ url: "https://zcode.z.ai/remote/v4?sid=a", version: "3.12.2" });
-    await h.guard.check();
-    expect(h.navigate).toHaveBeenCalledTimes(1);
-    expect(h.remembered).toEqual(["3.12.2"]);
+  it("开启守卫时，历史页面协商不能覆盖当前 URL 的显式版本不符", async () => {
+    const prior = harness({ ready: true, version: "3.12.2" });
+    await prior.guard.check();
+    prior.guard.dispose();
+    const current = harness({ version: "3.12.2" });
+    expect(await current.guard.check()).toBeUndefined();
+    expect(current.navigate).toHaveBeenCalledExactlyOnceWith(
+      current.url.replace("3.12.1", "3.12.2"),
+    );
+    expect(current.onAccepted).not.toHaveBeenCalled();
   });
 
   it("fills a missing version and accepts the v4 trailing slash", async () => {
@@ -133,34 +136,40 @@ describe("remote v4 desktop version guard", () => {
     expect(h.navigate).toHaveBeenCalledTimes(1);
   });
 
-  it("coalesces concurrent checks and checks again after recovery", async () => {
-    const h = harness({ version: "3.12.1" });
-    await Promise.all([h.guard.check(), h.guard.check()]);
-    expect(h.requestBootstrap).toHaveBeenCalledTimes(1);
-    expect(h.onAccepted).toHaveBeenCalledTimes(1);
-    h.guard.invalidate();
-    await h.guard.check();
-    expect(h.requestBootstrap).toHaveBeenCalledTimes(2);
-    expect(h.onAccepted).toHaveBeenCalledTimes(2);
-  });
+  it.each([true, false])(
+    "coalesces concurrent checks and checks again after recovery, enabled=%s",
+    async (enabled) => {
+      const h = harness({ version: "3.12.1", enabled });
+      await Promise.all([h.guard.check(), h.guard.check()]);
+      expect(h.requestBootstrap).toHaveBeenCalledTimes(1);
+      expect(h.onAccepted).toHaveBeenCalledTimes(1);
+      h.guard.invalidate();
+      await h.guard.check();
+      expect(h.requestBootstrap).toHaveBeenCalledTimes(2);
+      expect(h.onAccepted).toHaveBeenCalledTimes(2);
+    },
+  );
 
-  it("ignores a late version from an obsolete connection", async () => {
-    const h = harness({ version: "3.12.1" });
-    let resolveOld!: (value: WebRemoteControlWindowBootstrapResult) => void;
-    h.requestBootstrap.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveOld = resolve;
-        }),
-    );
-    const old = h.guard.check();
-    h.guard.invalidate();
-    expect(await h.guard.check()).toEqual(bootstrap("3.12.1"));
-    resolveOld(bootstrap("3.12.2"));
-    expect(await old).toBeUndefined();
-    expect(h.navigate).not.toHaveBeenCalled();
-    expect(h.onAccepted).toHaveBeenCalledExactlyOnceWith(bootstrap("3.12.1"));
-  });
+  it.each([true, false])(
+    "ignores a late version from an obsolete connection, enabled=%s",
+    async (enabled) => {
+      const h = harness({ version: "3.12.1", enabled });
+      let resolveOld!: (value: WebRemoteControlWindowBootstrapResult) => void;
+      h.requestBootstrap.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      );
+      const old = h.guard.check();
+      h.guard.invalidate();
+      expect(await h.guard.check()).toEqual(bootstrap("3.12.1"));
+      resolveOld(bootstrap("3.12.2"));
+      expect(await old).toBeUndefined();
+      expect(h.navigate).not.toHaveBeenCalled();
+      expect(h.onAccepted).toHaveBeenCalledExactlyOnceWith(bootstrap("3.12.1"));
+    },
+  );
 
   it.each([false, true])(
     "MRO03：旧回包先到不能占用新配对的查看 epoch，重申先到=%s",
@@ -205,6 +214,37 @@ describe("remote v4 desktop version guard", () => {
     },
   );
 
+  it("关闭版本导航时，重配对仍只接受当前连接的查看 epoch", async () => {
+    const h = harness({ version: "3.12.1", enabled: false });
+    const oldResponse = Promise.withResolvers<WebRemoteControlWindowBootstrapResult>();
+    const currentResult = { ...bootstrap("3.12.1"), mobileTaskViewEpoch: "E2" };
+    h.requestBootstrap.mockReturnValueOnce(oldResponse.promise).mockResolvedValue(currentResult);
+    const send = vi.fn(() => true);
+    const publisher = createWebRemoteControlTaskViewPublisher(send);
+    const bridge = {
+      kind: "local" as const,
+      bridgeSessionId: "bridge",
+      workspaceKey: "/repo",
+      workspacePath: "/repo",
+    };
+    publisher.setBridge(bridge);
+    publisher.update(bridge, { workspacePath: "/repo", taskId: "task" });
+    h.onAccepted.mockImplementation((result: WebRemoteControlWindowBootstrapResult) =>
+      publisher.seed(result.mobileTaskViewEpoch),
+    );
+    const old = h.guard.check();
+    await Promise.resolve();
+    publisher.transportStateChanged("waiting", "paired");
+    h.guard.invalidate();
+    publisher.transportStateChanged("paired", "waiting");
+    // 旧回包先到不能占用新配对的 epoch；关闭导航不等于关闭 stale-response 边界。
+    oldResponse.resolve({ ...bootstrap("3.12.1"), mobileTaskViewEpoch: "E1" });
+    expect(await old).toBeUndefined();
+    expect(h.onAccepted).not.toHaveBeenCalled();
+    expect(await h.guard.check()).toEqual(currentResult);
+    expect(send).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ epoch: "E2", seq: 1 }));
+  });
+
   it("does not accept an in-flight bootstrap after disposal", async () => {
     const h = harness();
     const response = Promise.withResolvers<WebRemoteControlWindowBootstrapResult>();
@@ -217,23 +257,26 @@ describe("remote v4 desktop version guard", () => {
     expect(h.onAccepted).not.toHaveBeenCalled();
   });
 
-  it("suppresses obsolete errors but propagates current failures", async () => {
-    const h = harness();
-    let rejectOld!: (error: Error) => void;
-    h.requestBootstrap.mockImplementationOnce(
-      () =>
-        new Promise((_resolve, reject) => {
-          rejectOld = reject;
-        }),
-    );
-    const old = h.guard.check();
-    await Promise.resolve();
-    h.guard.invalidate();
-    rejectOld(new Error("old connection"));
-    expect(await old).toBeUndefined();
-    h.requestBootstrap.mockRejectedValueOnce(new Error("current connection"));
-    await expect(h.guard.check()).rejects.toThrow("current connection");
-  });
+  it.each([true, false])(
+    "suppresses obsolete errors but propagates current failures, enabled=%s",
+    async (enabled) => {
+      const h = harness({ enabled });
+      let rejectOld!: (error: Error) => void;
+      h.requestBootstrap.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectOld = reject;
+          }),
+      );
+      const old = h.guard.check();
+      await Promise.resolve();
+      h.guard.invalidate();
+      rejectOld(new Error("old connection"));
+      expect(await old).toBeUndefined();
+      h.requestBootstrap.mockRejectedValueOnce(new Error("current connection"));
+      await expect(h.guard.check()).rejects.toThrow("current connection");
+    },
+  );
 
   it("does not navigate after disposal or leak pending state to another device", async () => {
     const first = harness({ ready: true, version: "3.12.2" });

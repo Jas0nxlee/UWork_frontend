@@ -1190,26 +1190,6 @@ async function bootstrapExternalRelayWebRemoteControl(
   let nextBridgeGeneration = 0;
   const checkVersionOnRecovery = window.location.pathname.replace(/\/+$/, "") === "/remote/v4";
   let disposeVersionNotice: (() => void) | undefined;
-  // 会话级记住“已协商的桌面版本”：企微会把页面以裸 URL 重开（丢 app_version），
-  // 只认 URL 会让守卫反复导航 → 反复配对握手（表现为“第二次连接特别慢”）。
-  // 用 localStorage 而不是 sessionStorage：企微内置浏览器会把页面**当新上下文**重新打开
-  // （sessionStorage 随之清空），那样"已协商"记忆会失效、版本守卫每轮又导航一次，
-  // 表现为“配对完成→加载工作区→又跳回恢复连接”的 10 秒循环。
-  const AGREED_VERSION_KEY = "zcode:remote:agreed-app-version";
-  const readAgreedVersion = (): string | undefined => {
-    try {
-      return window.localStorage.getItem(AGREED_VERSION_KEY) ?? undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  const rememberAgreedVersion = (version: string): void => {
-    try {
-      window.localStorage.setItem(AGREED_VERSION_KEY, version);
-    } catch {
-      /* 存不下就退回按 URL 判断 */
-    }
-  };
   // 自托管只发单一构建：版本导航只会换来整页重载（企微丢 app_version → 循环），
   // 构建期用 VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD=off 关掉导航。
   const versionGuardEnabled =
@@ -1217,8 +1197,6 @@ async function bootstrapExternalRelayWebRemoteControl(
   const versionGuard = createWebRemoteControlVersionGuard({
     requestBootstrap: () => requestBootstrap(),
     enabled: versionGuardEnabled,
-    readAgreedVersion,
-    rememberAgreedVersion,
     onAccepted: (result) => {
       if (terminalTransportState === "paired") taskViewPublisher.seed(result.mobileTaskViewEpoch);
     },
@@ -1572,7 +1550,7 @@ async function bootstrapExternalRelayWebRemoteControl(
         pairedHandshakeStarted = false;
         return;
       }
-      // 企业身份准入：先发身份帧；拿了企业令牌就先等"校验通过"信号再握手（见 startPairedHandshake）。
+      // 企业身份准入先发身份帧，再复用同一个握手入口；验证前丢弃的 bootstrap 由有界重试补发。
       const enterpriseToken =
         relayParams.enterpriseAuth && relayParams.enterpriseOrg
           ? readEnterpriseAuthToken(webRemoteControlStorage, {
@@ -1625,8 +1603,8 @@ async function bootstrapExternalRelayWebRemoteControl(
    *
    * 桌面端在校验通过前会丢弃所有非身份 payload，而手机在"配对成功"事件里会立刻开始 bootstrap/版本检查，
    * 于是请求被丢、手机等满 10s 报"桌面端响应超时"（2026-11-04 实测日志：丢弃 10ms 后校验就通过了）。
-   * 现在改成：**收到桌面端校验通过后才推的 `mobile-task-view-request` 再开始握手**；同时留一个兜底
-   * 计时器（旧桌面端/VPN 抖动时不至于把页面挂死），外加 requestBootstrap 自身的重试。
+   * 配对事件立即发出第一轮请求；验证通过的 `mobile-task-view-request` 也复用同一入口，不能并发握手。
+   * 若第一轮仍被准入闸门丢弃，requestBootstrap 在本次配对内用有界重试重新读取，不绕过桌面校验。
    */
   let pairedHandshakeStarted = false;
   const startPairedHandshake = (): void => {
@@ -1663,7 +1641,7 @@ async function bootstrapExternalRelayWebRemoteControl(
 
   const requestBootstrap = async (): Promise<WebRemoteControlWindowBootstrapResult> => {
     // 企业准入校验是异步的，桌面端在校验通过前会丢弃 bootstrap-request（上游安全用例锁死了这个语义）。
-    // 因此这里超时后**换一个新的 requestId 重试**：新请求必然晚于校验，既不削弱准入，也不必让用户等满
+    // 因此这里超时后**换一个新的 requestId 重试**：校验通过后的新请求可正常接收，既不削弱准入，也不必让用户等满
     // 10 秒看到"桌面端响应超时"再重连（实测：2026-11-04 手机侧就是这么卡住的）。
     let lastError: unknown;
     // 3 秒一轮：企业准入是异步的，第一轮可能正好落在"闸门还没开"的窗口里被桌面丢弃；
