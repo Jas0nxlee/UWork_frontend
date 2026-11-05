@@ -128,6 +128,8 @@ sequenceDiagram
     不再有 `org`；
   - `backend` 由 `GET /api/auth/wecom/web-config`（同源、公开）确认，返回
     `{backend:"uwork", tenantId}`；不是本后台的 origin 直接 404，页面回落到二维码/显式参数入口。
+    该探测不属于官方 OAuth 认证：默认 HMAC 即使收到官方 `code` / `authCode` / `error` + `state` 参数，也不调用官方回调或登录服务。无配对参数且无显式企业基址时允许一次固定同源路径的公开 GET；使用 `credentials: omit`、`redirect: error`，不转发 query、令牌或请求正文。404 后展示扫码入口。扫码直连仍不发此探测。
+
   - 组织映射在后台用 `TENANT_HOSTS="host=tenantId,host2=tenantId2"` 配置（缺省空 = 单租户自动解析）。
 - 页面仍**向后兼容**显式参数：URL 带 `backend`/`org`/`enterprise_auth` 时以参数为准（二维码路径照旧）。
 - 桌面随包配置 `config/mobile-remote-control.json` 的 `enterpriseAuth` 增加

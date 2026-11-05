@@ -1632,7 +1632,11 @@ export function createWebRemoteControlManager(dependencies: WebRemoteControlMana
       // 这里在状态恢复为可发送后主动 flush，避免重连窗口内缓冲的响应/RPC 帧超时丢弃。
       flushPendingOutboundPayloads(runtime);
       sendPendingBridgeInvalidation(runtime);
-      if (previousTransportState !== "paired") requestMobileTaskView(runtime);
+      // 企业准入未通过时先别推：手机把它当作"可以开始握手"的信号，
+      // 提前推会让 bootstrap-request 在校验前到达并被丢弃（手机等满 10s 超时）。
+      // 校验通过那条路径（verifyEnterpriseIdentity）会自己补发。
+      if (previousTransportState !== "paired" && runtime.enterpriseGate !== "pending")
+        requestMobileTaskView(runtime);
       return;
     }
     if (state === "kicked") {

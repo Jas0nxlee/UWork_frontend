@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { saveEnterpriseAuthToken } from "#src/web-remote-control/app/enterpriseAuth.js";
 import {
   encodeWebRemoteControlRpcTransportMessage,
   type WebRemoteControlAppPayload,
@@ -32,6 +33,9 @@ const testState = vi.hoisted(() => ({
   transportDisposeCalls: 0,
   desktopAppVersion: undefined as string | undefined,
   deferBootstrap: false,
+  dropBootstrapCount: 0,
+  bootstrapUnavailableCount: 0,
+  rejectBootstrap: false,
   bootstrapReplies: [] as Array<() => void>,
   deferBridge: false,
   bridgeReplies: [] as Array<() => void>,
@@ -126,6 +130,25 @@ vi.mock("#src/web-remote-control/adapters/webRemoteControlTransport.js", async (
       sendPayload(payload: WebRemoteControlAppPayload): boolean {
         testState.sentPayloads.push(payload);
         if (payload.zcode_type === "bootstrap-request") {
+          if (testState.bootstrapUnavailableCount > 0) {
+            testState.bootstrapUnavailableCount -= 1;
+            return false;
+          }
+          if (testState.dropBootstrapCount > 0) {
+            testState.dropBootstrapCount -= 1;
+            return true;
+          }
+          if (testState.rejectBootstrap) {
+            queueMicrotask(() =>
+              this.options.onPayload({
+                zcode_type: "app-error",
+                requestId: payload.requestId,
+                reason: "enterprise-identity-rejected",
+                error: "Enterprise identity was rejected by the test desktop.",
+              }),
+            );
+            return true;
+          }
           const workspace = testState.useRemoteWorkspace
             ? {
                 workspacePath: "/workspace/demo",
@@ -242,6 +265,12 @@ vi.mock("#src/web-remote-control/adapters/webRemoteControlTransport.js", async (
   };
 });
 
+vi.mock("#src/web-remote-control/adapters/hmacTransport.js", async () => {
+  const { WebRemoteControlTerminalTransport } =
+    await import("#src/web-remote-control/adapters/webRemoteControlTransport.js");
+  return { WebRemoteControlHmacTerminalTransport: WebRemoteControlTerminalTransport };
+});
+
 function setupExternalRelayGlobals(pathname = "/remote") {
   // 此组验证官方 V2 的帧恢复；UWork 默认 HMAC，夹具必须显式选择既有 V2 transport。
   vi.stubEnv("VITE_WEB_REMOTE_CONTROL_PROTOCOL", "oauth-v2");
@@ -344,6 +373,29 @@ function setupExternalRelayGlobals(pathname = "/remote") {
   };
 }
 
+function setupHmacGlobals(enterprise = true) {
+  setupExternalRelayGlobals("/remote/v4");
+  vi.stubEnv("BASE_URL", "/remote/v4/");
+  vi.stubEnv("VITE_WEB_REMOTE_CONTROL_PROTOCOL", "hmac-v1");
+  vi.stubEnv("VITE_ZCODE_WEB_REMOTE_CONTROL_RELAY_WS_URL", "wss://relay.example.test/ws");
+  const query = new URLSearchParams({
+    sid: "sid-1",
+    mid: "mid-1",
+    hash: "hash-abcdefghijklmnop",
+    t: "1700000000",
+    app_version: "1.0.0",
+    ...(enterprise ? { org: "org-a", enterprise_auth: "https://identity.example.test" } : {}),
+  });
+  window.location.search = `?${query}`;
+  window.location.href = `${window.location.origin}/remote/v4?${query}`;
+  if (enterprise)
+    saveEnterpriseAuthToken(
+      window.sessionStorage,
+      { apiBaseUrl: "https://identity.example.test", orgId: "org-a" },
+      "phone-token",
+    );
+}
+
 describe("external relay frame gap recovery", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -361,6 +413,9 @@ describe("external relay frame gap recovery", () => {
     reloadMock.mockClear();
     testState.desktopAppVersion = undefined;
     testState.deferBootstrap = false;
+    testState.dropBootstrapCount = 0;
+    testState.bootstrapUnavailableCount = 0;
+    testState.rejectBootstrap = false;
     testState.bootstrapReplies.length = 0;
     testState.deferBridge = false;
     testState.bridgeReplies.length = 0;
@@ -464,6 +519,99 @@ describe("external relay frame gap recovery", () => {
     ).toHaveLength(2);
   });
 
+  it("企业准入首轮被丢弃后，在同一配对重发读取成功，不重建 relay", async () => {
+    vi.useFakeTimers();
+    setupHmacGlobals();
+    testState.dropBootstrapCount = 1;
+    await import("../src/main.js");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      1,
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      2,
+    );
+    expect(
+      testState.sentPayloads.filter((p) => p.zcode_type === "enterprise-identity"),
+    ).toHaveLength(1);
+    expect(testState.recoverConnectionCalls).toBe(0);
+    expect(testState.relayProtocolOptions).toHaveLength(1);
+    expect(
+      renderMock.mock.calls.some(([element]) =>
+        Boolean(element?.props?.children?.props?.children?.props?.services),
+      ),
+    ).toBe(true);
+  });
+
+  it("企业准入纯超时最多四次且12秒终止，不叠加外层 timeout 恢复", async () => {
+    vi.useFakeTimers();
+    setupHmacGlobals();
+    testState.deferBootstrap = true;
+    await import("../src/main.js");
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      4,
+    );
+    expect(testState.recoverConnectionCalls).toBe(0);
+    expect(
+      renderMock.mock.calls.some(
+        ([element]) => element?.props?.failure?.reason === "desktop-bootstrap-timeout",
+      ),
+    ).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      4,
+    );
+  });
+
+  it("企业握手的 relay-unavailable 立即交既有恢复 owner，不在准入循环内延后", async () => {
+    vi.useFakeTimers();
+    setupHmacGlobals();
+    testState.bootstrapUnavailableCount = 1;
+    await import("../src/main.js");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(testState.recoverConnectionCalls).toBe(1);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      2,
+    );
+    expect(testState.relayProtocolOptions).toHaveLength(1);
+  });
+
+  it("普通 HMAC 保持原有20秒/两次读取和一次恢复，不套用企业准入轮次", async () => {
+    vi.useFakeTimers();
+    setupHmacGlobals(false);
+    testState.deferBootstrap = true;
+    await import("../src/main.js");
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      2,
+    );
+    expect(testState.recoverConnectionCalls).toBe(1);
+    expect(
+      renderMock.mock.calls.some(
+        ([element]) => element?.props?.failure?.reason === "desktop-bootstrap-timeout",
+      ),
+    ).toBe(true);
+  });
+
+  it("企业鉴权拒绝不作为准入超时重发，也不恢复 relay", async () => {
+    vi.useFakeTimers();
+    setupHmacGlobals();
+    testState.rejectBootstrap = true;
+    await import("../src/main.js");
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(testState.sentPayloads.filter((p) => p.zcode_type === "bootstrap-request")).toHaveLength(
+      1,
+    );
+    expect(testState.recoverConnectionCalls).toBe(0);
+    expect(
+      renderMock.mock.calls.some(
+        ([element]) => element?.props?.failure?.reason === "enterprise-identity-rejected",
+      ),
+    ).toBe(true);
+  });
+
   it.each(["v4", "v3"])(
     "reports a %s bootstrap timeout after one bounded recovery retry",
     async (version) => {
@@ -483,6 +631,7 @@ describe("external relay frame gap recovery", () => {
       expect(
         testState.sentPayloads.filter((payload) => payload.zcode_type === "bootstrap-request"),
       ).toHaveLength(2);
+      expect(testState.recoverConnectionCalls).toBe(1);
     },
   );
 

@@ -8,6 +8,12 @@ interface WebRemoteControlVersionGuardOptions {
   isPageReady(): boolean;
   navigate(url: string): void;
   onMismatch(desktopVersion: string): void;
+  /**
+   * 部署侧开关（缺省开启）：自托管只发布**单一构建**，没有按桌面版本分发的静态包，
+   * 用 `app_version` 导航换来的只是整页重载（企微会丢参数，表现为“配对完成→加载工作区→
+   * 又跳回恢复连接”的循环）。关掉后仍做一次 bootstrap 并接受结果，只是不再导航。
+   */
+  enabled?: boolean;
 }
 
 /** 只管理当前手机连接的版本校验；资源路由由服务端处理。 */
@@ -46,7 +52,8 @@ export function createWebRemoteControlVersionGuard(options: WebRemoteControlVers
         .then((result) => {
           // 重连可能让旧响应晚于新连接返回，不能用旧桌面的版本导航或初始化业务。
           if (disposed || requestGeneration !== generation) return undefined;
-          const version = result.desktopAppVersion?.trim();
+          // 关闭导航仍须沿用同一代际边界；旧分支绕过 invalidate，让旧 epoch/错误污染重配对。
+          const version = options.enabled === false ? undefined : result.desktopAppVersion?.trim();
           if (version) {
             const url = new URL(options.getUrl());
             if (

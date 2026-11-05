@@ -25,6 +25,17 @@ export interface RemotePairingMaterial {
 
 const PAIRING_POLL_INTERVAL_MS = 1_500;
 
+/** 设备目录的重试节奏：上游（pivot 内省 → 后台）会偶发 503，重试两次就够。 */
+const DEVICE_FETCH_RETRIES = 2;
+const DEVICE_FETCH_BACKOFF_MS = [600, 1_500];
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** 5xx/429 与网络错误是暂时的，可以重试；401/403 是凭据问题，必须立刻交给上层重新登录。 */
+function isRetryableStatus(status: number): boolean {
+  return status >= 500 || status === 429;
+}
+
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   try {
     const body = (await response.json()) as unknown;
@@ -53,13 +64,37 @@ export async function fetchRemoteDevices(options: {
   token: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  /** 测试用：把重试退避压到 0。 */
+  retryDelayMs?: (attempt: number) => number;
 }): Promise<RemoteDeviceSummary[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(endpoints(options.context).devices, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${options.token}` },
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
+  const backoff =
+    options.retryDelayMs ?? ((attempt: number) => DEVICE_FETCH_BACKOFF_MS[attempt - 1] ?? 1_500);
+  const url = endpoints(options.context).devices;
+  let response: Response | undefined;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= DEVICE_FETCH_RETRIES + 1; attempt += 1) {
+    if (attempt > 1) await sleep(backoff(attempt - 1));
+    if (options.signal?.aborted) throw new Error("remote devices aborted");
+    try {
+      response = await fetchImpl(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${options.token}` },
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
+    } catch (error) {
+      // 网络层失败（含超时）也可以重试；abort 不重试。
+      if (options.signal?.aborted) throw error;
+      lastError = error;
+      continue;
+    }
+    if (response.ok) break;
+    // 上游"繁忙"（后台把 pivot 抖动翻成 503）与网关 5xx 都重试；401/403 立即失败。
+    if (!isRetryableStatus(response.status) || attempt > DEVICE_FETCH_RETRIES) {
+      throw new Error(`remote devices ${response.status}`);
+    }
+  }
+  if (!response) throw lastError ?? new Error("remote devices unavailable");
   if (!response.ok) throw new Error(`remote devices ${response.status}`);
   const body = await readJson(response);
   const raw = Array.isArray(body["devices"]) ? (body["devices"] as unknown[]) : [];

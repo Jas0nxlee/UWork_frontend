@@ -1153,6 +1153,9 @@ async function bootstrapExternalRelayWebRemoteControl(
 ): Promise<void> {
   if (connection.signal.aborted) return;
   const { params: relayParams, getToken } = connection;
+  const hasEnterpriseAdmission =
+    connection.protocol === "hmac-v1" &&
+    Boolean(relayParams.enterpriseAuth && relayParams.enterpriseOrg);
   // 修复原因：自建 HMAC 构建必须显式配置 relay，不能把配对密钥送往默认官方 V2 服务。
   if (
     connection.protocol === "hmac-v1" &&
@@ -1190,8 +1193,13 @@ async function bootstrapExternalRelayWebRemoteControl(
   let nextBridgeGeneration = 0;
   const checkVersionOnRecovery = window.location.pathname.replace(/\/+$/, "") === "/remote/v4";
   let disposeVersionNotice: (() => void) | undefined;
+  // 自托管只发单一构建：版本导航只会换来整页重载（企微丢 app_version → 循环），
+  // 构建期用 VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD=off 关掉导航。
+  const versionGuardEnabled =
+    (import.meta.env.VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD ?? "") !== "off";
   const versionGuard = createWebRemoteControlVersionGuard({
     requestBootstrap: () => requestBootstrap(),
+    enabled: versionGuardEnabled,
     onAccepted: (result) => {
       if (terminalTransportState === "paired") taskViewPublisher.seed(result.mobileTaskViewEpoch);
     },
@@ -1479,6 +1487,9 @@ async function bootstrapExternalRelayWebRemoteControl(
         return;
       }
       if (payload.zcode_type === "mobile-task-view-request") {
+        // 桌面端只在企业身份校验通过后才推这条（见 webRemoteControlManager 的准入判定），
+        // 因此它同时是"可以开始 bootstrap/版本检查"的信号。
+        startPairedHandshake();
         taskViewPublisher.request(payload.epoch);
         return;
       }
@@ -1538,45 +1549,24 @@ async function bootstrapExternalRelayWebRemoteControl(
         renderWebRemoteControlLoading(state, connectingDevice);
       }
       if (state !== "paired") {
+        // 离开配对：下一轮配对要重新走一次握手。
+        pairedHandshakeStarted = false;
         return;
       }
-      connection.onPaired();
-      // 企业身份准入：配对后立刻把身份交给桌面，桌面校验通过前会丢弃其它 payload。
-      if (relayParams.enterpriseAuth && relayParams.enterpriseOrg) {
-        const enterpriseToken = readEnterpriseAuthToken(webRemoteControlStorage, {
-          apiBaseUrl: relayParams.enterpriseAuth,
-          orgId: relayParams.enterpriseOrg,
-        });
-        if (enterpriseToken) {
-          transport.sendPayload({ zcode_type: "enterprise-identity", token: enterpriseToken });
-        }
+      // 企业身份准入先发身份帧，再复用同一个握手入口；验证前丢弃的 bootstrap 由有界重试补发。
+      const enterpriseToken =
+        relayParams.enterpriseAuth && relayParams.enterpriseOrg
+          ? readEnterpriseAuthToken(webRemoteControlStorage, {
+              apiBaseUrl: relayParams.enterpriseAuth,
+              orgId: relayParams.enterpriseOrg,
+            })
+          : null;
+      if (enterpriseToken) {
+        // 身份帧先发（桌面端校验通过前会丢弃其它 payload），但不再干等信号：
+        // 直接开始握手，bootstrap 用 3 秒一轮重试，闸门一开就接上。
+        transport.sendPayload({ zcode_type: "enterprise-identity", token: enterpriseToken });
       }
-      // 已有校验操作自行跨重连消费一次重试；配对事件不能启动另一个恢复 owner。
-      if (bootstrapping && pendingVersionCheck) return;
-      // healthy bridge 与在途初始化都不能并发新建 bridge，但新配对仍必须检查桌面版本。
-      if ((activeRelayProtocol && !activeRelayProtocol.isDegraded()) || bootstrapping) {
-        if (!checkVersionOnRecovery) return;
-        void checkDesktopVersion().catch((error) => {
-          // 版本读取失败沿用恢复链路，不卸载已挂载页面和草稿。
-          if (!terminated && !versionGuard.isBlocked()) {
-            void recoverVisibleSession("visible");
-            if (!import.meta.env.PROD)
-              console.warn("[web-remote-control] version check failed", error);
-          }
-        });
-        return;
-      }
-      if (!bootstrapPairedSession) {
-        return;
-      }
-      bootstrapping = true;
-      void bootstrapPairedSession()
-        .catch((error) => {
-          renderBootstrapError(error);
-        })
-        .finally(() => {
-          bootstrapping = false;
-        });
+      startPairedHandshake();
     },
     onFailure: (failure) => {
       renderBootstrapFailure(failure);
@@ -1611,16 +1601,78 @@ async function bootstrapExternalRelayWebRemoteControl(
     transport.recoverConnection(),
   );
 
+  /**
+   * 企业准入握手门。
+   *
+   * 桌面端在校验通过前会丢弃所有非身份 payload，而手机在"配对成功"事件里会立刻开始 bootstrap/版本检查，
+   * 于是请求被丢、手机等满 10s 报"桌面端响应超时"（2026-11-04 实测日志：丢弃 10ms 后校验就通过了）。
+   * 配对事件立即发出第一轮请求；验证通过的 `mobile-task-view-request` 也复用同一入口，不能并发握手。
+   * 若第一轮仍被准入闸门丢弃，requestBootstrap 在本次配对内用有界重试重新读取，不绕过桌面校验。
+   */
+  let pairedHandshakeStarted = false;
+  const startPairedHandshake = (): void => {
+    if (pairedHandshakeStarted || terminated || versionGuard.isBlocked()) return;
+    pairedHandshakeStarted = true;
+    connection.onPaired();
+    // 已有校验操作自行跨重连消费一次重试；配对事件不能启动另一个恢复 owner。
+    if (bootstrapping && pendingVersionCheck) return;
+    // healthy bridge 与在途初始化都不能并发新建 bridge，但新配对仍必须检查桌面版本。
+    if ((activeRelayProtocol && !activeRelayProtocol.isDegraded()) || bootstrapping) {
+      if (!checkVersionOnRecovery) return;
+      void checkDesktopVersion().catch((error) => {
+        // 版本读取失败沿用恢复链路，不卸载已挂载页面和草稿。
+        if (!terminated && !versionGuard.isBlocked()) {
+          void recoverVisibleSession("visible");
+          if (!import.meta.env.PROD)
+            console.warn("[web-remote-control] version check failed", error);
+        }
+      });
+      return;
+    }
+    if (!bootstrapPairedSession) {
+      return;
+    }
+    bootstrapping = true;
+    void bootstrapPairedSession()
+      .catch((error) => {
+        renderBootstrapError(error);
+      })
+      .finally(() => {
+        bootstrapping = false;
+      });
+  };
+
   const requestBootstrap = async (): Promise<WebRemoteControlWindowBootstrapResult> => {
-    const requestId = createWebRemoteControlRequestId("bootstrap");
-    const response = await requestAppPayload(
-      { zcode_type: "bootstrap-request", requestId },
-      (
-        payload,
-      ): payload is Extract<WebRemoteControlAppPayload, { zcode_type: "bootstrap-response" }> =>
-        payload.zcode_type === "bootstrap-response" && payload.requestId === requestId,
-    );
-    return response.result;
+    // 企业身份校验在途时桌面会丢弃 bootstrap；只能在同一配对内重发只读请求。
+    // paired 状态下 recoverConnection 会重建 socket 并撤销该终端的准入，不能靠重配对等待校验。
+    const attempts = hasEnterpriseAdmission ? 4 : 1;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const requestId = createWebRemoteControlRequestId("bootstrap");
+      try {
+        const response = await requestAppPayload(
+          { zcode_type: "bootstrap-request", requestId },
+          (
+            payload,
+          ): payload is Extract<WebRemoteControlAppPayload, { zcode_type: "bootstrap-response" }> =>
+            payload.zcode_type === "bootstrap-response" && payload.requestId === requestId,
+          hasEnterpriseAdmission ? { timeoutMs: 3_000 } : undefined,
+        );
+        return response.result;
+      } catch (error) {
+        lastError = error;
+        const failure = error as Partial<WebRemoteControlFailure> | undefined;
+        if (
+          !hasEnterpriseAdmission ||
+          failure?.reason !== "desktop-bootstrap-timeout" ||
+          terminated ||
+          versionGuard.isBlocked() ||
+          terminalTransportState !== "paired"
+        )
+          throw error;
+      }
+    }
+    throw lastError;
   };
 
   let pendingVersionCheck: Promise<WebRemoteControlWindowBootstrapResult | undefined> | undefined;
@@ -1639,11 +1691,12 @@ async function bootstrapExternalRelayWebRemoteControl(
       }
       return result;
     };
-    const request = requestWithRelayRecovery(readCurrentVersion, { recoverTimeout: true }).finally(
-      () => {
-        if (pendingVersionCheck === request) pendingVersionCheck = undefined;
-      },
-    );
+    // 企业准入读取已在同一配对内消耗有界预算；纯超时不能再重复整组并重置刚通过的准入。
+    const request = requestWithRelayRecovery(readCurrentVersion, {
+      recoverTimeout: !hasEnterpriseAdmission,
+    }).finally(() => {
+      if (pendingVersionCheck === request) pendingVersionCheck = undefined;
+    });
     pendingVersionCheck = request;
     return request;
   };

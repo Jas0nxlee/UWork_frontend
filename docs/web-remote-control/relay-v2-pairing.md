@@ -265,6 +265,36 @@ HTTP401 或重连前 JWT 缺失：关闭连接、清除本地会话、回登录�
 
 前后台恢复继续先探测同一 socket，必要时重新申请 token；重配对后按原顺序校验桌面版本、恢复 bootstrap/mobile-view-state、bridge、ACK 未确认帧与 snapshot/gap。桌面 `desktop-continuous`、手机 `web-remote-replayable` 的业务 owner、workspaceIdentity 和恢复顺序不变。
 
+#### 部署关闭版本导航时的请求代际
+
+默认开启导航时仍以当前 URL 和桌面返回版本判断，不使用跨页面的 localStorage 历史协商记录证明当前资源版本；确认前的页面或另一页面也不能为当前页面免除版本检查。自托管只分发单一构建时，可通过显式部署开关关闭导航。
+
+`VITE_ZCODE_WEB_REMOTE_CONTROL_VERSION_GUARD=off` 只关闭 URL 版本比较、导航和确认提示；仍由同一个 version guard 读取 bootstrap、合并并发请求并同步提交 `onAccepted`。重配对/断连调用 `invalidate()` 后，无论开关是否开启，上一代响应和错误均作废：不能返回旧 bootstrap、写入旧查看 epoch 或触发当前连接恢复。释放后同样忽略迟到响应；当前代的错误仍向上传递。
+
+```text
+paired E1 → guard.check(request generation 1)
+waiting   → guard.invalidate(generation 2)
+paired E2 → guard.check(request generation 2) → onAccepted(E2)
+E1 迟到响应/错误 → generation 不匹配 → 忽略（版本导航开关不改变此顺序）
+```
+
+回归同时覆盖版本导航开启和关闭：并发合并、断连后旧成功/旧错误、当前错误，以及重配对后查看 epoch 只接受当前代。
+
+#### 企业准入窗口内的 bootstrap 读取
+
+企业 HMAC 的身份 HTTP 校验与 relay 配对不是同一事件；Main 在校验前丢弃 bootstrap，不排队。手机在同一 paired generation 内最多读取 4 次，每次 3 秒，超时后直接换 requestId 重发；不增加 sleep、传输恢复状态或业务缓存。12 秒内仍无回应则按原错误视图结束，不再由外层 timeout 恢复重复整组。`relay-unavailable` 立即交给既有 relay recovery owner；鉴权/协议拒绝不作为准入超时重试。
+
+普通 HMAC 和显式 OAuth V2 没有这道企业准入窗口，保持既有单次 10 秒请求与外层最多一次恢复，20 秒无回应时终止。HMAC 的正常 paired 超时调用 `recoverConnection` 会重建 socket，从而撤销旧 terminal_sid 的企业准入，因此企业 admission 的短暂等待只能重发同 socket 的只读 bootstrap，不能用反复重配对代替校验完成。
+
+```text
+企业 HMAC: paired E1 → 身份帧 → bootstrap #1 被 pending gate 丢弃
+Main 校验完成（保持 E1）→ bootstrap #2/#3/#4 读取 → 接受当前 epoch
+4 次纯超时 → 终止（零 timeout 触发的 socket 重建）
+链路不可用 → 既有 relay recovery owner → 新 generation 仍由 guard 丢弃旧结果
+```
+
+
+
 ### 浏览器 HTTP 取消兼容
 
 terminal token 与设备列表 HTTP adapter 不依赖 `AbortSignal.any()`、`AbortSignal.timeout()` 或 `throwIfAborted()`。缺少这些方法时，仍须完成真实请求和配对，不能在构造请求参数时抛错并持续重连。
