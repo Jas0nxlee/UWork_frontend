@@ -20,7 +20,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Compare configuration fingerprints and independently probe both public endpoints
         env:
-          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CONFIG }}
+          WECOM_PROXY_CONFIG: ${{ secrets.WECOM_PROXY_CANDIDATE }}
           PROXY_CANDIDATES: ${{ inputs.candidates }}
         run: |
           node --input-type=module <<'JS'
