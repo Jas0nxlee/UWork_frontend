@@ -33,3 +33,4 @@ sequenceDiagram
 2. 同一布局通过普通 `resolveZCodePlugins` 入口完成插件发现，不能在草稿使用的发现链路抛 ENOENT。
 3. 显式构造带原生依赖的测试定义，继续验证依赖闭包、缺失必需传递依赖以及目录穿越拒绝规则，恢复测试定义后不影响真实默认合同。
 4. 原版先在新增回归中失败，移除过时定义后通过；执行相关 CLI 测试、根与 CLI 类型/Lint、架构及改动格式检查。Windows 原版/修后运行验证由根任务记录，不把本机单测等同于 Windows 实机验收。
+5. 发布 CI 显式执行 `bundled-plugins-resilience.test.ts`，同时守护升级遗留目录兼容和真实必需依赖的严格校验。完整升级及 macOS 隔离验证结果记录在 `docs/testing/windows-upgrade-0.1.9.md`，区分正式旧版、候选修复版和人工确认的证据边界。
