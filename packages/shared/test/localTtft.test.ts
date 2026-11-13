@@ -4,7 +4,7 @@ import {
   localTtftContextSchema,
   localTtftFactsSchema,
   calibrateLocalTtftClock,
-} from "../src/localTtft.js";
+} from "../src/local-ttft/contract.js";
 
 describe("本地 TTFT 协议与跨进程时钟边界", () => {
   it("只接受有界无正文观测上下文", () => {

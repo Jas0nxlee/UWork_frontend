@@ -1,11 +1,12 @@
 import { useCallback } from "react";
-import type { Locale } from "@zcode/shared";
+import { toZhOrEnLocale, type Locale } from "@zcode/shared";
 import { TID_LOCALE_TOGGLE } from "@zcode/shared/test-ids";
 import { useZCodeIntl } from "./IntlProvider.js";
 
 const LOCALE_CYCLE: Locale[] = ["zh-CN", "en-US"];
 
-const LOCALE_LABELS: Record<Locale, string> = {
+/** 桌面端只内置中英文案，切换按钮也只循环这两项。 */
+const LOCALE_LABELS: Record<"zh-CN" | "en-US", string> = {
   "zh-CN": "中",
   "en-US": "En",
 };
@@ -29,7 +30,7 @@ export function LocaleSwitcher() {
       className="cursor-pointer rounded-lg bg-btn-alt-bg px-3 py-1 text-ui-base text-btn-alt-text transition hover:bg-surface-raised"
       title={intl.formatMessage({ id: "locale.switchLanguage" })}
     >
-      {LOCALE_LABELS[locale]}
+      {LOCALE_LABELS[toZhOrEnLocale(locale)]}
     </button>
   );
 }

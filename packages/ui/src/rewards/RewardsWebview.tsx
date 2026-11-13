@@ -5,6 +5,7 @@ import {
   isTrustedRewardsUrl,
   REWARDS_PARTITION,
   resolveRewardsOrigin,
+  toZhOrEnLocale,
   ZCODE_ENV,
   type RewardsContext,
 } from "@zcode/shared";
@@ -20,7 +21,9 @@ import { EmbeddedWebsiteHeader } from "@/components/EmbeddedWebsiteHeader.js";
 export function RewardsWebview({ onClose }: { onClose: () => void }) {
   const { credentialService, oauthService } = useServices();
   const platform = usePlatform();
-  const { intl, locale } = useZCodeIntl();
+  const { intl, locale: uiLocale } = useZCodeIntl();
+  // 积分页只有中英两套；非中文界面语言用英文。
+  const locale = toZhOrEnLocale(uiLocale);
   const themePreference = useZCodeStore((s) => s.theme);
   const userId = useZCodeStore((s) => s.user?.id ?? null);
   const [systemDark, setSystemDark] = useState(

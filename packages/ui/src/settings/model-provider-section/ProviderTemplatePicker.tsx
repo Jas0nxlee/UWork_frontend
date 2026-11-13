@@ -8,6 +8,7 @@ import {
   TID_MODEL_PROVIDER_TEMPLATE_PICKER,
   testId,
 } from "@zcode/shared/test-ids";
+import { toZhOrEnLocale } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -95,7 +96,11 @@ export function ProviderTemplatePicker({
                 />
               ) : null}
               {group.templates.map((template) => {
-                const label = resolveProviderTemplateName(template.templateId, template, locale);
+                const label = resolveProviderTemplateName(
+                  template.templateId,
+                  template,
+                  toZhOrEnLocale(locale),
+                );
                 return (
                   <ProviderTemplateCard
                     key={template.templateId}

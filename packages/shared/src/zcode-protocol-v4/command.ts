@@ -1,3 +1,4 @@
+/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 v4 命令契约整文件对齐，拆分会打断 schema 与类型导出的单一门面。 */
 import { genUiModelContextSchema } from "../gen-ui/contract.js";
 import { createSessionRequestedConfigSchema } from "./create-session-config.js";
 import { localTtftContextSchema, localTtftClockSchema } from "../local-ttft/contract.js";

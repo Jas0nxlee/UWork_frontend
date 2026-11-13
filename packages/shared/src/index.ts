@@ -35,7 +35,14 @@ export type {
   PersistedWorkspaceSessionEntry,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
-export { DEFAULT_LOCALE } from "./protocol.js";
+export { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./protocol.js";
+export {
+  isLocale,
+  isLocalePreference,
+  LOCALE_NATIVE_NAMES,
+  resolveLocaleFromLanguageTag,
+  toZhOrEnLocale,
+} from "./locale.js";
 export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor } from "./env.js";
@@ -344,7 +351,7 @@ export * from "./subagent-runtime-config.js";
 export * from "./subagent-profile.js";
 export { parseAgentProfileFromMarkdown } from "./subagent-profile-parser.js";
 
-export * from "./localTtft.js";
+export * from "./local-ttft/contract.js";
 export * from "./pluginStoreOrder.js";
 export * from "./clientConfig.js";
 export * from "./pluginStoreOrdering.js";

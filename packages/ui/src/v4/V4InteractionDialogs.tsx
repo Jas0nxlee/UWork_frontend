@@ -323,6 +323,11 @@ export function V4InteractionDialogs({
   if (pending.payload.kind === "workspaceHookReview") {
     return null;
   }
+  // pluginInstall 属于上游 3.18.1 的插件发现流程；本仓 CLI 尚未产出该交互，
+  // 契约层先接受该 kind，UI 侧显式不渲染（接入 PluginInstallCard 时替换这里）。
+  if (pending.payload.kind === "pluginInstall") {
+    return null;
+  }
 
   if (pending.payload.kind === "permission") {
     const request = pendingPermissionToLegacyRequest(sessionId, {

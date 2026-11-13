@@ -4,18 +4,19 @@ import {
   SHARE_CONTENT_LIMITS,
 } from "./conversation-share-content.js";
 
+import { toZhOrEnLocale } from "./locale.js";
 import type { Locale } from "./protocol.js";
 import {
   conversationArtifactTypeSchema,
   conversationRowSchema,
-  type ConversationRow,
+  type WireConversationRow,
 } from "./zcode-protocol-v4/rows.js";
 
 /**
  * 分享站按语言分路径：中文站带 /cn 前缀，英文站是裸 /share。
  * web 路由、发布回链改写、导入回链共用这一份定义，避免三处各写一遍前缀。
  */
-const CONVERSATION_SHARE_LOCALE_PATH_PREFIX: Readonly<Record<Locale, string>> = {
+const CONVERSATION_SHARE_LOCALE_PATH_PREFIX: Readonly<Record<"zh-CN" | "en-US", string>> = {
   "zh-CN": "/cn",
   "en-US": "",
 };
@@ -28,7 +29,7 @@ const CONVERSATION_SHARE_PATHNAME_RE = /^\/(cn\/)?share\/([^/]+)\/?$/u;
  */
 export function parseConversationSharePathname(
   pathname: string,
-): { rawCode: string; locale: Locale } | null {
+): { rawCode: string; locale: "zh-CN" | "en-US" } | null {
   const match = CONVERSATION_SHARE_PATHNAME_RE.exec(pathname);
   if (!match) return null;
   return { rawCode: match[2]!, locale: match[1] ? "zh-CN" : "en-US" };
@@ -50,7 +51,8 @@ export function localizeConversationShareUrl(shareUrl: string, locale: Locale): 
   }
   const parsed = parseConversationSharePathname(url.pathname);
   if (!parsed) return shareUrl;
-  url.pathname = `${CONVERSATION_SHARE_LOCALE_PATH_PREFIX[locale]}/share/${parsed.rawCode}`;
+  // 分享站只有中英两套路径；非中文界面语言走英文站。
+  url.pathname = `${CONVERSATION_SHARE_LOCALE_PATH_PREFIX[toZhOrEnLocale(locale)]}/share/${parsed.rawCode}`;
   return url.toString();
 }
 
@@ -94,11 +96,11 @@ export function isConversationShareSchemaVersionSupported(version: number): bool
  * 计数交给调用方转成「部分内容需要更新 ZCode 查看」的软提示，不能静默。
  */
 export function decodeConversationShareRows(rows: readonly unknown[]): {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   unsupportedCount: number;
   unsupportedKinds: string[];
 } {
-  const decoded: ConversationRow[] = [];
+  const decoded: WireConversationRow[] = [];
   const unsupportedKinds: string[] = [];
   let unsupportedCount = 0;
   for (const row of rows) {
@@ -371,7 +373,7 @@ export const conversationSharePreviewDataSchema = z.object({
 });
 export type ConversationSharePreviewWire = z.infer<typeof conversationSharePreviewDataSchema>;
 export type ConversationSharePreview = Omit<ConversationSharePreviewWire, "rows"> & {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   /** 本端认不出、已跳过的行数；>0 时 UI 必须给「部分内容需要更新 ZCode 查看」软提示。 */
   unsupportedRowCount: number;
 };
@@ -408,7 +410,7 @@ export type ConversationShareContinuationWire = z.infer<
   typeof conversationShareContinuationDataSchema
 >;
 export type ConversationShareContinuation = Omit<ConversationShareContinuationWire, "rows"> & {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   /** 未解析的原始 rows：落盘只读副本时按原样保存，避免未知字段被本端永久抹掉。 */
   rawRows: readonly unknown[];
   /** 本端认不出、已跳过的行数；>0 时 UI 必须给「部分内容需要更新 ZCode 查看」软提示。 */

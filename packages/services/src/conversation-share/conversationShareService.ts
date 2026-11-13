@@ -24,8 +24,10 @@ import {
   type ConversationPreviewArtifactCandidate,
   localizeConversationShareUrl,
   resolveRuntimeZCodeEndpointOrigin,
+  toZhOrEnLocale,
 } from "@zcode/shared";
-import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import { isWireConversationRow } from "@zcode/shared/zcode-protocol-v4";
+import type { ConversationRow, WireConversationRow } from "@zcode/shared/zcode-protocol-v4";
 import {
   PROTOCOL_V4_LIMITS,
   ZCODE_ATTACHMENT_FAULT_CODES,
@@ -243,13 +245,15 @@ function previewPreflightKey(
  * 导入会话的标题前缀。services 层没有 intl，这里只维护一份最小映射；
  * 前缀在导入时定型并持久化为 session.title（titleSource: "custom"），之后切界面语言不再改写。
  */
-const IMPORTED_SHARE_TITLE_PREFIX: Readonly<Record<Locale, string>> = {
+const IMPORTED_SHARE_TITLE_PREFIX: Readonly<Record<"zh-CN" | "en-US", string>> = {
   "zh-CN": "来自分享：",
   "en-US": "From Share: ",
 };
 
 function formatImportedShareSessionTitle(shareTitle: string, locale: Locale | undefined): string {
-  return `${IMPORTED_SHARE_TITLE_PREFIX[locale ?? "zh-CN"]}${shareTitle.trim()}`;
+  // 只内置中英前缀：未提供语言时保持原来的中文默认，ja-JP 等其它语言用英文。
+  const prefixLocale = locale === undefined ? "zh-CN" : toZhOrEnLocale(locale);
+  return `${IMPORTED_SHARE_TITLE_PREFIX[prefixLocale]}${shareTitle.trim()}`;
 }
 
 function localizePublishedShare(
@@ -290,7 +294,7 @@ const importedConversationShareFileSchema = z
   .strip();
 
 interface ConversationRowsRead {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   revision: number;
   logEpoch: string;
 }
@@ -333,8 +337,10 @@ function hasUnsupportedArtifactReference(value: unknown): boolean {
  * 只降级「已定稿但无法承载」的内容；运行中的轮次/行/工具/子代理仍由
  * collectShareStructureIssues 阻断 —— 那些内容尚未定稿，跳过等于分享半成品。
  */
-function sanitizeUnsupportedShareStructures(rows: readonly ConversationRow[]): ConversationRow[] {
-  const sanitized: ConversationRow[] = [];
+function sanitizeUnsupportedShareStructures(
+  rows: readonly WireConversationRow[],
+): WireConversationRow[] {
+  const sanitized: WireConversationRow[] = [];
   for (const row of rows) {
     if (row.kind === "timelineMarker") {
       // 运行中的 marker 留着，让 collectShareStructureIssues 照旧阻断——内容尚未定稿。
@@ -374,10 +380,10 @@ function sanitizeUnsupportedShareStructures(rows: readonly ConversationRow[]): C
 }
 
 function sanitizeUnsupportedShareArtifacts(
-  rows: readonly ConversationRow[],
+  rows: readonly WireConversationRow[],
   capabilities: ConversationShareCapabilities,
   ordinalRows: readonly ConversationRow[],
-): { rows: ConversationRow[]; warnings: ConversationShareFailureIssue[] } {
+): { rows: WireConversationRow[]; warnings: ConversationShareFailureIssue[] } {
   const ordinals = turnOrdinalByProductTurn(ordinalRows);
   const warnings: ConversationShareFailureIssue[] = [];
   const retained = rows.filter((row) => {
@@ -579,7 +585,9 @@ function buildTurnPreflightResults(
   });
 }
 
-function removeIndependentArtifactRows(rows: readonly ConversationRow[]): ConversationRow[] {
+function removeIndependentArtifactRows(
+  rows: readonly WireConversationRow[],
+): WireConversationRow[] {
   // 文件候选来自用户输入附件和最终可见的 Assistant 预览卡片；内嵌图片随后独立转换。历史 artifact row
   // 若没有对应预览卡片，不再作为第三条独立发现来源进入公开 projection。
   return rows.filter((row) => row.kind !== "artifact");
@@ -593,9 +601,9 @@ function throwServiceError(
 }
 
 function selectRows(
-  rows: ConversationRow[],
+  rows: WireConversationRow[],
   selection: PublishTextConversationInput["selection"],
-): { rows: ConversationRow[]; productTurnIds: string[] } {
+): { rows: WireConversationRow[]; productTurnIds: string[] } {
   let selectedProductTurnIds: Set<string>;
   if (selection.kind === "all") {
     selectedProductTurnIds = new Set(
@@ -791,7 +799,7 @@ export class ConversationShareService implements IConversationShareService {
     const skippableWarnings: ConversationShareFailureIssue[] = [];
     const deferredIssues: ConversationShareFailureIssue[] = [];
 
-    let selected: { rows: ConversationRow[]; productTurnIds: string[] };
+    let selected: { rows: WireConversationRow[]; productTurnIds: string[] };
     try {
       selected = selectRows(conversation.rows, input.selection);
     } catch (error) {
@@ -2574,7 +2582,16 @@ export class ConversationShareService implements IConversationShareService {
       beforeRowId = firstRowId;
     }
 
-    const rows = pages.flat();
+    // rows/range 现在逐行降级（04-sync-and-recovery 封闭规则 13），所以这里可能收到 unreadable
+    // 占位行。分享必须**拒绝**，不能静默省略：少掉几行的分享会让读到链接的人看到一份失真的对话，
+    // 那比发不出去更坏。本端读不懂说明发送端比本端新，提示用户升级后重试。
+    const rows = pages.flat().filter(isWireConversationRow);
+    if (rows.length !== pages.reduce((total, page) => total + page.length, 0)) {
+      throwServiceError(
+        "invalid_conversation",
+        "Conversation contains rows this version cannot read; update UWork and try again",
+      );
+    }
     for (let index = 1; index < rows.length; index += 1) {
       const previous = rows[index - 1]!;
       const current = rows[index]!;

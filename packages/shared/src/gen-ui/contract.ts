@@ -222,11 +222,40 @@ export function stripGenUiModelContext(content: string): string {
   );
   if (!match) return content;
   try {
-    z.array(z.object({ path: genUiPathSchema, state: z.unknown() }).strict())
-      .max(GEN_UI_STATE_MAX_ENTRIES)
-      .parse(JSON.parse(match[1]!));
+    genUiModelContextSchema.parse(JSON.parse(match[1]!));
     return content.slice(0, match.index);
   } catch {
     return content;
   }
 }
+
+/**
+ * 模型上下文条目的线上校验；与 `buildGenUiModelContext` 共享同一组上限，
+ * 供 v4 协议在命令/输入意图上复用（zcode-protocol-v4）。
+ */
+export const genUiModelContextSchema = z
+  .array(z.object({ path: genUiPathSchema, state: z.unknown() }).strict())
+  .max(GEN_UI_STATE_MAX_ENTRIES)
+  .transform((entries, context) => {
+    try {
+      const serialized = serializeJson(entries);
+      if (
+        new TextEncoder().encode(serialized).byteLength > GEN_UI_CONTEXT_MAX_BYTES ||
+        entries.some(
+          (entry) =>
+            new TextEncoder().encode(serializeJson(entry.state)).byteLength >
+            GEN_UI_STATE_MAX_BYTES,
+        )
+      ) {
+        throw new Error("Gen UI model context exceeds its size limit");
+      }
+      return JSON.parse(serialized) as Array<{ path: string; state: unknown }>;
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : "Invalid Gen UI model context",
+      });
+      return z.NEVER;
+    }
+  });
+export type GenUiModelContext = z.infer<typeof genUiModelContextSchema>;

@@ -6,7 +6,11 @@ import {
   type ConversationShareArtifactDescriptor,
 } from "@zcode/shared";
 import { toolCallDisplaySchema } from "@zcode/shared/zcode-protocol-v4";
-import type { ArtifactRow, ConversationRow, ToolCallRow } from "@zcode/shared/zcode-protocol-v4";
+import type {
+  ArtifactRow,
+  WireConversationRow,
+  ToolCallRow,
+} from "@zcode/shared/zcode-protocol-v4";
 
 import { ConversationShareServiceError } from "./conversationShare.js";
 
@@ -14,7 +18,7 @@ import type { ShareContentDraft } from "./conversationShareWorkflowSnapshot.js";
 
 export interface ConversationSharePublicProjection {
   contentBlocks?: ConversationShareContentBlock[];
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   selectedProductTurnIds: string[];
   artifacts: ConversationSharePublicArtifact[];
 }
@@ -98,7 +102,7 @@ function isPublicArtifactRef(value: string): boolean {
   return /^zcode-artifact:\/\/share\/[A-Za-z0-9._~-]+$/u.test(value);
 }
 
-function assertTerminalAndSafe(rows: ConversationRow[]): void {
+function assertTerminalAndSafe(rows: WireConversationRow[]): void {
   for (const row of rows) {
     if (row.productTurnId === undefined) {
       throwProjectionError(
@@ -201,7 +205,7 @@ function requiredMappedId(ids: Map<string, string>, sourceId: string, label: str
   return mapped;
 }
 
-function buildIdMaps(rows: ConversationRow[], selectedProductTurnIds: string[]): PublicIdMaps {
+function buildIdMaps(rows: WireConversationRow[], selectedProductTurnIds: string[]): PublicIdMaps {
   return {
     productTurnIds: allocateIds(selectedProductTurnIds, "share-product-turn"),
     turnIds: allocateIds(
@@ -227,7 +231,7 @@ function buildIdMaps(rows: ConversationRow[], selectedProductTurnIds: string[]):
   };
 }
 
-function projectBase(row: ConversationRow, index: number, ids: PublicIdMaps) {
+function projectBase(row: WireConversationRow, index: number, ids: PublicIdMaps) {
   if (!row.productTurnId) {
     throwProjectionError(
       "invalid_conversation",
@@ -250,8 +254,8 @@ function projectBase(row: ConversationRow, index: number, ids: PublicIdMaps) {
 }
 
 function projectTimelineMarker(
-  row: Extract<ConversationRow, { kind: "timelineMarker" }>,
-): Extract<ConversationRow, { kind: "timelineMarker" }>["marker"] {
+  row: Extract<WireConversationRow, { kind: "timelineMarker" }>,
+): Extract<WireConversationRow, { kind: "timelineMarker" }>["marker"] {
   switch (row.marker.type) {
     case "compact":
       return {
@@ -272,6 +276,8 @@ function projectTimelineMarker(
     case "forkNotice":
     case "forkCreated":
     case "checkpointRestored":
+    // 已在 retainedRows 中过滤；走到这里说明调用方绕过了过滤。
+    case "worktreeCreated":
       throwProjectionError(
         "invalid_conversation",
         "Timeline references outside the shared projection are not supported",
@@ -286,7 +292,11 @@ function projectTimelineMarker(
  * 一种 kind 时这里会编译失败。那是有意的闸门——公开投影是跨版本数据交换格式，往里加一种
  * 老客户端读不了的 kind 必须是个显式决定，不能靠 default 悄悄放过去。
  */
-function projectRow(row: ConversationRow, index: number, ids: PublicIdMaps): ConversationRow {
+function projectRow(
+  row: WireConversationRow,
+  index: number,
+  ids: PublicIdMaps,
+): WireConversationRow {
   const base = projectBase(row, index, ids);
   switch (row.kind) {
     case "turnHeader":
@@ -440,7 +450,7 @@ function assertUnique(values: string[], label: string): void {
 }
 
 export function assertConversationSharePublicProjection(input: {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   selectedProductTurnIds: string[];
 }): void {
   if (input.rows.length === 0 || input.selectedProductTurnIds.length === 0) {
@@ -617,13 +627,13 @@ export function assertConversationSharePublicProjection(input: {
 }
 
 export function buildConversationSharePublicProjection(input: {
-  rows: ConversationRow[];
+  rows: WireConversationRow[];
   selectedProductTurnIds: string[];
   additionalArtifacts?: ConversationSharePublicArtifact[];
   contentDrafts?: ShareContentDraft[];
   toolPresentation?: boolean;
   toolImages?: ReadonlyMap<number, Array<{ resourceId: string; mimeType: string }>>;
-  sourceRows?: readonly ConversationRow[];
+  sourceRows?: readonly WireConversationRow[];
 }): ConversationSharePublicProjection {
   assertTerminalAndSafe(input.rows);
   assertUnique(input.selectedProductTurnIds, "source product turn");
@@ -647,7 +657,10 @@ export function buildConversationSharePublicProjection(input: {
   // 本地运行投影包含 subagent 详情和写入态标识，不能直接作为公开载荷；
   // 必须先过滤非 V1 Row，再基于剩余内容生成一套闭合的公开 ID。
   const retainedRows = input.rows.filter(
-    (row) => row.kind !== "subagent" && row.kind !== "hookInvocation",
+    (row) =>
+      row.kind !== "subagent" &&
+      row.kind !== "hookInvocation" &&
+      !(row.kind === "timelineMarker" && row.marker.type === "worktreeCreated"),
   );
   const sourceArtifactRows = retainedRows.filter(
     (row): row is ArtifactRow => row.kind === "artifact",

@@ -7,6 +7,7 @@ import { MarketingFailureDialog } from "@/components/marketing-touch/MarketingFa
 import { adaptMarketingPopup } from "@/components/marketing-touch/marketingPopupAdapter.js";
 import { marketingNavigation } from "@/lib/marketingNavigation.js";
 import type { MarketingTouchController } from "@/components/marketing-touch/marketingTouchController.js";
+import { toZhOrEnLocale } from "@zcode/shared";
 
 export function MarketingDialogs({ controller }: { controller: MarketingTouchController }) {
   const state = useStore(controller.store);
@@ -32,7 +33,7 @@ export function MarketingDialogs({ controller }: { controller: MarketingTouchCon
     dialog && content
       ? adaptMarketingPopup(
           dialog.delivery.campaign_id,
-          locale,
+          toZhOrEnLocale(locale),
           content,
           dialog.hero,
           intl.formatMessage({ id: "manualClaimPlan.claim.dialog.modelSettings" }),
