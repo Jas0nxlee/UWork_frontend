@@ -94,6 +94,8 @@ import type {
   OpenCuaPermissionOnboardingOptions,
   ConfigureFinalArmsCustomEventE2ERequest,
   FinalArmsCustomEventE2EEntry,
+  CaptureBrowserGuestPageRequest,
+  CaptureBrowserGuestPageResult,
 } from "@zcode/shared";
 import { unwrapRemoteWorkspaceBindResult } from "./remoteWorkspaceBindBridge.js";
 import {
@@ -345,6 +347,11 @@ contextBridge.exposeInMainWorld("zcode", {
   /** 将当前页面的 print 媒体版面导出为 PDF（Chromium 打印引擎，矢量文本） */
   printPageToPdf: (): Promise<PrintPageToPdfResult> =>
     ipcRenderer.invoke(PlatformChannels.PrintToPdf),
+  /** 在 main 截取内置浏览器 guest 当前视口为 PNG（renderer 侧 <webview>.capturePage 会崩溃） */
+  captureBrowserGuestPage: (
+    payload: CaptureBrowserGuestPageRequest,
+  ): Promise<CaptureBrowserGuestPageResult> =>
+    ipcRenderer.invoke(PlatformChannels.CaptureBrowserGuestPage, payload),
   /** 从系统拖拽/文件输入得到的 Web File 解析真实本地路径 */
   getPathForFile: (file: File): string | null => {
     // Electron 32 起移除了非标准 File.path，renderer 不能再直接从拖拽 File 上取路径。

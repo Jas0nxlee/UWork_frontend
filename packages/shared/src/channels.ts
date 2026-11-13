@@ -62,6 +62,8 @@ import type {
   SaveFileRequest,
   SaveFileResult,
   PrintPageToPdfResult,
+  CaptureBrowserGuestPageRequest,
+  CaptureBrowserGuestPageResult,
   OpenInEditorOptions,
   PostUpdateReleaseNotesPayload,
   RemoteSessionClosedEvent,
@@ -228,6 +230,8 @@ export const PlatformChannels = {
   SaveFile: "zcode:save-file",
   /** Renderer → Main：用 Chromium 打印引擎把当前页面 print 媒体版面导出为 PDF */
   PrintToPdf: "zcode:print-to-pdf",
+  /** Renderer → Main：在 main 截取内置浏览器 guest 当前视口为 PNG（renderer 侧 capturePage 会崩溃） */
+  CaptureBrowserGuestPage: "zcode:capture-browser-guest-page",
   /** Main → Renderer：转发远程连接过程日志 */
   RemoteConnectionLog: "zcode:remote-connection-log",
   /** Main → Renderer：远程 workspace session 已关闭 */
@@ -814,6 +818,10 @@ export interface PlatformChannelMap {
   [PlatformChannels.PrintToPdf]: {
     request: void;
     response: PrintPageToPdfResult;
+  };
+  [PlatformChannels.CaptureBrowserGuestPage]: {
+    request: CaptureBrowserGuestPageRequest;
+    response: CaptureBrowserGuestPageResult;
   };
   [PlatformChannels.RemoteConnectionLog]: {
     request: {

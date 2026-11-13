@@ -15,6 +15,7 @@ import { EmbeddedBrowserPermissionPrompts } from "@/browser-use/EmbeddedBrowserP
 import { BrowserViewportSurface } from "@/browser-use/BrowserViewportSurface.js";
 import { BrowserViewportToolbar } from "@/browser-use/BrowserViewportToolbar.js";
 import { useBrowserResizeOperationWarning } from "@/browser-use/useBrowserResizeOperationWarning.js";
+import { useBrowserPageExport } from "@/browser-use/useBrowserPageExport.js";
 import { useBrowserScreenshotSurfaceReady } from "@/browser-use/useBrowserScreenshotSurfaceReady.js";
 import { useEmbeddedBrowserWheelChain } from "@/browser-use/useEmbeddedBrowserWheelChain.js";
 import { useDesktopZoomFactor } from "@/browser-use/useDesktopZoomFactor.js";
@@ -939,6 +940,12 @@ export function UnifiedBrowserView({
     });
   }, [browserState.isReady, platform, runWebviewAction, webview]);
 
+  const pageExport = useBrowserPageExport({
+    currentUrl: browserState.currentUrl,
+    isReady: browserState.isReady,
+    webview,
+  });
+
   const handleTogglePicker = useCallback(() => {
     if (!webview || !browserState.isReady) return;
     void toggleWebElementPicking().catch((error: unknown) => {
@@ -1070,6 +1077,10 @@ export function UnifiedBrowserView({
         onSubmit={handleSubmit}
         isElementPickerActive={isWebElementPicking}
         isResponsiveMode={isResponsiveMode}
+        canExport={pageExport.canExport}
+        isExporting={pageExport.isExporting}
+        onExportPdf={pageExport.exportPdf}
+        onExportPng={pageExport.exportPng}
       />
       {/* 权限弹窗层：只在可见 tab 挂载（多 tab 共享 store，避免重复渲染与
           后台请求误显示）；permission 请求再按 guest 归属过滤到发起 tab。 */}
