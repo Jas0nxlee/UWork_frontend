@@ -79,6 +79,16 @@ modules:
   - id: e2e-report
     roots: [ packages/e2e-report/src ]
     managed: false
+  # design-runtime：内置浏览器设计模式注入页面的运行时（docs/browser-use/2026-11-03-browser-design-mode-spec.md）
+  - id: design-runtime
+    roots: [ packages/design-runtime/src, packages/design-runtime/vitest.config.ts ]
+    managed: true
+    requires: []
+    publicEntrypoints:
+      - packages/design-runtime/src/index.ts
+      - packages/design-runtime/src/contract.ts
+    layers: { app: "." }
+    owner: browser
   - id: zcode-cli
     roots: [ apps/zcode-cli ]
     managed: false

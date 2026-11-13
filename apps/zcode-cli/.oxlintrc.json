@@ -1,3 +1,7 @@
 {
-  "ignorePatterns": []
+  "ignorePatterns": [
+    // design 插件随包的第三方设计资源按上游字节保留（根 .gitattributes 同样标记 vendored），
+    // 里面的示例 deck-stage.js / compose.ts 不是产品代码，不参与本仓库 lint。
+    "packages/design-plugin/skills/design/design-resources/**"
+  ]
 }

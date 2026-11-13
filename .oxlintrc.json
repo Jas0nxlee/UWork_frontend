@@ -16,6 +16,9 @@
         "**/packages/desktop/src/main/desktopWindowLifecycle.ts",
         "**/packages/desktop/src/main/web-remote-relay/hmacTransport.ts",
         "**/packages/desktop/test/e2e/helpers/project-sidebar.ts",
+        // design-runtime 的页面运行时按命令集组织在一个自包含函数里（序列化进 guest 页面后执行），
+        // 拆分只会把同一份页面状态的读写拆散；沿用同一档 800 行上限。
+        "**/packages/design-runtime/src/pageRuntime.ts",
         "**/packages/services/src/conversation-share/conversationShareWorkflowSnapshot.ts",
         "**/packages/shared/src/test-ids.ts",
         "**/packages/ui/scripts/lib/officePptxButtonCases.mjs",
