@@ -274,6 +274,7 @@ export interface ZCodeAgentReadSessionParams extends ZCodeAgentSessionTarget {
 export interface ZCodeAgentReadSessionMessagesParams extends ZCodeAgentSessionTarget {
   afterMessageId?: string;
   limit?: number;
+  direction?: "forward" | "backward";
 }
 
 export interface ZCodeAgentReadSessionEventsParams extends ZCodeAgentSessionTarget {
@@ -648,6 +649,12 @@ export interface IZCodeAgentService {
   ): Promise<ZCodeSessionSubagentsResult>;
   getAppUsageStats(params: ZCodeAgentAppUsageParams): Promise<AppUsageSnapshot>;
   getTaskTokenUsage(params: ZCodeAgentTaskTokenUsageParams): Promise<ZCodeTaskTokenUsageResult>;
+  /**
+   * 该 workspace 的 CLI 是否在 runtime/capabilities 中声明 extensionInputSource（只供 Host 进程内调用）。
+   * 代扩展发消息前必须确认；false 时调用方报 unavailable，不去掉来源后发送
+   * （apps/zcode-cli/docs/design/v2/conversation-input-source.md §7）。
+   */
+  supportsExtensionInputSource?(target: ZCodeAgentWorkspaceTarget): Promise<boolean>;
   readSession(params: ZCodeAgentReadSessionParams): Promise<ZCodeSessionStateSnapshot>;
   readSessionMessages(
     params: ZCodeAgentReadSessionMessagesParams,
@@ -876,6 +883,10 @@ export interface IZCodeAgentService {
    * 写路径已收敛 v4 命令面；本订阅是读路径投影源。
    */
   onDynamicSessionEvent(params: ZCodeAgentSessionSubscribeParams): Event<ZCodeAgentServiceEvent>;
+  /** 独立于可被释放的 conversation publisher 的生命周期事实。 */
+  onDynamicSessionLifecycle(
+    params: ZCodeAgentWorkspaceTarget,
+  ): Event<import("@zcode/shared").SessionLifecycleSnapshot>;
   // ── v4 conversation 通道（竖切）──
   /** RPC attachment 建立后先读取 host 可信 hello。 */
   helloConversationV4(): Promise<HelloMessage>;

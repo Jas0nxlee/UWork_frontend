@@ -32,6 +32,7 @@ import {
   localTtftFactsSchema,
   sessionDebugSnapshotSchema,
   type LocalTtftFacts,
+  type SessionLifecycleSnapshot,
 } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- UWork Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
@@ -146,6 +147,7 @@ import {
   zcodeSessionStateSnapshotSchema,
   zcodeSessionSubscribeResultSchema,
   zcodeStateUpdatedNotificationSchema,
+  sessionLifecycleSnapshotSchema,
   zcodeUserInputRequestParamsSchema,
   zcodeWorkspacePresentationSchema,
   zcodeWorkspaceCancelGenerateTextResultSchema,
@@ -1317,6 +1319,10 @@ export function createZCodeAgentService(
     Emitter<ZCodePluginOperationProgressNotification>
   >();
   // v4 conversation 帧 fan-out：workspace 级 emitter，renderer 侧按 topic 自行路由。
+  const sessionLifecycleEmitter = new Emitter<{
+    workspaceKey: string;
+    snapshot: SessionLifecycleSnapshot;
+  }>();
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
   const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryFact>>();
@@ -2283,6 +2289,17 @@ export function createZCodeAgentService(
           return;
         }
 
+        if (message.method === zcodeProtocolMethods.sessionLifecycleChanged) {
+          if (activeClientsByWorkspaceKey.get(resolveWorkspaceKey(workspace))?.client !== client)
+            return;
+          const parsed = sessionLifecycleSnapshotSchema.safeParse(message.params);
+          if (parsed.success)
+            sessionLifecycleEmitter.fire({
+              workspaceKey: resolveWorkspaceKey(workspace),
+              snapshot: parsed.data,
+            });
+          return;
+        }
         if (message.method === V4_NOTIFICATIONS.localTtftFacts) {
           const parsed = localTtftFactsSchema.safeParse(message.params);
           if (parsed.success && !workspace.remoteSessionId && !workspace.workspaceIdentity?.trim())
@@ -3659,6 +3676,7 @@ export function createZCodeAgentService(
     for (const emitter of offPeakLifecycleEmitters.values()) emitter.dispose();
     offPeakLifecycleEmitters.clear();
     localTtftFactsEmitter.dispose();
+    sessionLifecycleEmitter.dispose();
     cuaPermissionObservationEmitter.dispose();
     pluginUiToolResultEmitter.dispose();
     for (const emitter of workspaceConfigFrameEmitters.values()) {
@@ -6611,6 +6629,12 @@ export function createZCodeAgentService(
       return getConversationFrameEmitter(params).event;
     },
 
+    onDynamicSessionLifecycle(params: ZCodeAgentWorkspaceTarget) {
+      return (listener: (snapshot: SessionLifecycleSnapshot) => void) =>
+        sessionLifecycleEmitter.event((event) => {
+          if (event.workspaceKey === resolveWorkspaceKey(params)) listener(event.snapshot);
+        });
+    },
     onDynamicLocalTtftFacts(params: ZCodeAgentWorkspaceTarget) {
       return (listener: (facts: LocalTtftFacts) => void) =>
         localTtftFactsEmitter.event((event) => {

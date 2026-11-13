@@ -1,5 +1,6 @@
 import type { ToolSearchExecutionContext, ModelCallWrapper } from "@zcode/contracts";
 import type { McpToolUiDescriptor } from "@zcode/shared/mcp-apps";
+import type { SessionControlBinding } from "./session-control/contract.js";
 // ============================================================
 // Tool Types - Core tool types for registry and executor
 // ============================================================
@@ -153,6 +154,8 @@ export interface ToolExecutionContext {
   spanId?: string;
   parentSpanId?: string;
   abortSignal: AbortSignal;
+  /** 仅可信根会话装配；子代理不继承此控制权。 */
+  sessionControl?: SessionControlBinding;
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   emitEvent?: (event: SessionEvent) => Promise<void>;
   executionPort?: ExecutionPort;

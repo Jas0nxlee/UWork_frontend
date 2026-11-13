@@ -1,3 +1,4 @@
+/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 整表移植：扩展会话读面：会话列表、消息/事件读取与生命周期订阅共用同一 capability 上下文，拆分会复制授权与取消处理。 */
 import type { IDisposable } from "@zcode/rpc";
 import type { AppSessionRef } from "@zcode/session-control/contracts";
 import {
