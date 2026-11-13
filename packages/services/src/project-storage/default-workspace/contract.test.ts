@@ -56,11 +56,14 @@ describe("系统 default 项目纠偏", () => {
         db
           .prepare("SELECT * FROM tasks ORDER BY task_id")
           .all()
-          .map(({ project_id: _project, ...task }) => task);
+          // project_id 是迁移写入的归属态；worktree_root 是迁移新增的 worktree 放置列（旧行恒为 NULL），
+          // 两者都不属于要保留的 CLI 事实，比较前后时剔除。
+          .map(({ project_id: _project, worktree_root: _worktree, ...task }) => task);
       const taskFacts = facts();
       expect((await port.migrate(db, context)).applied).toEqual([
         "0006_default_workspace_tasks",
         "0007_initial_workspace_order",
+        "0010_task_worktree_root",
       ]);
       expect(
         db.prepare("SELECT project_id FROM tasks WHERE task_id IN ('normal','archived')").all(),

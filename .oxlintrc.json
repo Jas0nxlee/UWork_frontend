@@ -32,6 +32,12 @@
         "**/packages/ui/src/project-sidebar/grouped/task-row.tsx",
         "**/packages/ui/src/project-sidebar/grouped/view.ts",
         "**/packages/ui/src/side-pane-full-view/ConversationHost.tsx",
+        // 受管 worktree（docs/git/worktree.md）整块从上游取来，职责完整；
+        // git 操作 / 编排服务 / 管理弹窗是长流程，不按行数机械拆分。
+        "**/packages/services/src/git/managed-worktree/gitWorktreeRepo.ts",
+        "**/packages/services/src/project-storage/project-repository.ts",
+        "**/packages/services/src/managed-worktree-tasks/service.ts",
+        "**/packages/ui/src/project-sidebar/ManagedWorktreesDialog.tsx",
         "**/packages/ui/src/store/index.ts",
         "**/packages/ui/src/store/pluginManagementStore.ts",
         "**/packages/ui/src/v4/pendingCommandRegistry.ts",

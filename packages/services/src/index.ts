@@ -335,6 +335,12 @@ export type {
 } from "@zcode/shared";
 
 export { IProjectService, LEGACY_SINGLE_ROOT_PROJECT_PREFIX } from "#src/project/contract.js";
+export {
+  IManagedWorktreeService,
+  type ManagedWorktreeGroup,
+  type ManagedWorktreeWorkspace,
+  type StartManagedWorktreeCreationResult,
+} from "#src/managed-worktree-tasks/contract.js";
 export type {
   ProjectTree,
   ProjectTask,

@@ -68,14 +68,21 @@ export function useStableResolvedActiveTaskMeta(taskMeta: ZCodeTaskMeta | null) 
   return stableTaskMetaRef.current;
 }
 
-export function useWorkspaceActiveTaskState({
-  workspaceAbsPath,
-  activeTaskId,
-  workspaceRemoteSessionId,
+/**
+ * 任务元数据只读 Host 的 tasks-index（唯一数据源）：先订阅再读取，任务列表或项目变化时重读。
+ * 会话头部与按 cwd 工作的界面（docs/git/worktree.md §3.7）共用这一份读取逻辑。
+ */
+export function useIndexedTaskMeta({
+  workspacePath: workspaceAbsPath,
   workspaceIdentity,
-  selectedProvider,
-  intl,
-}: UseWorkspaceActiveTaskStateParams) {
+  remoteSessionId: workspaceRemoteSessionId,
+  taskId: activeTaskId,
+}: {
+  workspacePath: string;
+  workspaceIdentity?: string;
+  remoteSessionId?: string | null;
+  taskId: string | null;
+}): ZCodeTaskMeta | null {
   const service = useZCodeTaskService(
     workspaceAbsPath,
     workspaceRemoteSessionId,
@@ -86,10 +93,6 @@ export function useWorkspaceActiveTaskState({
     (state) =>
       selectWorkspaceZCodeState(state, workspaceAbsPath, workspaceIdentity).taskListVersion,
   );
-  const optimisticMeta = useZCodeSessionStore((state) => {
-    const workspace = selectWorkspaceZCodeState(state, workspaceAbsPath, workspaceIdentity);
-    return activeTaskId ? (workspace.optimisticTaskListByTaskId[activeTaskId] ?? null) : null;
-  });
   const targetKey = JSON.stringify([
     workspaceIdentity?.trim() || workspaceAbsPath,
     activeTaskId,
@@ -142,6 +145,27 @@ export function useWorkspaceActiveTaskState({
   // 同 ID 可存在于不同远端；渲染时即拒绝旧目标，不能等 effect 才清标题。
   const indexedMeta =
     indexed?.service === service && indexed.targetKey === targetKey ? indexed.meta : null;
+  return indexedMeta;
+}
+
+export function useWorkspaceActiveTaskState({
+  workspaceAbsPath,
+  activeTaskId,
+  workspaceRemoteSessionId,
+  workspaceIdentity,
+  selectedProvider,
+  intl,
+}: UseWorkspaceActiveTaskStateParams) {
+  const optimisticMeta = useZCodeSessionStore((state) => {
+    const workspace = selectWorkspaceZCodeState(state, workspaceAbsPath, workspaceIdentity);
+    return activeTaskId ? (workspace.optimisticTaskListByTaskId[activeTaskId] ?? null) : null;
+  });
+  const indexedMeta = useIndexedTaskMeta({
+    workspacePath: workspaceAbsPath,
+    workspaceIdentity,
+    remoteSessionId: workspaceRemoteSessionId,
+    taskId: activeTaskId,
+  });
   const activeTaskMeta = indexedMeta ?? optimisticMeta;
   const resolvedActiveTaskMeta = useStableResolvedActiveTaskMeta(activeTaskMeta);
   // M5② store 收尾：taskMessagesByTaskId 已无写入方（旧 ChatView/bot 消息回放均退役），

@@ -2,6 +2,7 @@ import type { IRemoteProjectService } from "#src/remote-projects/contract.js";
 import type { ITaskGroupService } from "#src/task-groups/contract.js";
 import type { WindowProjectDirectoryServices } from "#src/window-project-directory/contract.js";
 import type { IProjectService } from "#src/project/contract.js";
+import type { IManagedWorktreeService } from "#src/managed-worktree-tasks/contract.js";
 import type { IGenUiService } from "./gen-ui/contract.js";
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import type { IHighspeedCardService } from "./highspeed/highspeedCard.js";
@@ -61,6 +62,8 @@ import type { IConversationShareService } from "./conversation-share/conversatio
 export interface IServiceAccessor {
   readonly taskGroupService?: ITaskGroupService;
   readonly projectService?: IProjectService;
+  /** 受管 worktree 管理；仅本地桌面 Host 提供，手机与旧 Host 缺省。 */
+  readonly managedWorktreeService?: IManagedWorktreeService;
   readonly remoteProjectService?: IRemoteProjectService;
   readonly windowProjectDirectory?: WindowProjectDirectoryServices;
   readonly fileService: IFileService;
