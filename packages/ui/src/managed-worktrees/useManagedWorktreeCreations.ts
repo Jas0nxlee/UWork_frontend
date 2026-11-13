@@ -2,14 +2,31 @@
 // 唯一数据源：这里只镜像 Host 推送的完整列表，不在 renderer 推算阶段或进度。
 import { useEffect, useState } from "react";
 import type { ManagedWorktreeCreation, ManagedWorktreeCreationSettlement } from "@zcode/shared";
-import { useOptionalBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
+import { useRemoteWorkspaceSessionStore } from "@/store/remoteWorkspaceSessionStore.js";
 import { logger } from "@/logger.js";
 
 const EMPTY: readonly ManagedWorktreeCreation[] = [];
 
+interface WorktreeCreationHostService {
+  listCreations(): Promise<ManagedWorktreeCreation[]>;
+  onDidChangeCreations(
+    listener: (creations: readonly ManagedWorktreeCreation[]) => void,
+  ): { dispose(): void };
+  onDidSettleCreation(listener: (settlement: ManagedWorktreeCreationSettlement) => void): {
+    dispose(): void;
+  };
+}
+
+/**
+ * 创建记录只属于本机 Host（base attachment）。直接读 base services 而不是当前 workspace 的
+ * ServiceProvider：远程项目的服务没有 managed-worktrees 频道；渲染壳未注入任何服务时返回 undefined。
+ */
+function useWorktreeHostService(): WorktreeCreationHostService | undefined {
+  return useRemoteWorkspaceSessionStore((state) => state.baseServices)?.managedWorktreeService;
+}
+
 export function useManagedWorktreeCreations(): readonly ManagedWorktreeCreation[] {
-  // 创建记录只属于本机 Host；当前项目的远程服务会把订阅发到不存在的 managed-worktrees 频道。
-  const managedWorktreeService = useOptionalBaseWorkspaceServices()?.managedWorktreeService;
+  const managedWorktreeService = useWorktreeHostService();
   const [creations, setCreations] = useState<readonly ManagedWorktreeCreation[]>(EMPTY);
   useEffect(() => {
     if (!managedWorktreeService) return;
@@ -38,7 +55,7 @@ export function useManagedWorktreeCreations(): readonly ManagedWorktreeCreation[
 export function useManagedWorktreeSettlements(
   handler: (settlement: ManagedWorktreeCreationSettlement) => void,
 ): void {
-  const managedWorktreeService = useOptionalBaseWorkspaceServices()?.managedWorktreeService;
+  const managedWorktreeService = useWorktreeHostService();
   useEffect(() => {
     if (!managedWorktreeService) return;
     const subscription = managedWorktreeService.onDidSettleCreation(handler);

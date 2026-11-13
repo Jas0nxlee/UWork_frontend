@@ -1,7 +1,7 @@
 // worktree 入口（composer 复选框、"在新 worktree 中分叉"）的可见性与可用性（docs/git/worktree.md §3.1）。
 // 可见：本地 Git 仓库；可用：项目 CLI 在 runtime/capabilities 中声明 worktreeCwd。
 import { useEffect, useState } from "react";
-import { useServices } from "@/hooks/useServices.js";
+import { useOptionalServices } from "@/hooks/useServices.js";
 import { logger } from "@/logger.js";
 
 export interface WorktreeSupport {
@@ -16,11 +16,14 @@ export function useWorktreeSupport(
   workspaceIdentity: string | undefined,
   enabled: boolean,
 ): WorktreeSupport {
-  const { managedWorktreeService, gitService } = useServices();
+  // 没有 ServiceProvider 的渲染（Shell 布局单测、静态预览）没有 worktree 能力：入口保持隐藏。
+  const services = useOptionalServices();
+  const managedWorktreeService = services?.managedWorktreeService;
+  const gitService = services?.gitService;
   const [state, setState] = useState<{ path: string; support: WorktreeSupport } | null>(null);
   const active = enabled && Boolean(managedWorktreeService) && !workspaceIdentity?.trim();
   useEffect(() => {
-    if (!active || !managedWorktreeService) return;
+    if (!active || !managedWorktreeService || !gitService) return;
     let disposed = false;
     void Promise.all([
       gitService.getWorkspaceRepositoryInfo({ workspacePath }),

@@ -1,4 +1,13 @@
 import { isReadonlyAgentSessionKind } from "@zcode/shared";
+import {
+  classifyLocalSessionDirectory,
+  resolveWorkspaceHookTrustIdentityForWorkspace,
+} from "@zcode/adapters/config";
+import { projectIdFromDirectory } from "../app/paths.js";
+import { resolve } from "node:path";
+
+/** 单次 sessions-index 订阅最多补读的受管 worktree 会话数（与 legacyTaskIds 同一量级上限）。 */
+const MAX_WORKTREE_SESSION_IDS = 200;
 import { readBackgroundBashOutputFromOwner } from "./background-work-owner.js";
 // v4 网关 binder。
 // 定位：ConversationV4Gateway 是域无关的通道运行时，本文件把它绑到协议服务器上下文：
@@ -95,7 +104,7 @@ import type {
 } from "@zcode/contracts";
 import { HYDRATION_TRACE_ID } from "../zcode-protocol-v4/projection-state.js";
 import { cloneModelSelection, derivedSessionModelSelection } from "./fork-model-selection.js";
-import { resolveWorkspaceRefFromId } from "./mapper.js";
+import { resolveWorkspaceRefFromId, workspaceRefWithCwd } from "./mapper.js";
 import { buildLiveWorkspaceConfigStateV4 } from "./v4-workspace-config.js";
 import {
   hasSessionModelProvider,
@@ -1242,6 +1251,7 @@ export function createConversationV4Gateway(
       sessionId,
       additionalDirectories,
       workspaceId,
+      cwd,
       mcpServers,
       offPeakToolEnabled,
       dynamicWorkflowEnabled,
@@ -1262,7 +1272,10 @@ export function createConversationV4Gateway(
       const created = await createSessionRecordForV4(context, {
         sessionId,
         additionalDirectories,
-        workspace: resolveWorkspaceRefFromId(workspaceId),
+        // cwd：受管 worktree 任务属于项目 workspace（key 不变），执行路径是 worktree。
+        workspace: cwd
+          ? workspaceRefWithCwd(resolveWorkspaceRefFromId(workspaceId), cwd)
+          : resolveWorkspaceRefFromId(workspaceId),
         // 群任务已经由首条真实需求触发，先落盘隔离授权，再开放任务与配置。
         // 普通 Desktop draft 仍保持 deferred。
         persistence: "deferred",
@@ -1326,6 +1339,20 @@ export function createConversationV4Gateway(
       const { goalBoundary, revisionAtDecision, sourceCommandId, target } = options;
       const record = context.sessions.get(sessionId);
       if (!record) throw new Error("proto.sessionNotFound");
+      // 先校验再读历史：远程 workspace 在任何持久化之前结构化拒绝。
+      const targetCwd = options.targetCwd
+        ? {
+            directory: workspaceRefWithCwd(record.workspace, options.targetCwd.cwd).workspacePath,
+            // 权限与记忆的项目身份按映射回源仓库的路径派生（docs/git/worktree.md §6.6.3）。
+            projectID: projectIdFromDirectory(
+              await resolveWorkspaceHookTrustIdentityForWorkspace({
+                workspacePath: options.targetCwd.cwd,
+                ...(context.deps.env ? { env: context.deps.env } : {}),
+              }),
+            ),
+            worktreeCreation: options.targetCwd.worktreeCreation,
+          }
+        : undefined;
       const store = context.deps.sessionStore;
       if (!store) throw new Error("fault.command.stableForkStoreUnavailable");
       const messages = await store.messages({ sessionID: sessionId as SessionId });
@@ -1355,6 +1382,14 @@ export function createConversationV4Gateway(
         sourceCommandId,
         revisionAtDecision,
         traceContext: record.traceContext,
+        // Host 预分配的 childSessionId 作为 child ID。幂等仍以 (parent, sourceCommandId) 的
+        // command fact 为准：同 commandId 重试由 commitForkBundle 返回已提交的同一 child。
+        ...(targetCwd && options.targetCwd
+          ? {
+              forkedSessionId: options.targetCwd.childSessionId as SessionId,
+              targetCwd,
+            }
+          : {}),
       });
       await registerCommittedForkBestEffort(context, record, fork, {
         commandId: sourceCommandId,
@@ -1367,6 +1402,10 @@ export function createConversationV4Gateway(
         },
         // core 已按 copied message/verifier 边界复制 goal；禁止再用 parent 当前 target 覆盖。
         inheritLatestTarget: false,
+        // child 在 worktree 中执行但属于同一 workspace（key 不变，§8.2）。
+        ...(targetCwd
+          ? { childWorkspace: workspaceRefWithCwd(record.workspace, targetCwd.directory) }
+          : {}),
       });
       return { forkedSessionId: String(fork.forkedSessionId) };
     },
@@ -1786,6 +1825,46 @@ export function createConversationV4Gateway(
     // ── workspace-config hook（配置目录订阅种子；live session 快路径，避免临时 app）──
     getWorkspaceConfig: (workspaceId) => buildLiveWorkspaceConfigStateV4(context, workspaceId),
     getStoredSessionSummaries: loadStoredSessionSummaries,
+    // 受管 worktree 会话：目录扫描看不到，Host 按精确 id 提供；cwd 必须映射回该 workspace 目录
+    // （已删除的 worktree 用受管布局判定兜底），否则不能借 workspace 的 key 进列表（§6.6.2）。
+    getWorktreeSessionSummaries: async (workspaceId, sessionIds) => {
+      const store = context.deps.sessionStore;
+      if (!store || parseRemoteWorkspaceIdentity(workspaceId)) return [];
+      const workspacePath = resolve(workspaceId);
+      const summaries: SessionSummary[] = [];
+      for (const sessionId of [...new Set(sessionIds)].slice(0, MAX_WORKTREE_SESSION_IDS)) {
+        const existingRecord = context.sessions.get(sessionId);
+        if (existingRecord && !isTaskListSessionType(existingRecord.taskType)) continue;
+        const stored = await store.getSession(sessionId as SessionId);
+        if (!stored) continue;
+        if (stored.taskType && !isTaskListSessionType(stored.taskType)) continue;
+        const relation = await classifyLocalSessionDirectory({
+          directory: stored.directory,
+          workspacePath,
+          ...(context.deps.env ? { env: context.deps.env } : {}),
+        });
+        if (relation === "same" || relation === "other") continue;
+        summaries.push({
+          sessionId: String(stored.id),
+          workspaceId,
+          ...(stored.parentID ? { parentSessionId: String(stored.parentID) } : {}),
+          title: stored.title ?? "",
+          titleSource: normalizeStoredTitleSource(stored.titleSource),
+          phase:
+            stored.lastOutcome === "error"
+              ? ("error" as const)
+              : stored.lastOutcome === "interrupted"
+                ? ("completedInterrupted" as const)
+                : ("completedSuccess" as const),
+          ...(stored.lastOutcome ? { lastOutcome: stored.lastOutcome } : {}),
+          sessionEnded: true,
+          hasBackgroundWork: false,
+          lastActivityAt: stored.time?.updated ?? 0,
+          createdAt: stored.time?.created ?? 0,
+        });
+      }
+      return summaries;
+    },
     refreshLegacySessionSummaries: (workspaceId, legacyTaskIds) =>
       parseRemoteWorkspaceIdentity(workspaceId)
         ? loadStoredSessionSummaries(workspaceId, legacyTaskIds)

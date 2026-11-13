@@ -132,7 +132,9 @@ import {
   zcodeMcpResourceSamplesSchema,
   zcodeToolExecResourceSchema,
   zcodeProcessResourceSampleSchema,
+  zcodeRuntimeCapabilitiesSchema,
   zcodeSessionCloseResultSchema,
+  zcodeSessionReleaseUnderDirectoryResultSchema,
   zcodeSessionCompactResultSchema,
   zcodeSessionEventsResultSchema,
   zcodeSessionGoalResultSchema,
@@ -184,7 +186,7 @@ import {
   mergeAutomationMutationToolDenylist,
   mergeOffPeakMutationToolDenylist,
 } from "#src/zcode-agent/automationToolPolicy.js";
-import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./zcodeAgent.js";
+import { HOST_WORKTREE_COMMAND, ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./zcodeAgent.js";
 import type {
   ZCodeProtocolRequestId,
   ModelSelection,
@@ -1226,6 +1228,20 @@ export function resolveOffPeakToolSelection(
     ? selection
     : { ...selection, options: { reasoningLevel: thoughtLevel } };
 }
+
+function isHostWorktreeCommand(params: ZCodeAgentConversationCommandParams): boolean {
+  return (params as { [HOST_WORKTREE_COMMAND]?: unknown })[HOST_WORKTREE_COMMAND] === true;
+}
+
+function assertNoHostOnlyWorktreeFields(envelope: CommandEnvelope): void {
+  const payload = (envelope.payload ?? {}) as Record<string, unknown>;
+  const forbidden =
+    envelope.type === "createSession"
+      ? payload.cwd !== undefined || payload.worktreeCreation !== undefined
+      : envelope.type === "forkAssistant" && payload.targetCwd !== undefined;
+  if (forbidden) throw new Error("worktree.host-only-field");
+}
+
 export function createZCodeAgentService(
   options?: CreateZCodeAgentServiceOptions,
 ): IZCodeAgentService & { disposeAllAndWait(): Promise<void> } {
@@ -1366,6 +1382,14 @@ export function createZCodeAgentService(
   >();
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
   const interactionPreferenceSyncByWorkspaceKey = new Map<string, Promise<void>>();
+  /**
+   * runtime/capabilities 的按连接探测结果（docs/git/worktree.md §9.3）。能力集合属于物理 CLI
+   * 连接：换代后 getClient 返回新连接，缓存随之失效；探测失败不缓存，下次调用重试。
+   */
+  const clientCapabilitiesByClient = new WeakMap<
+    ZCodeProtocolClient,
+    Promise<{ worktreeCwd?: boolean }>
+  >();
   let latestAppRuntimePreferences: ZCodeAgentAppRuntimePreferences | undefined;
   /** 服务端「提供」的进程内单次读取；见 resolveDynamicWorkflowGate 的注释。 */
   let dynamicWorkflowOffer: Promise<DynamicWorkflowClientConfig | undefined> | undefined;
@@ -3806,6 +3830,9 @@ export function createZCodeAgentService(
     params: ZCodeAgentConversationCommandParams,
   ): Promise<CommandEnvelope> {
     const envelope = params.envelope;
+    // cwd / worktreeCreation / targetCwd 只允许 Host 的 worktree 服务设置（docs/git/worktree.md §5.1）：
+    // 渲染进程与手机经 RPC 传来的 JSON 无法携带 Symbol 键，因此不能伪造。
+    if (!isHostWorktreeCommand(params)) assertNoHostOnlyWorktreeFields(envelope);
     if (envelope.type === "createSession") {
       const { dynamicWorkflowEnabled, dynamicWorkflowMode } =
         await resolveDynamicWorkflowSessionFlags();
@@ -5546,6 +5573,48 @@ export function createZCodeAgentService(
       );
       // 兼容尚未返回 closed 字段、但已成功执行普通 close 的 Agent。
       return result.closed ?? true;
+    },
+
+    async releaseSessionsUnderDirectory(params) {
+      // 绝不为卸载拉起 CLI：没有进程时没有驻留会话。
+      const client = processManager.getExistingClient(params);
+      if (!client || client.isDisposed) return { released: [], busy: [] };
+      return await client.request(
+        zcodeProtocolMethods.sessionReleaseUnderDirectory,
+        { directory: params.directory },
+        zcodeSessionReleaseUnderDirectoryResultSchema,
+      );
+    },
+
+    async queryCommandResult(params) {
+      // 命令结果是 CLI 的事实；进程已退出时以只读方式拉起，读取持久化的命令记录。
+      const client = await getReadOnlyClient(params);
+      const query = commandsQueryParamsSchema.parse({ commands: [params.key] });
+      const result = await client.request(
+        V4_METHODS.commandsQuery,
+        query,
+        commandsQueryResultSchema,
+      );
+      return result.results[0]?.result ?? "unknown";
+    },
+
+    async supportsWorktreeCwd(target) {
+      const client = await getClient(target);
+      let capabilities = clientCapabilitiesByClient.get(client);
+      if (!capabilities) {
+        capabilities = client.request(
+          zcodeProtocolMethods.runtimeCapabilities,
+          {},
+          zcodeRuntimeCapabilitiesSchema,
+        );
+        clientCapabilitiesByClient.set(client, capabilities);
+        capabilities.catch(() => {
+          // 探测失败不缓存：CLI 可能只是启动期暂不可用，下次调用重试。
+          clientCapabilitiesByClient.delete(client);
+        });
+      }
+      // 能力集合属于连接；未声明（旧 CLI）按不支持处理。
+      return (await capabilities).worktreeCwd === true;
     },
 
     async setModel(params: ZCodeAgentSetModelParams) {

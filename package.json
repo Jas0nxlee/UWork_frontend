@@ -37,7 +37,7 @@
     "test:unit:node": "node --test scripts/test/node-unit-runner.test.mjs scripts/test/vitest-force-rerun.test.mjs && node scripts/run-node-unit-tests.mjs",
     "test:unit:affected": "node scripts/run-affected-unit-tests.mjs",
     "test:docker:web-app-gateway": "node scripts/test-web-app-gateway-reset.mjs",
-    "verify:pre-push": "pnpm run lint && pnpm run db:schema:check && pnpm run test:architecture && pnpm run architecture:check -- --changed && pnpm run test:unit:node && pnpm run test:unit:affected --scope push",
+    "verify:pre-push": "node scripts/check-push-worktree.mjs && pnpm run lint && pnpm run db:schema:check && pnpm run test:architecture && pnpm run architecture:check -- --changed && pnpm run test:unit:node && pnpm run test:unit:affected --scope push",
     "build": "pnpm -r build",
     "build:desktop-agent:bytecode": "node scripts/build-desktop-agent-bytecode.mjs",
     "build:docs": "pnpm --filter @zcode/dev-docs build",

@@ -70,6 +70,12 @@ import type {
   ImportedConversationShare,
 } from "@zcode/services";
 import { useCodingPlanBillingDiscountFromService } from "@/CodingPlanBillingDiscount.js";
+import {
+  ForkDestinationContext,
+  formatManagedWorktreeError,
+  useTaskWorktreePlacement,
+  useWorktreeSupport,
+} from "@/managed-worktrees/index.js";
 import { toast } from "@/components/ui/toast.js";
 import { cn } from "@/components/lib/utils.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -607,7 +613,7 @@ export function SessionPane({
   sessionId,
   openTrigger,
   rootSessionId,
-  readOnly = false,
+  readOnly: workspaceReadOnly = false,
   allowWorkspaceFileRewind = false,
   selectionSideChat = false,
   activeSelectionSideChatSessionId = null,
@@ -694,6 +700,16 @@ export function SessionPane({
   const composerDraftGeneration = useZCodeSessionStore(
     (store) => store.getWorkspaceState(workspacePath, workspaceIdentity).draftFocusVersion,
   );
+  const draftWorktreeEnabled = useZCodeSessionStore((store) =>
+    Boolean(store.getWorkspaceState(workspacePath, workspaceIdentity).draftWorktree),
+  );
+  const viewWorktreeCreation = useZCodeSessionStore((state) => state.viewWorktreeCreation);
+  // worktree 被删除后，任务按"工作区目录失效"规则只读（docs/git/worktree.md §3.12）。
+  const {
+    worktreeRoot: sessionWorktreeRoot,
+    worktreeAvailable,
+  } = useTaskWorktreePlacement({ workspacePath, workspaceIdentity, remoteSessionId, sessionId });
+  const readOnly = workspaceReadOnly || !worktreeAvailable;
   const pendingAtEntry = useMemo(() => {
     if (sessionId !== null || newTaskComposerScope.projectId !== null) return null;
     const pending = readPendingTaskDraft(newTaskComposerScope);
@@ -3119,7 +3135,9 @@ export function SessionPane({
   // pane 未绑定会话时后台建 phase=draft 会话作预热载体：配置写 CAS 直达、首发复用。
   // 对外绑定语义不变（shell activeTaskId 仍 null），预热会话只是 pane 内部 effective 订阅目标。
   const { binding: prewarmBinding, waitForSession: waitForDraftSession } = useDraftSessionPrewarm({
-    enabled: sessionId === null && draftAgentStartupAllowed && !recoveringDraft,
+    // worktree 草稿不预热：会话要等 worktree 建好后由 Host 创建，cwd 一次确定（§3.2）。
+    enabled:
+      sessionId === null && draftAgentStartupAllowed && !recoveringDraft && !draftWorktreeEnabled,
     workspaceKey,
     paneId,
     invalidationVersion: draftRuntimeInvalidationVersion,
@@ -3656,6 +3674,51 @@ export function SessionPane({
           submission = { ...submission, modelSelection: chosen };
         }
       }
+      // worktree 草稿的首发由 Host 编排：先建 worktree，再在项目 workspace 下创建会话并发送首条消息
+      // （docs/git/worktree.md §8.1）。这里只交出命令，进度与结果都来自 Host 的创建记录。
+      const draftWorktree =
+        sessionId === null
+          ? useZCodeSessionStore.getState().getWorkspaceState(workspacePath, workspaceIdentity)
+              .draftWorktree
+          : null;
+      if (draftWorktree) {
+        const service = baseWorkspaceServices.managedWorktreeService;
+        const projectId = useZCodeSessionStore
+          .getState()
+          .getWorkspaceState(workspacePath, workspaceIdentity).draftProjectId;
+        if (!service || !projectId) return "blocked" as const;
+        if (slashCommand !== null) {
+          toast(intl.formatMessage({ id: "git.managedWorktree.error.slash-unsupported" }));
+          return "blocked" as const;
+        }
+        const envelope = createCommandEnvelope({
+          type: "createSession",
+          sessionId: null,
+          payload: {
+            workspaceId: workspaceKey,
+            firstInput: {
+              text,
+              ...(readyAttachments.length > 0 ? { attachments: readyAttachments } : {}),
+              modelSelection: submission.modelSelection,
+              mode: submission.mode,
+              planEnabled: submission.planEnabled,
+            },
+          } as never,
+        });
+        const started = await service.startNewTask({
+          workspacePath,
+          projectId,
+          ref: draftWorktree.ref,
+          envelope,
+        });
+        if (!started.ok) {
+          toast(formatManagedWorktreeError(intl, started.error.code));
+          return "blocked" as const;
+        }
+        onAcceptedSelection?.();
+        viewWorktreeCreation(workspacePath, started.creationId, workspaceIdentity);
+        return "sent" as const;
+      }
       const prewarmTargetBeforeSend =
         sessionId === null ? prewarmBindingRef.current?.sessionId : null;
       if (prewarmTargetBeforeSend) {
@@ -3934,6 +3997,42 @@ export function SessionPane({
       }
     },
     [dispatchSendText, focusTimelineToLatest, intl, sessionId],
+  );
+  const handleForkToWorktree = useCallback(
+    (target: ConversationRowTarget) => {
+      const service = baseWorkspaceServices.managedWorktreeService;
+      const current = snapshotRef.current;
+      if (!service || !sessionId || current === null) return;
+      // 与原地分叉同一 CAS 语义；Host 建 worktree、预留子任务并注入 targetCwd 后转发给项目 CLI。
+      const envelope = createCommandEnvelope({
+        type: "forkAssistant",
+        sessionId,
+        payload: { target } as never,
+        baseRevision: current.revision,
+        baseLogEpoch: current.logEpoch,
+      });
+      void service.forkToWorktree({ workspacePath, envelope }).then(
+        (result) => {
+          if (!result.ok) {
+            toast(formatManagedWorktreeError(intl, result.error.code));
+            return;
+          }
+          viewWorktreeCreation(workspacePath, result.creationId, workspaceIdentity);
+        },
+        (error: unknown) => {
+          logger.warn("[v4-pane] fork 到 worktree 失败", { error });
+          toast(formatManagedWorktreeError(intl, error));
+        },
+      );
+    },
+    [
+      baseWorkspaceServices.managedWorktreeService,
+      intl,
+      sessionId,
+      viewWorktreeCreation,
+      workspaceIdentity,
+      workspacePath,
+    ],
   );
   // 上面那个 ref 的唯一赋值点（见 handleSendWorkflowSaveRequest 的说明）。
   sendTextRef.current = handleSendText;
@@ -4707,6 +4806,12 @@ export function SessionPane({
   // editUserQuery 已由 command 层防御 latest real user query，并在 running
   // 提交时先 stop barrier 再 rewind/rerun；UI 不应再用 completed gate 把入口整轮隐藏。
   const editActionsEnabled = runtimeReady && !readOnly && !selectionSideChat && Boolean(sessionId);
+  // worktree 分叉入口与原地分叉同一可用性前提（docs/git/worktree.md §3.6）。
+  const forkToWorktreeSupport = useWorktreeSupport(
+    workspacePath,
+    workspaceIdentity,
+    forkActionsEnabled && !compactForRemoteControl,
+  );
   const isDraft = sessionId === null;
   // 滚动恢复必须使用与 sessionId 匹配的 lease projection。切换 session 的 render 与
   // passive effect 不在同一时刻，旧 lease 的 rows 若提前交给 timeline，会让新记忆按旧
@@ -4715,6 +4820,27 @@ export function SessionPane({
     !isDraft && (lease === null || sessionLeaseReady) && snapshot?.sessionId === sessionId
       ? snapshot
       : null;
+  // value 保持稳定引用，避免每次渲染让所有行组件的 memo 失效。
+  const forkDestinationValue = useMemo(
+    () => ({
+      forkToWorktree: forkToWorktreeSupport.visible ? handleForkToWorktree : null,
+      available: forkToWorktreeSupport.available,
+      inWorktree: Boolean(sessionWorktreeRoot),
+    }),
+    [
+      forkToWorktreeSupport.available,
+      forkToWorktreeSupport.visible,
+      handleForkToWorktree,
+      sessionWorktreeRoot,
+    ],
+  );
+  // worktree 创建视图盖在本会话上，直到时间线出现内容或订阅出错（docs/git/worktree.md §3.3）。
+  const finishWorktreeHandoff = useZCodeSessionStore((store) => store.finishWorktreeHandoff);
+  const timelineHasRows = (timelineSnapshot?.rows.totalCount ?? 0) > 0;
+  useEffect(() => {
+    if (sessionId && (timelineHasRows || errored))
+      finishWorktreeHandoff(workspacePath, sessionId, workspaceIdentity);
+  }, [errored, finishWorktreeHandoff, sessionId, timelineHasRows, workspaceIdentity, workspacePath]);
   const shareHandoverContext =
     snapshot?.sharedContextImport && "contextId" in snapshot.sharedContextImport
       ? snapshot.sharedContextImport
@@ -5862,6 +5988,7 @@ export function SessionPane({
                 workspacePath={workspacePath}
                 workspaceIdentity={workspaceIdentity}
               >
+                <ForkDestinationContext.Provider value={forkDestinationValue}>
                 <ConversationTimeline
                   compactForRemoteControl={compactForRemoteControl}
                   scrollToBottomActionRef={timelineScrollToBottomRef}
@@ -5972,6 +6099,7 @@ export function SessionPane({
                       : undefined
                   }
                 />
+                </ForkDestinationContext.Provider>
               </BotGroupDeliveryProvider>
             </SessionPluginReferenceIconBoundary>
           )}
