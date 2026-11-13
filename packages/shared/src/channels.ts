@@ -531,6 +531,22 @@ export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof Platfor
 export const EmbeddedBrowserWebviewChannels = {
   /** Guest 无法继续消费某方向的滚动时，把二维 delta 转交自由尺寸画布。 */
   WheelBoundary: "zcode:embedded-browser-wheel-boundary",
+  /**
+   * 设计运行时的页面事件（docs/browser-use/2026-11-03-browser-design-mode-spec.md）：页面主世界
+   * `window.postMessage` 带命名空间的信封，preload 校验后把 `events` 数组转给宿主。
+   */
+  DesignEvents: "zcode:embedded-browser-design-events",
+  /**
+   * 页面上按下 Cmd/Ctrl + Z（Shift 为重做），且按键当下的目标不是可编辑元素：preload 隔离世界只认 isTrusted 的按键，
+   * 页面脚本发不出这条，设计工具据此撤销 / 重做源码写回。
+   */
+  DesignUndoShortcut: "zcode:embedded-browser-design-undo-shortcut",
+} as const;
+
+/** 设计运行时 postMessage 信封：`{ [messageKey]: 1, events: unknown[] }`；events 序列化后超过上限（UTF-8 字节）的消息 preload 直接丢弃。 */
+export const EMBEDDED_BROWSER_DESIGN_BRIDGE = {
+  messageKey: "__zcodeDesign",
+  maxMessageBytes: 256 * 1024,
 } as const;
 
 export interface EmbeddedBrowserWheelBoundaryPayload {

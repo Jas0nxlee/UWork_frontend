@@ -39,12 +39,15 @@ function getViewportDimensionLimits(dimension: ViewportDimension): { max: number
 }
 
 export function BrowserViewportToolbar({
+  embedded = false,
   isVisible,
   onViewportSizeChange,
   onZoomChange,
   viewportSize,
   zoom,
 }: {
+  /** 并进设计工具栏同一行时只渲染控件组，行的边框、高度和溢出交给设计工具栏 */
+  embedded?: boolean;
   isVisible: boolean;
   onViewportSizeChange: (viewportSize: BrowserViewportSize) => void;
   onZoomChange: (zoom: BrowserViewportZoom) => void;
@@ -136,7 +139,11 @@ export function BrowserViewportToolbar({
 
   return (
     <div
-      className="flex h-8 shrink-0 items-center justify-center gap-1 overflow-x-auto border-y border-border bg-background px-2"
+      className={
+        embedded
+          ? "flex min-w-0 flex-wrap items-center justify-center gap-1"
+          : "flex h-8 shrink-0 items-center justify-center gap-1 overflow-x-auto border-y border-border bg-background px-2"
+      }
       data-testid={TID_BROWSER_RESPONSIVE_TOOLBAR}
     >
       {/* TooltipContent 通过 Portal 挂到 body；不可见 tab 的触发器处于 display:none，

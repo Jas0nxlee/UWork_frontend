@@ -848,8 +848,9 @@ function ConversationComposerImpl({
   const {
     contexts: webElementContexts,
     hasContexts: hasWebElementContexts,
-    removeContext: removeWebElementContext,
-    clearContexts: clearWebElementContexts,
+    removeContextByUser: removeWebElementContextByUser,
+    clearContextsByUser: clearWebElementContextsByUser,
+    removeSentContexts: removeSentWebElementContexts,
   } = useWebElementContexts({
     workspacePath,
     workspaceIdentity,
@@ -1502,7 +1503,10 @@ function ConversationComposerImpl({
         }
         attachmentsApi.clearAttachments(submittedAttachmentIds);
         currentCodeCommentContexts.forEach(removeCodeCommentContext);
-        currentWebElementContexts.forEach((context) => removeWebElementContext(context.id));
+        // 随消息发出的引用：从输入框移除，并告诉浏览器只忘掉引用、保留页面选中（再点同一元素会重新引用）。
+        if (currentWebElementContexts.length > 0) {
+          removeSentWebElementContexts(currentWebElementContexts.map((context) => context.id));
+        }
         currentPluginUiContexts.forEach((context) => removePluginUiContext(context.id));
         currentPptxElementReferences.forEach((reference) =>
           removePptxElementReference(reference.id),
@@ -1724,7 +1728,7 @@ function ConversationComposerImpl({
       removeCodeCommentContext,
       removeConversationSelectionReference,
       removePptxElementReference,
-      removeWebElementContext,
+      removeSentWebElementContexts,
       removePluginUiContext,
       pluginUiContexts,
       sessionId,
@@ -2259,8 +2263,8 @@ function ConversationComposerImpl({
             />
             <WebElementContextAttachmentChip
               contexts={webElementContexts}
-              onRemove={removeWebElementContext}
-              onRemoveAll={clearWebElementContexts}
+              onRemove={removeWebElementContextByUser}
+              onRemoveAll={clearWebElementContextsByUser}
             />
             <PluginUiModelContextChip
               contexts={pluginUiContexts}
@@ -2287,7 +2291,7 @@ function ConversationComposerImpl({
     attachmentsApi,
     clearCodeCommentContexts,
     clearConversationSelectionReferences,
-    clearWebElementContexts,
+    clearWebElementContextsByUser,
     clearPluginUiContexts,
     clearPptxElementReferences,
     codeCommentContexts,
@@ -2298,7 +2302,7 @@ function ConversationComposerImpl({
     locale,
     removeCodeCommentContext,
     removeConversationSelectionReference,
-    removeWebElementContext,
+    removeWebElementContextByUser,
     removePluginUiContext,
     removePptxElementReference,
     conversationSelectionReferences,

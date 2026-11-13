@@ -1874,6 +1874,9 @@ importers:
       '@xyflow/react':
         specifier: ^12.10.1
         version: 12.10.2(@types/react@19.2.14)(immer@11.1.8)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@zcode/design-runtime':
+        specifier: workspace:*
+        version: link:../design-runtime
       '@zcode/provider':
         specifier: workspace:*
         version: link:../provider
