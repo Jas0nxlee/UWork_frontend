@@ -1,5 +1,6 @@
 import { NATIVE_TOOL_SEARCH_DESCRIPTION } from "../search/description.js";
 import {
+  LOCAL_TOOL_SEARCH_NAME,
   TOOL_SEARCH_NAME,
   ToolSearchInputJsonSchema,
   ToolSearchInputSchema,
@@ -14,6 +15,8 @@ const SEARCH_TIMEOUT_MS = 10_000;
 
 export const toolSearchToolEntry: ToolEntry = {
   capability: "Search available tools and load their definitions",
+  // local 模式对外换名为 LocalToolSearch；别名让模型调用能命中同一实现，规范名保持稳定。
+  aliases: [LOCAL_TOOL_SEARCH_NAME],
   metadata: {
     name: TOOL_SEARCH_NAME,
     // 模型侧说明使用固定文案；schema 展开由 provider 处理，客户端仍只返回真实引用。

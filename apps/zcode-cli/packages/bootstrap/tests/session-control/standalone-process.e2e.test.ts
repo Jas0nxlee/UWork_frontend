@@ -634,13 +634,25 @@ async function writeConfig(directory: string, baseUrl: string) {
         },
       }),
     ),
-    writeFile(
-      join(directory, ".zcode", "cli", "config.json"),
-      JSON.stringify({
-        features: { memory: false, mcp: false, subagent: false, skill: false },
-        plugins: { enabled: false },
-        skills: { enabled: false },
-      }),
+    // UWork 数据根分离后，用户级 CLI 配置跟随 ZCODE_STORAGE_DIR
+    // （@zcode/shared resolveUserCliConfigPath），不再读 HOME/.zcode/cli/config.json；
+    // 两份都写，保持本用例“关闭 memory/plugins”的意图与路径解析无关。
+    mkdir(join(directory, "storage", "cli"), { recursive: true }).then(() =>
+      Promise.all(
+        [
+          join(directory, ".zcode", "cli", "config.json"),
+          join(directory, "storage", "cli", "config.json"),
+        ].map((path) =>
+          writeFile(
+            path,
+            JSON.stringify({
+              features: { memory: false, mcp: false, subagent: false, skill: false },
+              plugins: { enabled: false },
+              skills: { enabled: false },
+            }),
+          ),
+        ),
+      ),
     ),
   ]);
 }

@@ -5,6 +5,8 @@ import {
 } from "@zcode/shared";
 /* eslint-disable max-lines -- ZCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
 import { observeSessionDebug } from "./session-debug.js";
+import { isTranscriptVisibleMessage } from "../active-transcript/index.js";
+import { createAppSessionControlBinding } from "../session-control/index.js";
 import {
   TASK_LIST_SESSION_TYPES,
   isTaskListSessionType,
@@ -99,6 +101,7 @@ import {
   formatProtocolModelSelection,
   mapSessionEventForProtocol,
   mapSessionInfo,
+  mapSnapshotMessages,
   resolveSessionContextUsage,
   shouldExposeSessionEventToProtocol,
 } from "./mapper.js";
@@ -162,6 +165,8 @@ type ZCodeSessionRecordParams = (
 ) & { taskType?: SessionTaskType };
 
 interface SessionStartupPreferences {
+  /** 只接受当前 Host 的能力响应；旧 Host 和独立 app-server 缺省关闭。 */
+  appControlEnabled?: boolean;
   additionalDirectories?: readonly string[];
   subagentRuntimeConfigEnabled?: boolean;
   memoryEnabled: boolean;
@@ -1959,15 +1964,79 @@ export async function readSessionContextUsage(
 
 export async function readMessages(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
   const params = parseParams(zcodeSessionMessagesParamsSchema, rawParams);
-  const record = requireSession(context, params.sessionId);
-  const allMessages = await readActiveSessionMessages(context, record);
+  // Bug 根因：forward 只服务会话控制的 ReadSession，但这里一律 requireSession，冷会话（例如用户
+  // 只用 #sess 引用、从未打开过）没有活跃 record 就抛 sessionUnavailable，被 Host 压成
+  // "App control failed"；同一引用的 summary 视图不需要 runtime，所以能读、正文读不了。
+  // 规格 0.9：forward 在 record 缺失时从会话库冷读，与独立 CLI 的读取口径一致；
+  // backward（桌面分页历史）保持原行为，仍要求活跃 record。
+  const record =
+    params.direction === "forward"
+      ? context.sessions.get(params.sessionId)
+      : requireSession(context, params.sessionId);
+  const allMessages = record
+    ? await readForwardVisibleMessages(context, record, params.direction)
+    : await readColdVisibleMessages(context, params.sessionId);
   const afterMessageIndex = params.afterMessageId
     ? allMessages.findIndex((message) => String(message.info.id) === params.afterMessageId)
     : -1;
+  // forward 的 cursor 必须命中；找不到（例如两页之间发生 rewind）时报错，不能从头重读造成重复页。
+  if (params.direction === "forward" && params.afterMessageId && afterMessageIndex < 0)
+    throw createCoreError(CoreErrorType.InvalidInput, "Message cursor is no longer available", {
+      recoverable: true,
+    });
   const messages = afterMessageIndex >= 0 ? allMessages.slice(afterMessageIndex + 1) : allMessages;
+  // App 从最早消息向后分页；若仍截尾，limit+1 探测会跳过首页及 cursor 后的消息。
+  // 只有显式 forward 改为取头部，其他消费者继续使用原来的最近历史窗口。
+  const page =
+    params.direction === "forward"
+      ? messages.slice(0, params.limit)
+      : limitMessages(messages, params.limit);
+  // 冷读没有 runtime 可回填历史图片的 data URL，保留 zcode-artifact:// 引用（hydrate 失败即保留原值）。
+  // ReadSession 两侧都只取 text part，回填只会放大结果（见规格 0.4 的 32 KiB 现场）。
   return {
-    messages: params.limit ? messages.slice(-params.limit) : messages,
+    // 原先直接返回 Core 的 id/sessionID/messageID，真实客户端严格 wire schema 因此拒绝整页历史。
+    // 与 session/read 共用完整映射，保留媒体回填和工具展示元数据，并继续过滤仅供 Agent 恢复的字段。
+    messages: await mapSnapshotMessages(
+      record?.app ?? {
+        readToolResultArtifact: () => {
+          throw new Error("Cold session read does not hydrate artifacts");
+        },
+      },
+      page,
+    ),
   };
+}
+
+async function readForwardVisibleMessages(
+  context: ZCodeProtocolAgentServerContext,
+  record: ZCodeProtocolSessionRecord,
+  direction: "forward" | "backward" | undefined,
+): Promise<MessageWithParts[]> {
+  const activeMessages = await readActiveSessionMessages(context, record);
+  // forward 只服务会话控制的 ReadSession。staging 起运行时提醒、环境信息与中断标记也以隐藏
+  // user 消息落库；不先过滤会把它们当成用户原话返回，并让分页 limit 与 cursor 落在隐藏消息上。
+  return direction === "forward"
+    ? activeMessages.filter(isTranscriptVisibleMessage)
+    : activeMessages;
+}
+
+/**
+ * 冷会话的 active 分支：没有活跃 runtime 就没有内存 rewind 事件，只按 session.revert 投影，
+ * 与独立 CLI 的 readVisibleMessages 同口径。读取不恢复 runtime、不认领 owner、不改 CLI 事实。
+ */
+async function readColdVisibleMessages(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): Promise<MessageWithParts[]> {
+  const sessionStore = context.deps.sessionStore;
+  const session = sessionStore ? await getPersistedSession(context, sessionId) : null;
+  if (!sessionStore || !session || session.time.deleted)
+    throw new ProtocolRequestError(
+      zcodeProtocolErrorCodes.sessionUnavailable,
+      `Session is not available: ${sessionId}`,
+    );
+  const messages = await sessionStore.messages({ sessionID: sessionId as SessionId });
+  return projectActiveSessionMessages(messages, session, []).filter(isTranscriptVisibleMessage);
 }
 
 export async function readEvents(context: ZCodeProtocolAgentServerContext, rawParams: unknown) {
@@ -3368,6 +3437,7 @@ async function resolveSessionStartupPreferences(
   if (source.kind === "inherit") {
     const inheritedShellSelection = source.parent.app.runtime.getSessionShellSelection();
     return {
+      appControlEnabled: source.parent.appControlEnabled === true,
       memoryEnabled: source.parent.memoryEnabled,
       subagentRuntimeConfigEnabled: source.parent.subagentRuntimeConfigEnabled,
       modelContextBudgetStrategy: DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
@@ -3388,6 +3458,7 @@ async function resolveSessionStartupPreferences(
     runtimePreferences.askUserQuestionAutoResolutionEnabled,
   );
   return {
+    appControlEnabled: runtimePreferences.appControlEnabled === true,
     additionalDirectories: runtimePreferences.additionalDirectories,
     subagentRuntimeConfigEnabled: runtimePreferences.subagentRuntimeConfigEnabled,
     memoryEnabled: runtimePreferences.memoryEnabled,
@@ -3514,6 +3585,19 @@ async function createRecord(
     // core 遇到 permission / AskUserQuestion 只能走默认拒绝，UI 永远收不到阻塞请求。
     // 这里把阻塞交互转换成 server-to-client JSON-RPC request，由 app 通过 response 释放 runtime。
     permissionBroker: createProtocolInteractionBroker(context),
+    // fork 的 parentID 记录历史来源，仍是独立根会话；不能把 lineage 当作子代理继承权限。
+    ...(startupPreferences.appControlEnabled === true &&
+    (taskType === "fork" ||
+      (!parentSessionId && (taskType === "interactive" || taskType === "workflow_parent")))
+      ? {
+          sessionControl: createAppSessionControlBinding({
+            requestClient: context.requestClient.bind(context),
+            sessionId,
+            workspacePath: workspace.workspacePath,
+            workspaceIdentity: workspace.workspaceIdentity,
+          }),
+        }
+      : {}),
     automationPort: createProtocolAutomationPort(context, () => ownSessionRecord),
     topicResourcePort: createProtocolTopicResourcePort(context),
     // 只接入 Host 已开放的工具面；缺省不注入。复用现行异步工厂，
@@ -3567,6 +3651,7 @@ async function createRecord(
   const now = Date.now();
   const record: ZCodeProtocolSessionRecord = {
     app,
+    appControlEnabled: startupPreferences.appControlEnabled === true,
     createdAt: now,
     eventStore,
     memoryEnabled: startupPreferences.memoryEnabled,

@@ -286,7 +286,7 @@ describe("Local checkpoint promotion", () => {
     const prepared = prepare(entries);
     expect(prepared.toolSearch.mode).toBe("local");
     expect(prepared.request.tools?.map((t) => t.name)).toEqual([
-      "ToolSearch",
+      "LocalToolSearch",
       "DeferredToolCall",
       "A",
       "B",
