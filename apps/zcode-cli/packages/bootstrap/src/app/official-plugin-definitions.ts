@@ -97,6 +97,34 @@ export const OFFICIAL_ZCODE_GUIDE_REQUIRED_SEED_PATHS = [
   "skills/zcode-configuration-guide/SKILL.md",
 ] as const;
 
+// design 是纯内容型插件（技能 + 设计资源 + SessionStart hook，无 MCP），技能正文按需读取 references/
+// 与 scripts/；hook 只注入一句指针，正文缺失时 hook 静默退出，会话里就再也触发不到技能。
+// 所以这里钉住入口、11 份规则文件、7 个随包脚本和 hook，seed 缺任一项都拒绝生成残缺缓存。
+export const OFFICIAL_DESIGN_REQUIRED_SEED_PATHS = [
+  "skills/design/SKILL.md",
+  "skills/design/references/app.md",
+  "skills/design/references/catalog.md",
+  "skills/design/references/check.md",
+  "skills/design/references/create.md",
+  "skills/design/references/deck.md",
+  "skills/design/references/design-system.md",
+  "skills/design/references/image.md",
+  "skills/design/references/interact.md",
+  "skills/design/references/motion.md",
+  "skills/design/references/page.md",
+  "skills/design/references/redesign.md",
+  "skills/design/scripts/adapt-canvas.mjs",
+  "skills/design/scripts/audit-page.js",
+  "skills/design/scripts/audit.mjs",
+  "skills/design/scripts/design-lint.mjs",
+  "skills/design/scripts/design-tokens.mjs",
+  "skills/design/scripts/import-design-system.mjs",
+  "skills/design/scripts/probe.js",
+  "hooks/hooks.json",
+  "hooks/run-hook.cmd",
+  "hooks/design-rules",
+] as const;
+
 export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = [
   {
     defaultEnabled: true,
@@ -424,6 +452,35 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
     // 这里的 version 追踪上游 zcode-cua runtime 版本，使插件 UI 展示、缓存路径、
     // marketplace 条目都对齐；具体版本由原子 producer bump 工作流维护。
     version: "0.6.5",
+  },
+  {
+    // 设计工作流（HTML 设计稿、交互原型、HTML 演示稿）。纯内容型，默认关闭；用户可启用、可停用、不可卸载。
+    // 版本与 package.json / 两份 plugin.json / sea-official-plugin-assets.mjs 同步 bump。
+    listing: {
+      author: ZAI_AUTHOR,
+      category: "productivity",
+      displayName: "Design",
+      // 英文名与描述回退到 manifest（displayName / description）；这里只放 zh-CN 覆盖。
+      displayName_i18n: { "zh-CN": "设计" },
+      description_i18n: {
+        "zh-CN": "做网页设计稿、原型和演示稿；桌面端本地工作区可在内置浏览器里点选修改。",
+      },
+      examplePrompts: ["Design a landing page for a budgeting app", "Build an 8-page HTML deck"],
+      examplePrompts_i18n: {
+        "zh-CN": ["给记账 App 设计一个落地页", "做一份 8 页的 HTML 演示稿"],
+      },
+    },
+    name: "design",
+    requiredSeedPaths: OFFICIAL_DESIGN_REQUIRED_SEED_PATHS,
+    rootCandidates: [
+      "packages/design-plugin",
+      "../design-plugin",
+      "../../design-plugin",
+      "../../../design-plugin",
+    ],
+    // 4.0.0 起 design 插件只带 skills/ + hooks/，版本与 package.json / 两份 plugin.json /
+    // sea-official-plugin-assets.mjs 同步 bump 到 0.8.0。
+    version: "0.8.0",
   },
 ];
 

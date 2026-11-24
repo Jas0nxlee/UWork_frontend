@@ -140,6 +140,22 @@ export const TID_BROWSER_MORE_BUTTON = "browser-more-button";
 export const TID_BROWSER_OPEN_EXTERNAL_ITEM = "browser-open-external-item";
 /** 浏览器打开调试工具按钮 */
 export const TID_BROWSER_DEVTOOLS_BUTTON = "browser-devtools-button";
+/** 浏览器设计模式（docs/browser-use/2026-11-03-browser-design-mode-spec.md） */
+export const TID_BROWSER_DESIGN_TOOLBAR = "browser-design-toolbar";
+export const TID_BROWSER_DESIGN_PANEL_BUTTON = "browser-design-panel-button";
+export const TID_BROWSER_DESIGN_VARIANT_SELECT = "browser-design-variant-select";
+export const TID_BROWSER_DESIGN_VARIANT_OPTION = "browser-design-variant-option";
+export const TID_BROWSER_DESIGN_SLIDE_PREV = "browser-design-slide-prev";
+export const TID_BROWSER_DESIGN_SLIDE_NEXT = "browser-design-slide-next";
+export const TID_BROWSER_DESIGN_SLIDE_COUNTER = "browser-design-slide-counter";
+/** 画布右侧的属性面板；字段带 data-design-field（元素属性）或 data-design-variable（页面变量） */
+export const TID_BROWSER_DESIGN_INSPECTOR = "browser-design-inspector";
+export const TID_BROWSER_DESIGN_INSPECTOR_CLOSE = "browser-design-inspector-close";
+export const TID_BROWSER_DESIGN_SELECT_PARENT = "browser-design-select-parent";
+/** 面板里「写回到哪个文件 / 为什么不能写回」那一行（data-writable） */
+export const TID_BROWSER_DESIGN_SOURCE_STATUS = "browser-design-source-status";
+/** 输入框里的网页元素 chip（data-count 为元素数） */
+export const TID_WEB_ELEMENT_CONTEXT_CHIP = "web-element-context-chip";
 /** 浏览器网页视图 */
 export const TID_BROWSER_WEBVIEW = "browser-webview";
 /** 内置浏览器权限确认条容器 */

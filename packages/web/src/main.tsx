@@ -943,6 +943,9 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
         "fileService.applyWorkspaceFileSearchIgnoreTransform",
       ),
       writeWorkspaceFileSearchIgnore: unsupported("fileService.writeWorkspaceFileSearchIgnore"),
+      // 设计工具写回源码只在桌面/远端 host 上有意义（web 端没有本机 HTML 文件）。
+      readDesignSourceFile: unsupported("fileService.readDesignSourceFile"),
+      writeDesignSourceFile: unsupported("fileService.writeDesignSourceFile"),
     },
     mediaPreviewService:
       createUnsupportedHomeOnlyService<NonNullable<RootServices["mediaPreviewService"]>>(

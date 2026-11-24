@@ -265,6 +265,39 @@ const officialPluginPackages = [
     requiresRuntime: false,
     stagedPath: "packages/zcode-cua-plugin",
   },
+  {
+    // design（默认关闭内容型插件）：Electron 生产包靠这里 stage 的目录做首启 seed，漏掉它
+    // 生产桌面包就没有设计技能。必需文件与 official-plugin-definitions.ts 的 requiredSeedPaths 一致。
+    packageName: "@zcode/design-plugin",
+    relativePath: "apps/zcode-cli/packages/design-plugin",
+    requiresRuntime: false,
+    requiredSeedPaths: [
+      "skills/design/SKILL.md",
+      "skills/design/references/app.md",
+      "skills/design/references/catalog.md",
+      "skills/design/references/check.md",
+      "skills/design/references/create.md",
+      "skills/design/references/deck.md",
+      "skills/design/references/design-system.md",
+      "skills/design/references/image.md",
+      "skills/design/references/interact.md",
+      "skills/design/references/motion.md",
+      "skills/design/references/page.md",
+      "skills/design/references/redesign.md",
+      "skills/design/scripts/adapt-canvas.mjs",
+      "skills/design/scripts/audit-page.js",
+      "skills/design/scripts/audit.mjs",
+      "skills/design/scripts/design-lint.mjs",
+      "skills/design/scripts/design-tokens.mjs",
+      "skills/design/scripts/import-design-system.mjs",
+      "skills/design/scripts/probe.js",
+      "hooks/hooks.json",
+      "hooks/run-hook.cmd",
+      "hooks/design-rules",
+    ],
+    requiredRuntimePaths: [],
+    stagedPath: "packages/design-plugin",
+  },
   // superpowers 已从内置插件下线，改走 UI 推荐区按需安装；这里不再 stage 它的资源。
 ];
 // 随 CLI 内置的技能包（不是插件）：bootstrap 的 resolveBundledSkillRoots 沿官方插件同款候选目录

@@ -118,6 +118,25 @@ export interface BrowserViewCloseTabRequest {
 }
 
 export const LOCAL_MEDIA_PREVIEW_SCHEME = "zcode-media";
+export const BROWSER_LOCAL_PREVIEW_SCHEME = "zcode-html";
+
+/** 仅还原展示/外部打开地址；目录授权和签名校验始终由 main 执行。 */
+export function browserPreviewSourceUrl(input: string): string {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== `${BROWSER_LOCAL_PREVIEW_SCHEME}:`) return input;
+    const [, directory, ...segments] = url.pathname.split("/");
+    const root = new URL(decodeURIComponent(directory ?? ""));
+    if (root.protocol !== "file:" || root.host || !root.pathname.endsWith("/")) return input;
+    const source = new URL(segments.join("/"), root);
+    if (!source.href.startsWith(root.href)) return input;
+    source.search = url.search;
+    source.hash = url.hash;
+    return source.href;
+  } catch {
+    return input;
+  }
+}
 
 export function buildLocalMediaPreviewUrl(path: string): string {
   const url = new URL(`${LOCAL_MEDIA_PREVIEW_SCHEME}://local/preview`);

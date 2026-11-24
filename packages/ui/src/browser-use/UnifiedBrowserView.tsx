@@ -1,16 +1,22 @@
 /* oxlint-disable eslint(max-lines) -- UnifiedBrowserView 集中维护稳定 webview 的导航、事件和 guest 生命周期；横向滚动链已下沉独立 hook。 */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   BrowserViewScreenshotSurfacePreparePayload,
   EmbeddedBrowserViewportPreference,
 } from "@zcode/shared";
+import { browserPreviewSourceUrl, EmbeddedBrowserWebviewChannels } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useWebElementPicker } from "@/hooks/useWebElementPicker.js";
+import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import { BrowserSiteSettingsEntry } from "@/browser-use/BrowserSiteSettingsEntry.js";
 import { BrowserToolbar } from "@/EmbeddedBrowserPaneParts.js";
+import { BrowserDesignInspector } from "@/browser-use/BrowserDesignInspector.js";
+import { BrowserDesignToolbar } from "@/browser-use/BrowserDesignToolbar.js";
+import { useBrowserDesignMode } from "@/browser-use/useBrowserDesignMode.js";
+import { useBrowserFileLiveReload } from "@/browser-use/useBrowserFileLiveReload.js";
 import { EmbeddedBrowserPermissionPrompts } from "@/browser-use/EmbeddedBrowserPermissionPrompts.js";
 import { BrowserViewportSurface } from "@/browser-use/BrowserViewportSurface.js";
 import { BrowserViewportToolbar } from "@/browser-use/BrowserViewportToolbar.js";
@@ -418,6 +424,39 @@ export function UnifiedBrowserView({
       webview ? webview.executeJavaScript(script, true) : Promise.resolve({ status: "cancelled" }),
     workspacePath: workspacePath ?? "",
     workspaceIdentity: workspaceKey ?? workspaceIdentity,
+  });
+  // 人类 tab 的「选择元素」就是设计模式的点选；Agent tab 仍用元素 chip 选择器，两者不同时拦截页面点击。
+  const cancelPickingForDesign = useCallback(() => {
+    void cancelWebElementPicking();
+  }, [cancelWebElementPicking]);
+  const isHumanBrowser = onHumanViewportPreferenceChange !== undefined;
+  // file:// 指向本机磁盘，自动刷新与设计工具写回一律走本机 base host，与当前 workspace 是否远端无关。
+  const { fileService: localFileService, fileWatcherService: localFileWatcherService } =
+    useBaseWorkspaceServices();
+  const designChipTarget = useMemo(
+    () =>
+      isHumanBrowser && workspacePath
+        ? {
+            workspacePath,
+            ...((workspaceKey ?? workspaceIdentity)
+              ? { workspaceIdentity: workspaceKey ?? workspaceIdentity }
+              : {}),
+          }
+        : null,
+    [isHumanBrowser, workspaceIdentity, workspaceKey, workspacePath],
+  );
+  const design = useBrowserDesignMode({
+    // 元素截图依赖 main 侧 captureBrowserGuestPage（本仓未移植），引用只带文字。
+    chipTarget: designChipTarget,
+    currentUrl: browserState.currentUrl,
+    fileService: localFileService,
+    onSelectModeStart: cancelPickingForDesign,
+    isVisible,
+    probeEnabled: isHumanBrowser,
+    remoteSessionId,
+    workspaceIdentity,
+    webview,
+    webviewGeneration,
   });
 
   // ---- 从 webview 同步 chrome 状态（url/前进后退/标题）----
@@ -929,10 +968,47 @@ export function UnifiedBrowserView({
     runWebviewAction(() => webview.openDevTools());
   }, [browserState.isReady, runWebviewAction, webview]);
 
+  // 只给人类用户 tab 开：onHumanViewportPreferenceChange 只在人类主动打开的 tab 上传入。
+  useBrowserFileLiveReload({
+    currentUrl: browserState.currentUrl,
+    enabled: isHumanBrowser,
+    fileService: localFileService,
+    fileWatcherService: localFileWatcherService,
+    isOwnWrite: design.isOwnSourceWrite,
+    isVisible,
+    webview,
+  });
+
+  const { stopSelecting: stopDesignSelecting, requestSelectMode: requestDesignSelectMode } = design;
+
+  // 页面里按 Cmd/Ctrl + Z：guest preload 只认真实按键、且按键目标不是页面输入框时才发（页面脚本发不出这条），
+  // 只在点选时撤销 / 重做写回；任何本机 HTML 点选时都可能写回过，不只设计稿
+  const { undo: undoDesignWrite, redo: redoDesignWrite } = design;
+  const designUndoActive = design.mode === "select";
+  useEffect(() => {
+    if (!webview || !designUndoActive) return;
+    const handleIpcMessage = (event: ElectronWebviewIpcMessageEvent) => {
+      if (event.channel !== EmbeddedBrowserWebviewChannels.DesignUndoShortcut) return;
+      const payload: unknown = event.args[0];
+      const redo =
+        typeof payload === "object" &&
+        payload !== null &&
+        "redo" in payload &&
+        payload.redo === true;
+      void (redo ? redoDesignWrite() : undoDesignWrite());
+    };
+    webview.addEventListener("ipc-message", handleIpcMessage);
+    return () => webview.removeEventListener("ipc-message", handleIpcMessage);
+  }, [designUndoActive, redoDesignWrite, undoDesignWrite, webview]);
+  const isDesignToolsVisible = design.toolsVisible;
+  // 调整面板：设计稿页面，或任何页面上正在点选（人类 tab 的「选择元素」统一成这套点选）
+  const isDesignPanelAvailable = isDesignToolsVisible || design.mode !== "off";
+
   const handleOpenExternal = useCallback(() => {
     if (!webview || !browserState.isReady) return;
     runWebviewAction(() => {
-      const currentUrl = webview.getURL();
+      // 预览协议地址先还原成源 file:// 地址，外部浏览器才能打开（非预览地址原样返回）。
+      const currentUrl = browserPreviewSourceUrl(webview.getURL());
       // 安全边界：系统默认浏览器入口只允许 Web URL 和 file URL，仍禁止 about/data 等内联协议。
       if (!isDefaultBrowserOpenableUrl(currentUrl)) return;
       platform.openExternal(currentUrl);
@@ -941,6 +1017,13 @@ export function UnifiedBrowserView({
 
   const handleTogglePicker = useCallback(() => {
     if (!webview || !browserState.isReady) return;
+    // 人类 tab：地址栏「选择元素」在任何页面上都是同一套点选（再点一次或页面里 Esc 退出）；
+    // 能不能改由页面决定：本机 HTML 在调整面板里直接改，其他页面面板只读、交给 Agent。Agent tab 仍是元素 chip 选择器。
+    if (isHumanBrowser) {
+      void requestDesignSelectMode();
+      return;
+    }
+    stopDesignSelecting();
     void toggleWebElementPicking().catch((error: unknown) => {
       setBrowserState((prev) => ({
         ...prev,
@@ -950,7 +1033,15 @@ export function UnifiedBrowserView({
         ),
       }));
     });
-  }, [browserState.isReady, intl, toggleWebElementPicking, webview]);
+  }, [
+    browserState.isReady,
+    intl,
+    isHumanBrowser,
+    requestDesignSelectMode,
+    stopDesignSelecting,
+    toggleWebElementPicking,
+    webview,
+  ]);
 
   const handleToggleResponsiveMode = useCallback(() => {
     toggleResponsiveMode();
@@ -1068,7 +1159,7 @@ export function UnifiedBrowserView({
         onReload={handleReload}
         onToggleResponsiveMode={handleToggleResponsiveMode}
         onSubmit={handleSubmit}
-        isElementPickerActive={isWebElementPicking}
+        isElementPickerActive={isHumanBrowser ? design.mode === "select" : isWebElementPicking}
         isResponsiveMode={isResponsiveMode}
       />
       {/* 权限弹窗层：只在可见 tab 挂载（多 tab 共享 store，避免重复渲染与
@@ -1076,7 +1167,7 @@ export function UnifiedBrowserView({
       {isVisible ? (
         <EmbeddedBrowserPermissionPrompts guestWebContentsId={permissionGuestWebContentsId} />
       ) : null}
-      {isResponsiveMode ? (
+      {isResponsiveMode && !isDesignToolsVisible ? (
         <BrowserViewportToolbar
           isVisible={isVisible}
           onViewportSizeChange={handleResponsiveViewportInput}
@@ -1085,29 +1176,54 @@ export function UnifiedBrowserView({
           zoom={responsiveViewportZoom}
         />
       ) : null}
-      <BrowserViewportSurface
-        browserRegionRef={browserRegionRef}
-        browserState={browserState}
-        desktopZoomFactor={desktopZoomFactor}
-        isResidencyRestore={isResidencyRestore}
-        formatMessage={intl.formatMessage}
-        isEmptyBrowserState={isEmptyBrowserState}
-        isComposed={isVisible || shouldComposeSurface}
-        isResponsiveMode={effectiveIsResponsiveMode}
-        isViewportEmulated={
-          effectiveIsResponsiveMode && screenshotSurfaceRequest?.viewportMode !== "natural"
-        }
-        onRetryGuest={handleRetryGuest}
-        onRetryLoad={handleRetryLoad}
-        onViewportResize={notifyBrowserViewportResize}
-        onViewportSizeChange={handleResponsiveViewportSizeChange}
-        onWebviewRef={handleWebviewRef}
-        shouldMountWebview={shouldMountWebview}
-        showResizeWarning={showResizeWarning}
-        webviewGeneration={webviewGeneration}
-        viewportSize={effectiveViewportSize}
-        viewportZoom={effectiveViewportZoom}
-      />
+      {isDesignToolsVisible ? (
+        <BrowserDesignToolbar
+          design={design}
+          viewportControls={
+            isResponsiveMode ? (
+              <BrowserViewportToolbar
+                embedded
+                isVisible={isVisible}
+                onViewportSizeChange={handleResponsiveViewportInput}
+                onZoomChange={setResponsiveViewportZoom}
+                viewportSize={responsiveViewportSize}
+                zoom={responsiveViewportZoom}
+              />
+            ) : null
+          }
+        />
+      ) : null}
+      <div className="@container/browser-canvas relative flex min-h-0 flex-1">
+        <BrowserViewportSurface
+          browserRegionRef={browserRegionRef}
+          browserState={browserState}
+          desktopZoomFactor={desktopZoomFactor}
+          isResidencyRestore={isResidencyRestore}
+          formatMessage={intl.formatMessage}
+          isEmptyBrowserState={isEmptyBrowserState}
+          designCanvas={isDesignToolsVisible}
+          designStage={isDesignToolsVisible && design.pageInfo?.stageBackdrop === true}
+          isComposed={isVisible || shouldComposeSurface}
+          isResponsiveMode={effectiveIsResponsiveMode}
+          isViewportEmulated={
+            effectiveIsResponsiveMode && screenshotSurfaceRequest?.viewportMode !== "natural"
+          }
+          onRetryGuest={handleRetryGuest}
+          onRetryLoad={handleRetryLoad}
+          onViewportResize={notifyBrowserViewportResize}
+          onViewportSizeChange={handleResponsiveViewportSizeChange}
+          onWebviewRef={handleWebviewRef}
+          shouldMountWebview={shouldMountWebview}
+          showResizeWarning={showResizeWarning}
+          webviewGeneration={webviewGeneration}
+          viewportSize={effectiveViewportSize}
+          viewportZoom={effectiveViewportZoom}
+        />
+        {/* 调整面板悬浮在画布右上，不撑满一列 */}
+        {isDesignPanelAvailable && design.panelOpen ? (
+          <BrowserDesignInspector design={design} />
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -878,6 +878,11 @@ test("allows skill-only official plugins when SEA runtime assets are required", 
       "packages/zcode-guide-plugin/skills/zcode-configuration-guide/SKILL.md",
       "",
     );
+    // design 是带 hook 的纯内容型插件：requiresRuntime:false，只需 seed 必需文件。
+    const designPlugin = officialSeaPlugins.find((plugin) => plugin.name === "design");
+    await writeTestFile(root, "packages/design-plugin/.zcode-plugin/plugin.json", "{}");
+    for (const seedPath of designPlugin?.requiredSeedPaths ?? [])
+      await writeTestFile(root, join("packages/design-plugin", seedPath), "");
 
     const { manifest } = await collectSeaOfficialPluginAssets({
       requireRuntime: true,
