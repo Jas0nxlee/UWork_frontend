@@ -83,7 +83,7 @@ P0 核心契约（阻塞一切）
 ### P4 收口
 
 - 全量测试必须**先跑基线对照**（本仓基线自带大面积红，报告前要证明"零新增失败"）；
-- `pre-push` 因缺 `origin/staging` 坏掉 → 用 `--no-verify` 并在 PR 正文说明；
+- `pre-push` 要带显式基线跑（`ZCODE_PRE_PUSH_BASE` / `ZCODE_AFFECTED_TEST_BASE=origin/main`）：仓库里没有 `origin/staging`，不带基线才会报「找不到基线」。（2026-11-24 更正：这里原先写「只能 `--no-verify`」，不成立。）
 - 分支矩阵与顺序写进 PR 描述，方便评审按特性逐个验收。
 
 ## 四、并行编排
@@ -238,6 +238,9 @@ session → worktree → design → browser 叠放，每次合并一个提交、
 `packages/desktop/test/desktopMainIpcPlatform.test.ts` 1 例。除此之外无新增失败。
 `design-plugin/test/audit.test.ts`（45 例，需本机 Chrome，约 17 分钟）**默认未跑**。
 
+> ⚠️ 下面这段对照跑在 Node 25.5.0 上、只比过 core 分支与集成分支，结论已被本节末尾的
+> 「按仓库口径复核（2026-11-24，Node 24.14.0、净化环境）」取代——以那一节为准。
+
 另做了一次**全量 `--project unit` 对照**：在 `/tmp/uw-baseline`（`git worktree add --detach`）分别跑
 `cf6dc444` 与集成分支，失败集合逐条比对：
 
@@ -273,3 +276,77 @@ Node 25 环境抖动（`e2eReporting*` 等），集成分支上通过。**全量
    提交里可读，但只能整体回滚。
 3. **core + 一个「特性批次」PR**：core 单独合，四条特性合成一个 PR。折中方案；适合只想让 review 看到
    「契约」与「特性」两层的情况，代价是特性之间无法单独回滚。
+
+### 按仓库口径复核（2026-11-24，Node 24.14.0、净化环境）
+
+上一版的「全绿」不合格，错在三处：跑在 Node 25.5.0 上（本机没有 mise，误用了 Homebrew 的 Node）、
+只挑了自己的回归集、`architecture:check --changed` 的 191 条被当成「只影响 pre-push」。这一轮按仓库
+自己的方式重来：Node 取 `mise.toml` 钉的 24.14.0（官方发行包，SHA256 校验后装在
+`~/.local/share/uwork-toolchain/`）；测试在 `env -i` 净化过的环境里跑（桌面应用会导出二十多个
+`ZCODE_*` 变量，其中一个 CUA Helper 路径能让用例假绿）；检查清单以 `.github/workflows/desktop-release.yml`
+的 checks job 原文为准；`verify:pre-push` 用显式基线 `ZCODE_PRE_PUSH_BASE` / `ZCODE_AFFECTED_TEST_BASE=origin/main`
+跑——**不需要 `--no-verify`**。
+
+| 门禁 | 结果 |
+| --- | --- |
+| CI checks job 本地原样跑（19 步，含安装/准备 2 步，共 406s） | 19/19 通过；typecheck 先清 18 个 `*.tsbuildinfo` 从头编译 131s |
+| `verify:pre-push`（7 项，基线 origin/main，36s） | 7/7 exit 0。第 7 项 `test:unit:affected` **是跳过不是通过**：Vitest 官方选中整个根套件（2156/2156）时脚本按约定跳过并 exit 0 |
+| 根单测全量（`--project unit`，与 main 对照，401s） | main `f6dda23d` 79 失败 / 20011 通过（20098，41 个失败文件）；集成分支 77 失败 / 20132 通过（20217，35 个失败文件）→ **集成独有失败 0**（失败集合 ⊆ main 的 79 例），另有 2 例 main 上红、集成侧绿（`createLocalServices` 的旧 Model Preset 刷新、CLI 显式 seed 数据库） |
+| `architecture:check --changed`（基线 origin/main） | 0 违规（191 条全部按仓库方式消解，见下） |
+| `pnpm lint` | 0 error / 351 warning（与改动前一致；其中 15 条是 design 分支按字节保真取来的上游脚本） |
+| `pnpm architecture:check`（全量）/ `test:architecture` / `db:schema:check` | 0 违规 / 43 例全过 / 通过 |
+| `pnpm fmt:check` | **存量不合规**（本轮之前就存在），新增内容沿用各文件既有写法 |
+
+**那 191 条 `unmanaged-new-file` 怎么消的**（以后再追上游照这个做）：
+
+- **原样上游 → 写进 upstream snapshot**（`scripts/architecture/upstream-snapshot.json`，按「路径 → 模式 blob」
+  指纹准入；判定要求暂存区与工作区同时匹配）。新准入 180 个路径；另有 7 个文件首行的
+  `oxlint-disable max-lines` 是移植时加的上游没有的注释，改成 `.oxlintrc.json` 的精确路径行数边界——
+  本仓对上游存量大文件的既定做法就是这种精确路径豁免（见该文件 overrides 首段注释），改走配置后
+  这些文件与上游逐字节一致，以后叠增量不必再三方合并。
+- **对账**：34 条指纹停在上游旧版本（路径本身仍是原样上游），更新为当前内容；本地改过的、已删除的
+  只报告不动。这份清单没有仓库自带的更新工具，用的是 `upstream-sync-tools/upstream-snapshot-admit.mjs`
+  与 `upstream-snapshot-reconcile.mjs`（只接纳与指定上游 ref 逐字节一致的条目）。
+- **确实改过的 10 个文件 → 5 条路径精确例外**（`architecture-policy.yaml`，理由按实测写）：
+  `cli-session-control/module.ts`（只删了上游一行未使用的 import）、`useBrowserDesignMode.ts`
+  （两处接缝：本仓没有 `ElementMentionSyncPlugin`、`useConfirmDialog` 没有 AbortSignal 参数）、
+  受管 worktree 三个 Hook（上游版用必需的 `useServices` / `useIndexedTaskMeta`，本仓 SessionPane/Shell
+  的单测渲染壳没有这两层 Provider，实测 42 个相关文件里 11 个 208 例直接抛错；改为可选注入后
+  同一组 625 例全过）、`MarketingTouchProvider.tsx`（保留 UWork 的 `toZhOrEnLocale` 中英收窄）、
+  ToolSearch 四个文件（见新增缺口 5）。
+- **没有为了过门禁去登记上游那 14 个模块**：试过一次，会新增 36 条违规（31 条 `missing-module-artifact`、
+  5 条 `disable-count`），正式纳管（补 `module.ts` / `contract.ts` / `contract.example.ts` /
+  `contract.test.ts` / `CONTRACT.md`）另起一轮。
+- 提交：`7c04add1`（两个停在 3.16.2 口径的旧测试）、`3853eece`（快照准入、对账、例外与 lint 配置）。
+
+**对上一版结论的更正**（文档前面几节写于 Node 25 时期，结论按本节为准）：
+
+1. 「全量对照无集成引入失败」**不成立**：Node 24 净化环境重跑后发现 5 例集成独有失败，全部是停在
+   3.16.2 口径的旧测试（`zcodeProtocolV4Command` 的 CAS 表、`zcodeProtocolV4DisplayTolerance` 的夹具键），
+   已修（`7c04add1`）。前面那节的「集成 67 文件 256 例、基线 71 文件 256 例」是 Node 25 的数字，失效。
+2. 「`pre-push` 因缺 `origin/staging` 只能 `--no-verify`」**不成立**：带显式基线就能过。但要注意
+   affected 选中整套时的跳过语义——推之前想要全量证据，仍要显式跑一次全量单测（或依赖 CI）。
+3. 「既有红」在 Node 24 下不一样：`projectSidebar*` 那 11 例（`storage?.getItem`）等是 Node 25 的
+   环境问题；Node 24 下 main 基线的真实红是 79 例（provider 迁移与模型注册表、桌面环境相关为主），
+   集成侧必须逐条落在其中。脚本 `upstream-sync-tools/full-unit-run.sh` 与 `verify-all.sh` 可复现。
+4. checks job 实际是 **19 步**（`ci-checks-local.sh` 与 workflow 同步维护），
+   `docs/testing/pre-push-hook.md` 里列的步骤清单已过时。
+
+**新增缺口**（与前面 1–4 并列）：
+
+5. **ToolSearch 公告重做未移植**：上游 3.18.1 / 4.0.0 把公告改成按删除原因分段 + MCP 状态公告
+   （`description.ts`、`mcp-diagnostics.ts`、`exposure.ts`、`history.ts`、`deferred-call.ts`、
+   contracts 的 `tool-search.ts` 等，约 820 行）。本仓这 4 个文件仍是 3.16.2 实现，只随 standalone CLI
+   装配补了 local 模式换名 `LocalToolSearch` 的最小改动（已写进路径例外）。
+6. **队列冻结编辑（Composer 编辑态）未移植**：契约（4.0.0 的 `command.ts`）已有
+   `lockQueueItemEdit` / `releaseQueueItemEdit` 与 `editQueueItem` 的 `editorId`/附件/设置字段，
+   但 CLI 侧 `commands/handlers/queue.ts` 还是 3.16.2 版：没有编辑锁，`executor.supports()` 对这两个
+   新命令返回 false；`editQueueItem` 因此**既不在 CAS 集、也没有编辑锁**（上游去掉 CAS 的前提是锁）。
+   影响面在兼容调用方——第一方桌面/Web/手机已不发 `editQueueItem`（改用
+   `deleteQueueItem(baseRevision)` + composer 恢复，见 `docs/conversation-protocol-declaration.md`）。
+7. **营销投放的 `localeResolved` 冷启动门槛未取**：上游 3.18.1 起等 `IntlProvider` 读完 setting.json
+   再创建 runtime（否则冷启动首发 `marketing/touch` 的 `X-Client-Language` 可能带占位语言）；
+   本仓 `useZCodeIntl()` 不暴露 `localeResolved`，保留 UWork 的 `toZhOrEnLocale` 收窄（已写进路径例外）。
+8. **文档漂移**：`docs/conversation-protocol-declaration.md`、`docs/zcode-protocol.md` 等仍是上游旧版
+   （本轮只在 `zcode-protocol.md` 补了「`editQueueItem` 不要求 `baseRevision`」一句，其余在按特性
+   移植时再收）；`docs/ui/composer-edit-mode.md` 未移植。

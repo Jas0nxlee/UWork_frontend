@@ -599,8 +599,11 @@ describe("zcode-protocol-v4 command", () => {
 
   it("CAS command set matches the spec table", () => {
     // editQueueItem 自上游 3.18.1 起不在表内：运行中 revision 随 control/queue 投影频繁递增，
-    // 用户编辑排队消息会被 proto.staleRevision 误拒；冻结编辑的并发保护改由 CLI 编辑锁承担。
-    // 原因见 src/zcode-protocol-v4/command.ts 里该常量上方的注释。
+    // 用户编辑排队消息会被 proto.staleRevision 误拒。上游把它移出 CAS 的前提是「并发保护改由 CLI
+    // 编辑锁（editorId 持锁）」——那一整片（lockQueueItemEdit 的实现与 Composer 编辑态）本仓还没
+    // 移植，所以本仓的 editQueueItem 目前既不在 CAS 集、也没有锁保护；第一方 UI 已不再调用它
+    // （改用 deleteQueueItem + composer 恢复），影响面在兼容调用方。
+    // 详见 docs/upstream-sync-3.18.1-plan.md「新增缺口」。
     expect([...COMMANDS_REQUIRING_BASE_REVISION].sort()).toEqual(
       [
         "deleteQueueItem",
