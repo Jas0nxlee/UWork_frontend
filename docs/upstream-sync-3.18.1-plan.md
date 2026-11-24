@@ -238,6 +238,21 @@ session → worktree → design → browser 叠放，每次合并一个提交、
 `packages/desktop/test/desktopMainIpcPlatform.test.ts` 1 例。除此之外无新增失败。
 `design-plugin/test/audit.test.ts`（45 例，需本机 Chrome，约 17 分钟）**默认未跑**。
 
+另做了一次**全量 `--project unit` 对照**：在 `/tmp/uw-baseline`（`git worktree add --detach`）分别跑
+`cf6dc444` 与集成分支，失败集合逐条比对：
+
+| 树 | 失败文件 | 失败例 | 通过例 |
+| --- | --- | --- | --- |
+| 基线 `cf6dc444` | 71 | 256 | 19940 |
+| 集成分支 | 67 | 256 | 19953 |
+
+失败集合只差一条：`packages/ui/test/v4ConversationRowViewUserEdit.test.ts > renders prompt contexts in
+the edit second row…`（期望 `## Element undefined`、实际 `## Element 1`）。用 `550a0dcf` 单跑确认它
+**在 design 分支上就红**（39/39 → 38/39）：design 把 `## Element N` 的编号提为必需字段
+（`WebElementContextComposerAttachment.ordinal`），但 `packages/ui/test` 不在根 typecheck 的工程里，
+夹具没跟着改。已在集成分支补 `ordinal: 1`（`d810bdbe`），该文件回到 39/39；另 5 个只在基线红的文件是
+Node 25 环境抖动（`e2eReporting*` 等），集成分支上通过。**全量对照的结论：没有集成引入的失败。**
+
 **仍然挂着的缺口**
 
 1. `design-plugin/test/audit.test.ts` 45 例需本机 Chrome，未纳入本轮回归；CI 上要单独一条带浏览器的作业。
