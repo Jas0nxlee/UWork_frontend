@@ -26,7 +26,7 @@ import {
 const TOPIC = "conversation/session-display-tolerance";
 const SUBSCRIPTION_ID = "sub-display-tolerance";
 
-/** 事故当天真的躺在库里的那张卡：20 行里 5 行带 lineage 键，此处取其中两行。 */
+/** 被污染的卡：run 行带着本侧镜像 schema 不认识的键，此处取两行。 */
 const POISONED_LIST_RUNS_DISPLAY = {
   kind: "list_workflow_runs",
   runs: [
@@ -39,8 +39,10 @@ const POISONED_LIST_RUNS_DISPLAY = {
       createdAt: 1_758_000_000_000,
       updatedAt: 1_758_000_100_000,
       spentTokens: 12_345,
-      // ↓ 本侧镜像不认识的两个键（CLI 侧输出 schema 在 980e257bff 长出来的）
-      resumedFrom: "dwfrun-3eadf667-8c25-43da-83b1-0e26e7f4897c",
+      // ↓ 本侧镜像不认识的键。2026-09-21 的事故卡带的是 resumedFrom / supersededBy；
+      //   上游 4.0.0 已把这两个 lineage 键补进镜像 schema（workflow-observation-display.ts），
+      //   当年那张卡不再非法。要继续钉住「认不出来的 display 只丢卡」，就得换成仍不认识的键。
+      unrecognizedLineageKey: "dwfrun-3eadf667-8c25-43da-83b1-0e26e7f4897c",
     },
     {
       runId: "dwfrun-2ffa52d4-decb-46eb-8dec-baac736f0187",
@@ -52,7 +54,7 @@ const POISONED_LIST_RUNS_DISPLAY = {
       createdAt: 1_758_000_000_000,
       updatedAt: 1_758_000_050_000,
       spentTokens: 6_789,
-      supersededBy: "dwfrun-5b042041-d319-4c35-97a1-61d47003e530",
+      anotherUnrecognizedKey: "dwfrun-5b042041-d319-4c35-97a1-61d47003e530",
     },
   ],
   truncated: true,
@@ -82,7 +84,7 @@ function toolRow(display: unknown): Record<string, unknown> {
 }
 
 describe("display 载荷在信封层不设门", () => {
-  it("row 上带 lineage 键的 list_workflow_runs 卡被丢弃，row 其余字段照常投影", () => {
+  it("row 上带镜像不认识的键的 list_workflow_runs 卡被丢弃，row 其余字段照常投影", () => {
     const parsed = toolCallRowSchema.safeParse(toolRow(POISONED_LIST_RUNS_DISPLAY));
     expect(parsed.success).toBe(true);
     if (!parsed.success) return;

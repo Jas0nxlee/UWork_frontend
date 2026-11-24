@@ -598,10 +598,12 @@ describe("zcode-protocol-v4 command", () => {
   });
 
   it("CAS command set matches the spec table", () => {
+    // editQueueItem 自上游 3.18.1 起不在表内：运行中 revision 随 control/queue 投影频繁递增，
+    // 用户编辑排队消息会被 proto.staleRevision 误拒；冻结编辑的并发保护改由 CLI 编辑锁承担。
+    // 原因见 src/zcode-protocol-v4/command.ts 里该常量上方的注释。
     expect([...COMMANDS_REQUIRING_BASE_REVISION].sort()).toEqual(
       [
         "deleteQueueItem",
-        "editQueueItem",
         "editUserQuery",
         "applyFileRewind",
         "forkAssistant",
