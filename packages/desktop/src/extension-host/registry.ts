@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 整表移植：扩展注册表：清单校验、代际登记与视图路由共享同一注册快照，拆分会引入双份世代状态。 */
 import { mkdir } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";

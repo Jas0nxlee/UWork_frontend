@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 调整面板的字段分组（布局/文字/外观/变量/源码状态）共享同一份选中状态，拆开会把 props 撕成多份。 */
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { ArrowUpToLine, Blend, Scan, Type, X } from "lucide-react";
 import type { DesignTweakControl } from "@zcode/design-runtime";

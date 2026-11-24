@@ -1137,3 +1137,32 @@ exceptions:
       - packages/ui/src/settings/DynamicWorkflowModeSetting.tsx
       - packages/ui/src/store/dynamicWorkflowAvailabilityStore.ts
     reason: Admitted upstream files edited only to let the user's dynamic workflow mode choice always win and keep the settings row visible; adopting packages/shared/src and packages/ui/src needs a separate module boundary refactor.
+  # 以下五条来自上游 3.18.1 / 4.0.0 按特性移植：原样引入的文件走 upstream snapshot 准入，
+  # 只有本地确实改过的路径才写到这里（取法与逐文件的差异见 docs/upstream-sync-3.18.1-plan.md）。
+  - id: upstream-cli-session-control-module-unused-import-edit
+    rule: unmanaged-new-file
+    paths: [ apps/zcode-cli/packages/bootstrap/src/cli-session-control/module.ts ]
+    reason: 上游 3.18.1 原样文件只删去一行未使用的 import（node:fs/promises 的 realpath，上游自己也没有引用，oxlint no-unused-vars 告警），其余逐行一致；session-control 的装配 owner 与模块边界不变，接管 bootstrap 目录不在本次上游同步范围内。
+  - id: upstream-browser-design-mode-seam-edit
+    rule: unmanaged-new-file
+    paths: [ packages/ui/src/browser-use/useBrowserDesignMode.ts ]
+    reason: 上游 3.18.1 的浏览器设计模式状态 owner 只改两处接缝：本仓没有 ElementMentionSyncPlugin，元素 chip 不带 inline；useConfirmDialog 没有 AbortSignal 参数，过期结果靠 aborted 判断丢弃。页面逻辑仍在受管的 design-runtime 包；上游同路径有同类例外 browser-design-mode-unmanaged-new-files，接管 packages/ui/src/browser-use 需要单独的边界重构。
+  - id: upstream-managed-worktree-hooks-optional-services-edit
+    rule: unmanaged-new-file
+    paths:
+      - packages/ui/src/managed-worktrees/useManagedWorktreeCreations.ts
+      - packages/ui/src/managed-worktrees/useTaskWorktreePlacement.ts
+      - packages/ui/src/managed-worktrees/useWorktreeSupport.ts
+    reason: 上游 3.18.1 的三个受管 worktree Hook 在本仓改用可选的服务注入。上游版用必需的 useServices / useIndexedTaskMeta，本仓 SessionPane 与 Shell 的单测渲染壳没有 ServiceProvider / TabStoreProvider，实测 42 个相关测试文件里 11 个（208 例）直接抛错；改后同一组 625 例全过。创建记录、放置信息与入口显隐的 owner 不变，受管 worktree 的服务与编排仍在各自模块；接管 packages/ui/src/managed-worktrees 需要单独的边界重构。
+  - id: uwork-marketing-touch-locale-narrowing-edit
+    rule: unmanaged-new-file
+    paths: [ packages/ui/src/components/marketing-touch/MarketingTouchProvider.tsx ]
+    reason: 已准入的存量文件保留 UWork 的中英收窄：上游 3.18.1 把投放请求头与弹窗 locale 放宽为真实界面语言，本仓仍经 toZhOrEnLocale 只发 zh-CN / en-US，也不取随之上线的 localeResolved 启动门槛（本仓 useZCodeIntl 不暴露它）。轮询与投放的 owner、签名形态与模块边界不变；上游同路径有同类例外 ui-more-locales-existing-edit。
+  - id: upstream-tool-search-announcement-slice-deferred-edit
+    rule: unmanaged-new-file
+    paths:
+      - apps/zcode-cli/packages/contracts/src/tools/tool-search.ts
+      - apps/zcode-cli/packages/core/src/tool/deferred-call.ts
+      - apps/zcode-cli/packages/core/src/tool/search/exposure.ts
+      - apps/zcode-cli/packages/core/src/tool/search/history.ts
+    reason: 上游 3.18.1 / 4.0.0 的 ToolSearch 公告重做（按删除原因分段、MCP 状态公告，连同 description.ts、mcp-diagnostics.ts 等整片）尚未移植，这四个仍停在 3.16.2 的实现（contracts 的 tool-search.ts 另有 main 既有的 toToolJsonSchema 改动）；本次只随 standalone CLI 装配补了 local 模式换名 LocalToolSearch 的最小改动（新增 LOCAL_TOOL_SEARCH_NAME / toolSearchNameForMode / isToolSearchName，历史投影让两个名字命中同一定义）。工具注册与执行的 owner 不变，接管 zcode-cli 不在本次范围内；上游同路径有同类例外 tool-search-schema-key-order-unmanaged-edit、tool-search-removal-reason-unmanaged-edit、tool-error-wrapping-texts。

@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 extension-host 能力表整表对齐，拆分会打断能力 id 与输出类型的单一映射。 */
 import { z } from "zod";
 import {
   appCreateSessionInputSchema,

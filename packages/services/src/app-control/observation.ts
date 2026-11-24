@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 整表移植：app-control 观察面：会话/项目快照、订阅去重与观测账本共享同一生命周期状态机，拆分会复制订阅回收边界。 */
 import { randomUUID } from "node:crypto";
 import {
   SessionControlError,

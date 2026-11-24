@@ -52,7 +52,18 @@
         "**/packages/web/src/web-remote-control/app/webRemoteControlEntry.ts",
         "**/packages/web/src/web-remote-control/adapters/hmacTransport.ts",
         "**/packages/web/src/web-remote-control/adapters/webRemoteControlTransport.ts",
-        "**/packages/web/test/e2e/manual-review/pending/remote-login-v2.mjs"
+        "**/packages/web/test/e2e/manual-review/pending/remote-login-v2.mjs",
+        // 上游 3.18.1 / 4.0.0 整表取来的文件不在文件首行写 oxlint-disable：改了首行就不再是原样上游，
+        // 架构只能走路径例外，以后叠上游增量还要多一次三方合并。行数边界按精确路径给到 800，
+        // 与上面受管 worktree 同一做法。
+        "**/packages/desktop/src/extension-host/registry.ts",
+        "**/packages/services/src/app-control/execution.ts",
+        "**/packages/services/src/app-control/observation.ts",
+        "**/packages/services/src/extensions/sessionReads.ts",
+        "**/packages/shared/src/extension-host/capabilities.ts",
+        "**/packages/shared/src/zcode-protocol-v4/command.ts",
+        "**/packages/ui/src/browser-use/BrowserDesignInspector.tsx",
+        "**/packages/ui/src/browser-use/useBrowserDesignMode.ts"
       ],
       "rules": {
         "max-lines": ["error", { "max": 800, "skipBlankLines": true, "skipComments": true }]

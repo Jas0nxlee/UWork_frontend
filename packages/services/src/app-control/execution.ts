@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 上游 3.18.1 整表移植：app-control 执行面：会话命令、CAS 收敛与反向 RPC 处置必须共享同一 execution 上下文，拆分会断开幂等与取消语义。 */
 import { createHash } from "node:crypto";
 import { completeNewModelSelection, validateModelSelectionOptions } from "@zcode/provider";
 import {

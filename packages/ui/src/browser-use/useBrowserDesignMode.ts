@@ -1,4 +1,3 @@
-/* oxlint-disable eslint(max-lines) -- 设计工具的状态 owner：选中/写回/引用对账共用一个 pageKey 生命周期，拆 hook 会让依赖环变复杂。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { IFileService } from "@zcode/services";
 import { browserPreviewSourceUrl } from "@zcode/shared";
