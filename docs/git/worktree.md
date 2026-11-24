@@ -429,7 +429,7 @@ interface HostQuitBlocker {
 - 所有 git 调用都通过现有的 `gitCommandProvider`，使用参数数组。
 - 创建：`git worktree add --detach <path> <commit>`。`<commit>` 先解析成 SHA。git 的 stdout/stderr 实时追加到创建记录。
 - 删除：`git worktree remove <path>`；只有 §3.11 的"无任务强制删除"加 `--force`。
-- fork 带入改动（§3.6），在父任务 cwd 执行，均为只读命令：`git rev-parse HEAD`、`git diff --cached --binary <sha>`、`git diff --binary`、`git ls-files --others --exclude-standard -z`；在新 worktree 中执行 `git apply --index`（已暂存）、`git apply`（未暂存），未跟踪文件按 §3.4 的拷贝规则复制。基于同一个 SHA，补丁不会冲突。
+- fork 带入改动（§3.6），在父任务 cwd 执行，均为只读命令：`git rev-parse HEAD`、`git diff --cached --binary <sha>`、`git diff --binary`、`git ls-files --others --exclude-standard -z`；`diff` 的 external diff 与 textconv 禁用由 `GitCommandProvider` 统一追加，规则见 [Git 子进程安全调用约定](architecture.md#git-子进程安全调用约定)。在新 worktree 中执行 `git apply --index`（已暂存）、`git apply`（未暂存），未跟踪文件按 §3.4 的拷贝规则复制。基于同一个 SHA，补丁不会冲突。
 - 拷贝清单：`git ls-files --others --ignored --exclude-standard -z` 与 `git ls-files --others --ignored --exclude-from=.worktreeinclude -z` 取交集，在源仓库根目录执行（§3.4）。
 - `git worktree add` 使用 10 分钟超时，`remove` 使用 5 分钟超时。
 - 仓库自带的 hooks（例如 `post-checkout`）按 git 默认行为执行。
@@ -493,6 +493,8 @@ CLI 存储：{ type: "timeline", timelineType: "worktree_creation", display: "wo
 V4 投影：timelineMarker { type: "worktreeCreated", path, sha, ref, output }
 不进入模型上下文（和其他 timeline 标记一样）
 ```
+
+辅助对话（selection side chat）与父任务共用 cwd，不新建 worktree。它复制的父历史中也有这一项，按继承历史隐藏，不在辅助对话中显示（[辅助对话 spec](../ui/conversation-selection-side-chat.md) SSC19）。
 
 各层的校验：
 

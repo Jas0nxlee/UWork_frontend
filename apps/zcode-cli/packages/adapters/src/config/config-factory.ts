@@ -528,7 +528,7 @@ const nodeTrustIdentityFs: WorkspaceHookTrustIdentityFs = {
 };
 
 /**
- * 计算 workspace 的 Hook Trust identity。远程 identity 原样返回；本地受管 worktree 严格校验通过后
+ * 计算 workspace 的 Hook Trust identity。远程 identity 保留 host 命名空间、路径取执行目录；本地受管 worktree 严格校验通过后
  * 归一为源仓库对应路径；其余情况返回 workspacePath（调用方负责传入已规范化的路径）。
  */
 export function resolveWorkspaceHookTrustIdentityForWorkspace(input: {
