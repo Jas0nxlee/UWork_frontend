@@ -21,6 +21,15 @@ export function resolveE2EHomeDir({
   return resolve(cwd, configuredHome || ".e2e-home");
 }
 
+/**
+ * runner 的隔离 HOME 目录名只有 `.e2e-home` 与 `.e2e-home-<runId>[-shard-N]` 两种布局。
+ * 修复原因：裸前缀 `.e2e-home` 会放行 `.e2e-homebackup`、`.e2e-home2` 等误配目录，
+ * 破坏性夹具步骤会继续执行而不是提前失败；因此只接受精确名或 `-` 分隔的后缀。
+ */
+export function isE2EHomeDirName(name: string): boolean {
+  return /^\.e2e-home(?:-|$)/u.test(name);
+}
+
 export function resolveE2EStorageRoot(e2eHomeDir = resolveE2EHomeDir()): string {
   // Bug 根因：回滚 storage profile 时删除了仍被 E2E 用例依赖的路径 helper。
   // 与 WDIO bootstrap、产品 Host 共用同一根，避免夹具与实际 CLI 分叉。
