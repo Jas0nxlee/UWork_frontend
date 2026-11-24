@@ -99,20 +99,27 @@ export const OFFICIAL_ZCODE_GUIDE_REQUIRED_SEED_PATHS = [
 
 // design 是纯内容型插件（技能 + 设计资源 + SessionStart hook，无 MCP），技能正文按需读取 references/
 // 与 scripts/；hook 只注入一句指针，正文缺失时 hook 静默退出，会话里就再也触发不到技能。
-// 所以这里钉住入口、7 份规则文件、三个随包脚本和 hook，seed 缺任一项都拒绝生成残缺缓存。
+// 所以这里钉住入口、11 份规则文件、7 个随包脚本和 hook，seed 缺任一项都拒绝生成残缺缓存。
 export const OFFICIAL_DESIGN_REQUIRED_SEED_PATHS = [
   "skills/design/SKILL.md",
+  "skills/design/references/app.md",
   "skills/design/references/catalog.md",
   "skills/design/references/check.md",
   "skills/design/references/create.md",
+  "skills/design/references/deck.md",
   "skills/design/references/design-system.md",
+  "skills/design/references/image.md",
   "skills/design/references/interact.md",
-  "skills/design/references/output.md",
+  "skills/design/references/motion.md",
+  "skills/design/references/page.md",
   "skills/design/references/redesign.md",
   "skills/design/scripts/adapt-canvas.mjs",
+  "skills/design/scripts/audit-page.js",
+  "skills/design/scripts/audit.mjs",
   "skills/design/scripts/design-lint.mjs",
   "skills/design/scripts/design-tokens.mjs",
   "skills/design/scripts/import-design-system.mjs",
+  "skills/design/scripts/probe.js",
   "hooks/hooks.json",
   "hooks/run-hook.cmd",
   "hooks/design-rules",
@@ -471,7 +478,9 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
       "../../design-plugin",
       "../../../design-plugin",
     ],
-    version: "0.7.2",
+    // 4.0.0 起 design 插件只带 skills/ + hooks/，版本与 package.json / 两份 plugin.json /
+    // sea-official-plugin-assets.mjs 同步 bump 到 0.8.0。
+    version: "0.8.0",
   },
 ];
 
