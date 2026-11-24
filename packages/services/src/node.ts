@@ -45,7 +45,11 @@ import {
   PERSONAL_PROVIDER_CONFIG_FILE_NAME,
 } from "@zcode/provider-node";
 import { UCAS_PROVIDER_ID } from "@zcode/provider";
-import { getAppConfigDir as resolveAppConfigDir, getUworkUserCliConfigPath } from "./paths.js";
+import {
+  getAppConfigDir as resolveAppConfigDir,
+  getDataBaseDir,
+  getUworkUserCliConfigPath,
+} from "./paths.js";
 import {
   createHasExistingLocalTask,
   hasAnyAgentSessionRow,
@@ -456,6 +460,14 @@ import type { WorkspaceFileSearchFilter } from "./file/workspaceFileMentionFilte
 import { createGitService } from "./git/gitService.js";
 import { GitCommitMessageGenerator } from "./git/gitCommitMessageGenerator.js";
 import { createGitCheckpointService } from "./git/gitCheckpointService.js";
+import { createGitWorktreeRepo } from "./git/managed-worktree/gitWorktreeRepo.js";
+import { createGitCommandProvider } from "./git/providers/gitCommandProvider.js";
+import {
+  createManagedWorktreeService,
+  createWorktreeRemovalGate,
+  IManagedWorktreeService,
+} from "./managed-worktree-tasks/index.js";
+import { HOST_WORKTREE_COMMAND } from "./zcode-agent/zcodeAgent.js";
 import { createSystemService } from "./system/systemService.js";
 import { createTerminalService } from "./terminal/terminalService.js";
 import {
@@ -2754,6 +2766,45 @@ export function createLocalServices(options: {
   const gitService = createGitService({
     commitMessageGenerator: gitCommitMessageGenerator,
   });
+  // 删除租约是 Agent 会话命令、终端创建与删除流程共享的唯一"删除中"事实（§8.3）。
+  const worktreeRemovalGate = createWorktreeRemovalGate();
+  // 终端实例需要同时注册给 renderer 与供 worktree 删除前的占用检查使用，必须是同一个实例。
+  const terminalService = createTerminalService({
+    settingService,
+    isCwdBlocked: (cwd) => worktreeRemovalGate.isRemoving(cwd),
+  });
+  const isLocalProjectHost =
+    !options?.projectStorageHostId || options.projectStorageHostId === "local";
+  const managedWorktreeService = createManagedWorktreeService({
+    isLocalHost: isLocalProjectHost,
+    repository: () => taskIndexRepo.getProjectRepository(),
+    git: createGitWorktreeRepo({
+      commandProvider: createGitCommandProvider(),
+      dataBaseDir: getDataBaseDir,
+    }),
+    removalGate: worktreeRemovalGate,
+    runtime: {
+      hasTerminalsUnder: async (path) =>
+        (await terminalService.listTerminalIdsUnderPath({ path })).length > 0,
+      releaseSessionsUnder: async (target) => {
+        if (!zcodeAgentService.releaseSessionsUnderDirectory)
+          throw new Error("worktree.release-unsupported");
+        return await zcodeAgentService.releaseSessionsUnderDirectory(target);
+      },
+    },
+    agent: {
+      supportsWorktreeCwd: async (target) =>
+        (await zcodeAgentService.supportsWorktreeCwd?.(target)) ?? false,
+      // HOST_WORKTREE_COMMAND 只有本服务能设置，渲染进程经 RPC 无法携带（§5.1）。
+      sendCommand: (command) =>
+        zcodeAgentService.sendConversationCommandV4({ ...command, [HOST_WORKTREE_COMMAND]: true }),
+      queryCommandResult: async (target) => {
+        if (!zcodeAgentService.queryCommandResult) throw new Error("worktree.query-unsupported");
+        return await zcodeAgentService.queryCommandResult(target);
+      },
+    },
+    afterChange: publishProjectChange,
+  });
   // task wrapper 由 ZCode task service adapter 提供；核心 session 状态由 ZCode agent server 维护。
   const zcodeTaskService = createZCodeTaskServiceAdapter({
     zcodeAgentService,
@@ -2911,9 +2962,10 @@ export function createLocalServices(options: {
       }),
     )
     .register(IGitService, gitService)
+    .register(IManagedWorktreeService, managedWorktreeService)
     .register(IGitCheckpointService, gitCheckpointService)
     .register(ISystemService, systemService)
-    .register(ITerminalService, createTerminalService({ settingService }))
+    .register(ITerminalService, terminalService)
     .register(ISettingService, settingService)
     .register(IOnboardingRecordService, onboardingRecordService)
     .register(ICredentialService, createPublicCredentialService(credentialService))

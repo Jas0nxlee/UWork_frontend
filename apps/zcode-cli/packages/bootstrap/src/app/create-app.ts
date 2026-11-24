@@ -12,7 +12,11 @@ import {
   createNodeToolArtifactStore,
 } from "@zcode/adapters/storage";
 import { createNodeLoggerFactory } from "@zcode/adapters/logging";
-import { createConfig, resolvePath } from "@zcode/adapters/config";
+import {
+  createConfig,
+  resolvePath,
+  resolveWorkspaceHookTrustIdentityForWorkspace,
+} from "@zcode/adapters/config";
 import {
   createNodeExecutionAdapter,
   resolveEffectiveBashShellSelection,
@@ -175,6 +179,14 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   const sessionId = options.sessionId ?? createSessionId();
   const traceContext = options.traceContext ?? createRootTraceContext({ sessionId });
   const workingDirectory = resolve(options.runtimeConfig?.workingDirectory ?? process.cwd());
+  // Hook Trust identity（D23）：受管 worktree 归一为源仓库路径，snapshot 与 Trust record 共用该键。
+  const workspaceHookTrustIdentity = await resolveWorkspaceHookTrustIdentityForWorkspace({
+    workspacePath: workingDirectory,
+    ...(options.runtimeConfig?.memory?.workspaceIdentity?.trim()
+      ? { workspaceIdentity: options.runtimeConfig.memory.workspaceIdentity.trim() }
+      : {}),
+    ...(options.env ? { env: options.env } : {}),
+  });
   const configResult = resolveEffectiveConfigResult(
     createConfig({
       env: options.env,
@@ -350,7 +362,15 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       sessionControl = bindRoot(sessionId);
     }
     const localSettingStore = asLocalSettingStore(sessionStore);
-    const projectID = projectIdFromDirectory(workingDirectory);
+    // 受管 worktree 会话的项目身份（权限 project_id、项目记忆）映射回源仓库路径，与 Hook Trust
+    // 继承同一 resolver（docs/git/worktree.md §6.6.3）。远程 workspace 的 Trust identity 是
+    // 不透明身份而不是目录，保持按工作目录派生；映射失败时 resolver 已退回工作目录。
+    const projectDirectory =
+      !options.runtimeConfig?.memory?.workspaceIdentity?.trim() &&
+      workspaceHookTrustIdentity !== workingDirectory
+        ? workspaceHookTrustIdentity
+        : undefined;
+    const projectID = projectIdFromDirectory(projectDirectory ?? workingDirectory);
     const persistedMode = options.runtimeConfig?.mode
       ? undefined
       : readProjectPermissionMode(localSettingStore, projectID);
@@ -397,6 +417,10 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         ),
       };
     }
+    if (projectDirectory) runtimeConfig.projectDirectory = projectDirectory;
+    // 协议入口给出会话所属 workspace 的 key（受管 worktree 会话 = 项目）；MCP 工具调用与官方 MCP
+    // 授权头以它为身份，不按工作目录重算（docs/git/worktree.md §9.3）。
+    if (options.workspaceKey) runtimeConfig.workspaceKey = options.workspaceKey;
     startupTimer.mark("UWork runtime configuration resolved", {
       context: runtimeConfigLogContext(runtimeConfig, workingDirectory),
       event: "bootstrap.app.startup.runtime_config.completed",

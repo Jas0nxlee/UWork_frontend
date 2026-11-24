@@ -605,6 +605,26 @@ export const TID_V4_ATTACHMENT_UPLOAD_RETRY = "v4-attachment-upload-retry";
 export const TID_V4_STOP = "v4-stop";
 /** v4 assistant 行 fork 按钮（动态后缀为 rowId） */
 export const TID_V4_FORK = "v4-fork";
+/** v4 fork 目的地菜单：在当前目录分叉（动态后缀为 rowId） */
+export const TID_V4_FORK_HERE = "v4-fork-here";
+/** v4 fork 目的地菜单：在新 worktree 中分叉（动态后缀为 rowId） */
+export const TID_V4_FORK_TO_WORKTREE = "v4-fork-to-worktree";
+/** 新建任务 composer 头部的 worktree 复选框 */
+export const TID_WORKTREE_TOGGLE = "composer-worktree-toggle";
+/** worktree 创建视图的进度卡片（data-phase = creating / starting-session / failed） */
+export const TID_WORKTREE_CREATION_CARD = "worktree-creation-card";
+/** 创建失败：重试 */
+export const TID_WORKTREE_CREATION_RETRY = "worktree-creation-retry";
+/** 创建失败：不使用 worktree */
+export const TID_WORKTREE_CREATION_CONTINUE_LOCAL = "worktree-creation-continue-local";
+/** 创建失败：放弃 */
+export const TID_WORKTREE_CREATION_DISMISS = "worktree-creation-dismiss";
+/** 会话历史中的"已创建 worktree"标记 */
+export const TID_WORKTREE_CREATED_MARKER = "worktree-created-marker";
+/** 侧栏中正在创建 worktree 的任务行 */
+export const TID_WORKTREE_CREATING_ROW = "worktree-creating-row";
+/** 侧栏任务行的 worktree 图标 */
+export const TID_TASK_ROW_WORKTREE_ICON = "task-row-worktree-icon";
 /** v4 assistant 行 retry 按钮（动态后缀为 rowId） */
 export const TID_V4_RETRY = "v4-retry";
 /** v4 assistant 行点赞按钮（动态后缀为 rowId） */

@@ -57,7 +57,13 @@ export type {
   RemoteProjectDirectory,
   RemoteProjectEntry,
   RemoteProjectHost,
+  IManagedWorktreeService,
+  ManagedWorktreeGroup,
 } from "@zcode/services";
+export type {
+  ManagedWorktreeEntry,
+  ManagedWorktreeTaskRef as ManagedWorktreeTask,
+} from "@zcode/shared";
 export interface ProjectAvailability {
   entryId?: string;
   /** 仅首次升级入口用于替换旧排序键，不改变项目身份。 */

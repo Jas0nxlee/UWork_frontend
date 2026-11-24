@@ -4,6 +4,7 @@ import {
   OFF_PEAK_EXECUTION_TOOL_DENYLIST,
 } from "@zcode/shared";
 /* eslint-disable max-lines -- ZCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
+import { isAbsolute, relative, resolve } from "node:path";
 import { observeSessionDebug } from "./session-debug.js";
 import { isTranscriptVisibleMessage } from "../active-transcript/index.js";
 import { createAppSessionControlBinding } from "../session-control/index.js";
@@ -12,6 +13,7 @@ import {
   isTaskListSessionType,
 } from "../zcode-protocol-v4/task-list-session-membership.js";
 import { resolveEffectiveBashShellSelection } from "@zcode/adapters/exec";
+import { classifyLocalSessionDirectory } from "@zcode/adapters/config";
 import { inputIntentMetadata } from "../zcode-protocol-v4/commands/input-intent.js";
 import { createModelExecutionContext } from "./model-execution.js";
 import type { SendInputOptions } from "../app/types.js";
@@ -53,9 +55,11 @@ import {
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
   zcodeProtocolErrorCodes,
   zcodeProtocolMethods,
+  sessionLifecycleActivationParamsSchema,
   zcodeSessionCancelBackgroundTaskParamsSchema,
   zcodeSessionCompactParamsSchema,
   zcodeSessionCloseParamsSchema,
+  zcodeSessionReleaseUnderDirectoryParamsSchema,
   zcodeSessionCreateParamsSchema,
   zcodeSessionEventsParamsSchema,
   zcodeSessionForkParamsSchema,
@@ -98,6 +102,7 @@ import {
 import {
   buildSessionSnapshot,
   buildWorkspaceRef,
+  resolveResumeWorkspaceRef,
   formatProtocolModelSelection,
   mapSessionEventForProtocol,
   mapSessionInfo,
@@ -1515,15 +1520,12 @@ export async function activateSessionForResume(
     );
   }
   session = await repairLegacyRemoteSessionWorkspaceForResume(context, session);
-  const workspace =
-    params.workspace ??
-    buildWorkspaceRef({
-      // V4 历史会话冷订阅只传 sessionId；远端会话若在这里仅用目录
-      // 重建 workspace，identity 会退化成 path key，无法命中按 workspaceID 隔离的
-      // provider registry，最终把可用模型误判为不可用并永久触发 restoreWarning。
-      workspaceIdentity: session.workspaceID,
-      workspacePath: session.path ?? session.directory,
-    });
+  // 冷恢复：身份（workspaceKey）取 Host 请求，执行路径取持久化的会话 cwd（创建后不变，I2）。
+  // 受管 worktree 会话的 Host workspace 是项目主目录，沿用请求路径会让会话在主目录中恢复执行。
+  const workspace = resolveResumeWorkspaceRef(
+    params.workspace,
+    session,
+  );
   let persistedMessages =
     options.persistedMessages ?? (await readPersistedSessionMessages(context, params.sessionId));
   const mode = derivePersistedSessionMode(persistedMessages);
@@ -2428,6 +2430,8 @@ export async function registerForkedSession(
       followupMode?: "queue" | "guide";
     };
     inheritLatestTarget: boolean;
+    /** fork 到受管 worktree 时 child 的 workspace ref（key 属于项目、路径是 worktree）。 */
+    childWorkspace?: { workspaceKey: string; workspacePath: string; workspaceIdentity?: string };
   },
 ) {
   const parentMode = options.runtimeConfig.mode;
@@ -2447,7 +2451,7 @@ export async function registerForkedSession(
       model: optionalModelSelectionFromString(parentModel),
       ...(fork.parentSessionId ? { parentSessionId: fork.parentSessionId } : {}),
       taskType: forkedSession.taskType,
-      workspace: record.workspace,
+      workspace: options.childWorkspace ?? record.workspace,
     },
     fork.forkedSessionId as SessionId,
     true,
@@ -2900,21 +2904,145 @@ export async function closeSession(context: ZCodeProtocolAgentServerContext, raw
     // immediate；条件关闭必须在 Agent record 上原子判断，不能依赖 renderer 的旧快照。
     return { closed: false };
   }
+  await deactivateSessionRecord(context, params.sessionId);
+  return { closed: true };
+}
+
+/**
+ * 卸载一个运行实例：结束插件 UI 工具调用、资源订阅与 runtime，清 v4 publisher；
+ * 不删除持久化事实，因此必须保留 sessions-index 中的行（重开会话走 snapshot 冷启动）。
+ */
+async function deactivateSessionRecord(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): Promise<void> {
+  const record = context.sessions.get(sessionId);
+  if (!record) return;
   record.unsubscribe?.();
   // 会话关闭时 abort 仍在进行的插件 UI 工具调用，登记表不留孤儿。
-  abortMcpUiToolCallsForSession(params.sessionId);
+  abortMcpUiToolCallsForSession(sessionId);
   // App-Provided Tools：结束本会话全部待执行的页面调用并丢弃登记。
-  clearMcpUiAppToolsForSession(context, params.sessionId);
+  clearMcpUiAppToolsForSession(context, sessionId);
   // 清掉本会话全部资源订阅（refcount 归零的 uri 才真正向 server 退订）。
-  await record.app.unsubscribeMcpResourcesForUi?.(`${params.sessionId}|`).catch(() => 0);
+  await record.app.unsubscribeMcpResourcesForUi?.(`${sessionId}|`).catch(() => 0);
   await record.app.close?.();
-  // v4 通道（M3）：会话关闭同时清 publisher / 订阅调度；重开会话走 snapshot 冷启动。
-  // 关闭运行实例不删除持久化事实，因此必须保留 sessions-index 中的行。
-  context.v4Gateway?.disposeSession(params.sessionId);
-  context.sessions.delete(params.sessionId);
+  context.v4Gateway?.disposeSession(sessionId);
+  context.sessions.delete(sessionId);
   // 内存 event store 随 record 释放。
-  await record.eventStore.deleteSession(params.sessionId as SessionId);
-  return { closed: true };
+  await record.eventStore.deleteSession(sessionId as SessionId);
+}
+
+function readSessionBusyState(
+  context: ZCodeProtocolAgentServerContext,
+  sessionId: string,
+): "busy" | "idle" {
+  const record = context.sessions.get(sessionId);
+  if (!record) return "idle";
+  if ((record.residencyFinalizationCount ?? 0) > 0) return "busy";
+  if (record.activeAbortController) return "busy";
+  try {
+    return record.app.runtime.hasActiveOrQueuedTurnWork() ? "busy" : "idle";
+  } catch {
+    // 读取不出来的运行态按忙处理：卸载是不可逆操作，宁可拒绝也不能打断执行。
+    return "busy";
+  }
+}
+
+function isPathWithin(parent: string, candidate: string): boolean {
+  const rel = relative(resolve(parent), resolve(candidate));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * session/lifecycle/ensureReady：按 Host 请求的 workspace 激活（或复用）会话运行实例。
+ * 归属判定只用文件系统关系（classifyLocalSessionDirectory），不能用 projectID：projectID 是有损
+ * slug，不同项目可能相同（my project / my-project），不能作为会执行代码的路径的归属证明。
+ * 不匹配时在激活前拒绝，避免为外来 workspace 拉起 runtime。
+ */
+export async function ensureSessionReady(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+) {
+  const params = parseParams(sessionLifecycleActivationParamsSchema, rawParams);
+  const active = context.sessions.get(params.sessionId);
+  if (active) {
+    if (
+      params.workspace &&
+      !(await workspaceOwnsSessionDirectory(context, params.workspace, active.workspace.workspacePath))
+    ) {
+      throw new ProtocolRequestError(-32602, "workspace does not own this session");
+    }
+    return { completed: true as const };
+  }
+  const stored = await context.deps.sessionStore?.getSession(params.sessionId as SessionId);
+  if (!stored || stored.time.deleted !== undefined) {
+    throw new ProtocolRequestError(
+      zcodeProtocolErrorCodes.sessionUnavailable,
+      `Session not found: ${params.sessionId}`,
+    );
+  }
+  // 预检在读 store 之后、materialize 之前：外来 workspace 绝不触发 runtime 创建。
+  if (
+    params.workspace &&
+    !(await workspaceOwnsSessionDirectory(
+      context,
+      params.workspace,
+      stored.directory,
+      stored.projectID,
+    ))
+  ) {
+    throw new ProtocolRequestError(-32602, "workspace does not own this session");
+  }
+  await activateSessionForResume(context, {
+    sessionId: params.sessionId,
+    ...(params.workspace ? { workspace: params.workspace } : {}),
+  });
+  return { completed: true as const };
+}
+
+async function workspaceOwnsSessionDirectory(
+  context: ZCodeProtocolAgentServerContext,
+  workspace: { workspacePath: string; workspaceIdentity?: string },
+  sessionDirectory: string,
+  sessionProjectId?: string,
+): Promise<boolean> {
+  const relation = await classifyLocalSessionDirectory({
+    directory: sessionDirectory,
+    workspacePath: workspace.workspacePath,
+    ...(context.deps.env ? { env: context.deps.env } : {}),
+  });
+  // same：普通会话的目录就是 workspace；worktree：受管 worktree 映射回该 workspace。
+  if (relation === "same" || relation === "worktree") return true;
+  // removed-worktree：目录已删，文件系统无法证明归属，只能用创建时持久化的 projectID 兜底
+  // （§3.12）。普通目录同样不能借项目 key 绕过归属校验。
+  if (relation === "removed-worktree")
+    return (
+      sessionProjectId !== undefined &&
+      sessionProjectId === projectIdFromDirectory(workspace.workspacePath)
+    );
+  return false;
+}
+
+/**
+ * 卸载 cwd 位于 directory 内的全部驻留会话（Host 删除受管 worktree 前使用，docs/git/worktree.md §8.3）。
+ * 会话选择与忙闲都以本进程驻留表为准（包括 Host 镜像尚未同步的同目录 fork 子会话）；
+ * 任一会话忙时全部不卸载。判断与开始卸载之间没有 await；之后的新命令由 Host 删除租约拦截。
+ * 只做驻留去激活，不删除持久会话，也不发 session.removed。
+ */
+export async function releaseSessionsUnderDirectory(
+  context: ZCodeProtocolAgentServerContext,
+  rawParams: unknown,
+) {
+  const params = parseParams(zcodeSessionReleaseUnderDirectoryParamsSchema, rawParams);
+  const sessionIds = [...context.sessions]
+    .filter(([, record]) => isPathWithin(params.directory, record.workspace.workspacePath))
+    .map(([sessionId]) => sessionId);
+  const busy = sessionIds.filter(
+    (sessionId) => readSessionBusyState(context, sessionId) === "busy",
+  );
+  if (busy.length > 0) return { released: [], busy };
+  for (const sessionId of sessionIds) await deactivateSessionRecord(context, sessionId);
+  return { released: sessionIds, busy: [] };
 }
 
 export function shouldCloseSessionForExpectedPersistence(

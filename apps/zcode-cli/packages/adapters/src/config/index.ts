@@ -486,6 +486,10 @@ export { mergeConfigs, createPrioritizedConfig, getScopePriority } from "./confi
 export {
   createConfig,
   resolveWorkspaceStorageDir,
+  resolveWorkspaceHookTrustIdentityForWorkspace,
+  resolveZCodeDataBaseDir,
+  classifyLocalSessionDirectory,
   type ConfigFactoryOptions,
   type ConfigResult,
+  type LocalSessionDirectoryRelation,
 } from "./config-factory.js";

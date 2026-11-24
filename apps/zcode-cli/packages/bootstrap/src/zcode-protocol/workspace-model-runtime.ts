@@ -77,6 +77,8 @@ export async function createWorkspaceZCodeApp(
     options.providerRuntimeHeadersPort ?? createProviderRuntimeHeadersPort(context, workspace);
   return context.deps.createZCodeApp({
     ...options,
+    // Hook Trust 等对外字段用会话所属 workspace 的 key；受管 worktree 会话 = 项目 key。
+    workspaceKey: workspace.workspaceKey,
     onOffPeakLifecycleEvent: (event) =>
       context.notify({
         method: V4_NOTIFICATIONS.offPeakLifecycle,

@@ -90,6 +90,7 @@ interface TranscriptFootprint {
   //（footprint 不计数 → 缺这两类 marker 的事件日志被误判为已覆盖）。
   goalVerificationCount: number;
   modelChangeCount: number;
+  worktreeCreatedCount: number;
 }
 
 interface ParsedSubagentOutput {
@@ -1426,6 +1427,8 @@ function collectTurnOutput(options: {
   emittedGoalVerifications: Set<string>;
   goalVerificationsByAnchor: ReadonlyMap<string, GoalVerificationFact[]>;
   onModelChange: (selection: HydratedTimelineModel) => void;
+  /** 受管 worktree 的 "已创建" part 可能落在本轮输出内（forkNotice 消息）——按消息顺序补发。 */
+  onWorktreeParts?: (message: MessageWithParts) => void;
   push: PushEvent;
 }): TurnOutputCollection {
   const { messages, turnId, push } = options;
@@ -1440,6 +1443,9 @@ function collectTurnOutput(options: {
   let turnEndedAtMs = options.turnStartedAtMs;
   while (index < messages.length && !isTurnBoundaryStarter(messages[index]!)) {
     const message = messages[index]!;
+    // fork 边界消息内部要按 part 顺序落位（forkNotice 之后才是 worktreeCreated），
+    // 那一支单独补发，这里只覆盖本轮其它消息。
+    if (!isForkTimelineMessage(message)) options.onWorktreeParts?.(message);
     if (isProviderContextOnlyAssistant(message)) {
       // selection side chat 会把继承的 assistant 历史标成 model-only，
       // 旧 cold hydration 却只隐藏 user carrier，随后把 assistant 当作 preface/上一轮输出合成，
@@ -1462,6 +1468,7 @@ function collectTurnOutput(options: {
           turnId,
         );
       }
+      options.onWorktreeParts?.(message);
       index += 1;
       continue;
     }
@@ -1626,12 +1633,37 @@ export function synthesizeEventsFromMessages(
     });
   };
 
+  // 受管 worktree 的 "已创建" 是持久 timeline part 承载的事实（docs/git/worktree.md §6.6.4）。
+  // 位置按语义分两种：fork 到 worktree 时 part 挂在 forkNotice 那条消息上，标记必须在其后
+  // （§8.2）；新建会话的 part 可能落在此后的消息上，但标记语义上属于首轮之前，所以先于所有轮次重建。
+  // 按路径去重，命令重试写下的重复 part 只重建一次。
+  const hydratedWorktreePaths = new Set<string>();
+  const emitWorktreeParts = (message: MessageWithParts): void => {
+    for (const part of message.parts) {
+      if (part.type !== "timeline" || part.timelineType !== "worktree_creation") continue;
+      const fact = part.worktreeCreation;
+      if (hydratedWorktreePaths.has(fact.path)) continue;
+      hydratedWorktreePaths.add(fact.path);
+      push(SessionEventType.WorktreeCreated, { ...fact });
+    }
+  };
+  const worktreePartsOnForkNotice = messages.some(
+    (message) =>
+      isForkTimelineMessage(message) &&
+      message.parts.some(
+        (part) => part.type === "timeline" && part.timelineType === "worktree_creation",
+      ),
+  );
+
   // 历史消息不声明模型容量；调用方未知时保持未知，不能合成默认分母。
   const contextWindow = options.contextWindow;
   push(SessionEventType.SessionCreated, {
     mode: "default",
     contextWindow,
   });
+  if (!worktreePartsOnForkNotice) {
+    for (const message of messages) emitWorktreeParts(message);
+  }
 
   let turnNumber = 0;
   let index = 0;
@@ -1830,6 +1862,7 @@ export function synthesizeEventsFromMessages(
         emittedGoalVerifications,
         goalVerificationsByAnchor,
         onModelChange: recordTimelineModel,
+        ...(worktreePartsOnForkNotice ? { onWorktreeParts: emitWorktreeParts } : {}),
         push,
       });
       index = collected.nextIndex;
@@ -1887,6 +1920,7 @@ export function synthesizeEventsFromMessages(
           emittedGoalVerifications,
           goalVerificationsByAnchor,
           onModelChange: recordTimelineModel,
+          ...(worktreePartsOnForkNotice ? { onWorktreeParts: emitWorktreeParts } : {}),
           push,
         });
         index = collected.nextIndex;
@@ -1932,6 +1966,7 @@ export function synthesizeEventsFromMessages(
         emittedGoalVerifications,
         goalVerificationsByAnchor,
         onModelChange: recordTimelineModel,
+        ...(worktreePartsOnForkNotice ? { onWorktreeParts: emitWorktreeParts } : {}),
         push,
       });
       index = collected.nextIndex;
@@ -1992,6 +2027,7 @@ export function synthesizeEventsFromMessages(
       emittedGoalVerifications,
       goalVerificationsByAnchor,
       onModelChange: recordTimelineModel,
+      ...(worktreePartsOnForkNotice ? { onWorktreeParts: emitWorktreeParts } : {}),
       push,
     });
     index = collected.nextIndex;
@@ -2023,6 +2059,7 @@ function transcriptFootprint(
   const compactOperations = new Set<string>();
   const goalVerificationKeys = new Set<string>();
   const modelChangeKeys = new Set<string>();
+  const worktreeCreatedKeys = new Set<string>();
   for (const fact of mergeGoalVerificationEntryFacts(goalVerificationEntries)) {
     goalVerificationKeys.add(fact.key);
   }
@@ -2036,6 +2073,7 @@ function transcriptFootprint(
     forkTimelineCount: 0,
     goalVerificationCount: 0,
     modelChangeCount: 0,
+    worktreeCreatedCount: 0,
   };
   // 模型切换 footprint = 相邻真实 user 轮持久化选型快照的变化次数（与投影 marker 的
   // 生成条件同源：本轮实际选型 ≠ 上一轮）。
@@ -2089,6 +2127,10 @@ function transcriptFootprint(
         modelChangeKeys.add(modelChangeKeyOfPart(part));
         continue;
       }
+      if (part.type === "timeline" && part.timelineType === "worktree_creation") {
+        worktreeCreatedKeys.add(part.worktreeCreation.path);
+        continue;
+      }
       const compact =
         part.type === "timeline"
           ? compactPayloadFromTimelinePart(part)
@@ -2102,6 +2144,7 @@ function transcriptFootprint(
   }
   footprint.compactMarkerCount = compactOperations.size;
   footprint.goalVerificationCount = goalVerificationKeys.size;
+  footprint.worktreeCreatedCount = worktreeCreatedKeys.size;
   // 新数据的 timeline part 是显式 boundary authority；旧数据无 part 时才依赖
   // 相邻轮 model 快照变化数。两者表达同一批边界，取 max 避免重复计数。
   footprint.modelChangeCount = Math.max(footprint.modelChangeCount, modelChangeKeys.size);
@@ -2143,6 +2186,9 @@ function projectionFootprint(
     modelChangeCount: rows.filter(
       (row) => row.kind === "timelineMarker" && row.marker.type === "modelChange",
     ).length,
+    worktreeCreatedCount: rows.filter(
+      (row) => row.kind === "timelineMarker" && row.marker.type === "worktreeCreated",
+    ).length,
   };
 }
 
@@ -2164,6 +2210,7 @@ function footprintCovered(expected: TranscriptFootprint, actual: TranscriptFootp
     actual.forkTimelineCount >= expected.forkTimelineCount &&
     actual.goalVerificationCount >= expected.goalVerificationCount &&
     actual.modelChangeCount >= expected.modelChangeCount &&
+    actual.worktreeCreatedCount >= expected.worktreeCreatedCount &&
     valuesCover(expected.assistantTexts, actual.assistantTexts) &&
     valuesCover(expected.reasoningTexts, actual.reasoningTexts) &&
     valuesCover(expected.toolCallIds, actual.toolCallIds)
@@ -2192,7 +2239,8 @@ export function eventsCoverTranscript(
     expected.subagentCount === 0 &&
     expected.forkTimelineCount === 0 &&
     expected.goalVerificationCount === 0 &&
-    expected.modelChangeCount === 0
+    expected.modelChangeCount === 0 &&
+    expected.worktreeCreatedCount === 0
   ) {
     return true;
   }

@@ -636,11 +636,29 @@ export interface ModelChangeTimelinePart extends TimelinePartBase {
   toModel?: TimelineModelSelection & { label: string };
 }
 
+/** 受管 worktree 的创建结果（docs/git/worktree.md §6.6.4）；由 Host 创建 worktree 后交给 CLI 落盘。 */
+export interface WorktreeCreationFact {
+  /** worktree 根目录。 */
+  path: string;
+  /** 检出的 commit。 */
+  sha: string;
+  /** 用户选择的起点；null = 源目录当前 HEAD。 */
+  ref: string | null;
+  /** git 与拷贝输出的末尾。 */
+  output: string;
+}
+
+export interface WorktreeCreationTimelinePart extends TimelinePartBase {
+  timelineType: "worktree_creation";
+  worktreeCreation: WorktreeCreationFact;
+}
+
 export type TimelinePart =
   | ContextCompactionTimelinePart
   | GoalVerificationTimelinePart
   | SessionForkTimelinePart
-  | ModelChangeTimelinePart;
+  | ModelChangeTimelinePart
+  | WorktreeCreationTimelinePart;
 
 export type TimelinePartDraft = TimelinePart extends infer Part
   ? Part extends TimelinePart

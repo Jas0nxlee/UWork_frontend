@@ -140,6 +140,7 @@ import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsActio
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
 import { formatMessageTimeLabel } from "@/v4/messageTimeLabel.js";
 import { parseConversationShareContext } from "@/lib/conversationShareContext.js";
+import { ForkDestinationMenu, useForkDestination } from "@/managed-worktrees/index.js";
 
 function RowShell({
   rowId,
@@ -1576,6 +1577,11 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
       });
     }
   }, [entityId, onFork, rowId]);
+  const forkDestination = useForkDestination();
+  const forkToWorktree = forkDestination.forkToWorktree;
+  const handleForkToWorktree = useCallback(() => {
+    if (entityId && forkToWorktree) forkToWorktree({ rowId, entityId });
+  }, [entityId, forkToWorktree, rowId]);
   return (
     <MessageActions className={cn(className, "has-[[data-bot-group-delivery]]:opacity-100")}>
       <CopyRowAction
@@ -1625,15 +1631,27 @@ export const ConversationAssistantTextActions = memo(function ConversationAssist
         </>
       ) : null}
       {onFork && entityId ? (
-        <MessageAction
-          aria-label={forkLabel}
-          label={forkLabel}
-          tooltip={resolveTooltip(forkLabel)}
-          data-testid={testId(TID_V4_FORK, String(rowId))}
-          onClick={handleFork}
-        >
-          <TrendingUpDownIcon className="size-3.5" />
-        </MessageAction>
+        forkToWorktree ? (
+          <ForkDestinationMenu
+            rowId={rowId}
+            label={forkLabel}
+            tooltip={resolveTooltip(forkLabel)}
+            worktreeAvailable={forkDestination.available}
+            inWorktree={forkDestination.inWorktree}
+            onForkHere={handleFork}
+            onForkToWorktree={handleForkToWorktree}
+          />
+        ) : (
+          <MessageAction
+            aria-label={forkLabel}
+            label={forkLabel}
+            tooltip={resolveTooltip(forkLabel)}
+            data-testid={testId(TID_V4_FORK, String(rowId))}
+            onClick={handleFork}
+          >
+            <TrendingUpDownIcon className="size-3.5" />
+          </MessageAction>
+        )
       ) : null}
       {turnId && hookInvocations ? (
         <ConversationHookDetailsAction rows={hookInvocations} turnId={turnId} />

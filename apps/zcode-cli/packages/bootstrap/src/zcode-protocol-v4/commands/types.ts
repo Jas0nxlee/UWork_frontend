@@ -276,6 +276,8 @@ export interface V4CommandCoreHost {
     sessionId?: string;
     additionalDirectories?: string[];
     workspaceId: string;
+    /** 受管 worktree 的会话执行路径；workspace 身份仍取 workspaceId（docs/git/worktree.md §9.3）。 */
+    cwd?: string;
     permissionScope?: "session";
     mcpServers?: CommandPayloadMap["createSession"]["mcpServers"];
     /** host 判定的 Off-Peak 工具面门禁；缺省不注册工具。 */
@@ -307,6 +309,8 @@ export interface V4CommandCoreHost {
       goalBoundary: StableForkGoalBoundaryMetadata;
       sourceCommandId: string;
       revisionAtDecision: number;
+      /** 受管 worktree：child 的 cwd / 项目身份 / "已创建" 事实（docs/git/worktree.md §8.2）。 */
+      targetCwd?: CommandPayloadMap["forkAssistant"]["targetCwd"];
     },
   ): Promise<{ forkedSessionId: string }>;
   /** @deprecated 仅旧宿主结构兼容；新 editUserQuery 永不调用，显式 forkAssistant 不受影响。 */

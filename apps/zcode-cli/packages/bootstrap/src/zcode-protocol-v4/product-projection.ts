@@ -33,6 +33,7 @@ import type {
   StreamingToolLedgerPayload,
   TargetChangedPayload,
   TargetCompletionVerificationPayload,
+  WorktreeCreatedPayload,
   ToolCallErrorPayload,
   ToolCallProgressPayload,
   ToolCallResultPayload,
@@ -453,6 +454,13 @@ export class ProductProjection {
   // resume SessionStart 没有 turnId；先保留在 CLI projection，下一条真实 user-intent
   // TurnStarted 到达后再分配 rowId/turnId。不得构造 session-hooks:* synthetic turn。
   private pendingSessionHookInvocations = new Map<string, PendingSessionHookInvocation>();
+  // 受管 worktree 的 "已创建" 事件先于首个 TurnStarted 到达（§6.6.4）：暂存后由 onTurnStarted
+  // 以 lightBoundary 落行，保证标记在 userInput 之前。
+  private pendingWorktreeCreated: { event: SessionEvent; payload: WorktreeCreatedPayload } | null =
+    null;
+  // "已创建 worktree" 是会话级一次性事实：命令重试或 runtime 重建都可能重发同一路径，
+  // 重复落行会让同一 worktree 在时间线上出现两个标记。
+  private worktreeCreatedRowIdsByPath = new Map<string, number>();
   // rewind 后 async Hook 的 terminal 仍可能迟到；保留 invocation 墓碑，避免被删旧分支
   // 因找不到原 row 而被 terminal-only 兼容路径重新 append。
   private rewoundHookInvocationIds = new Set<string>();
@@ -1145,6 +1153,8 @@ export class ProductProjection {
     );
     clone.subagentRowIdByAgentId = new Map(this.subagentRowIdByAgentId);
     clone.hookRowIdByInvocationId = new Map(this.hookRowIdByInvocationId);
+    clone.pendingWorktreeCreated = this.pendingWorktreeCreated;
+    clone.worktreeCreatedRowIdsByPath = new Map(this.worktreeCreatedRowIdsByPath);
     clone.pendingSessionHookInvocations = new Map(
       [...this.pendingSessionHookInvocations].map(([invocationId, pending]) => [
         invocationId,
@@ -1208,6 +1218,8 @@ export class ProductProjection {
     this.fileToolInputPreviewByCallId = candidate.fileToolInputPreviewByCallId;
     this.subagentRowIdByAgentId = candidate.subagentRowIdByAgentId;
     this.hookRowIdByInvocationId = candidate.hookRowIdByInvocationId;
+    this.pendingWorktreeCreated = candidate.pendingWorktreeCreated;
+    this.worktreeCreatedRowIdsByPath = candidate.worktreeCreatedRowIdsByPath;
     this.pendingSessionHookInvocations = candidate.pendingSessionHookInvocations;
     this.rewoundHookInvocationIds = candidate.rewoundHookInvocationIds;
     this.invalidSubagentChildSessionIds = candidate.invalidSubagentChildSessionIds;
@@ -1389,6 +1401,8 @@ export class ProductProjection {
         return this.onSessionResumed(event);
       case SessionEventType.SessionTitleUpdated:
         return this.onSessionTitleUpdated(event);
+      case SessionEventType.WorktreeCreated:
+        return this.onWorktreeCreated(event);
       case SessionEventType.TurnStarted:
         if (fact.semanticKind !== "userIntent") return [];
         return [
@@ -2058,12 +2072,22 @@ export class ProductProjection {
       this.snapshot = { ...this.snapshot, sharedContextImport };
       deltas.push({ op: "state.updated", patch: { sharedContextImport } });
     }
+    // 受管 worktree 的创建结果早于首个 TurnStarted 到达（§6.6.4）：现在有了 turnId，
+    // 以 lightBoundary 落在 turnHeader 之前，投影顺序为 worktreeCreated → userInput。
+    if (this.pendingWorktreeCreated) {
+      const pending = this.pendingWorktreeCreated;
+      this.pendingWorktreeCreated = null;
+      deltas.push({
+        op: "row.appended",
+        row: this.worktreeCreatedRow(pending.event, turnId, pending.payload, "lightBoundary"),
+      });
+    }
     // marker 时机：只有当
     // 本轮实际使用的 provider/model 身份与上一轮不同时，才在 turnHeader 之前落
     // modelChange marker。普通首轮 silentInitial 不产 marker；显式 sourceLess 边界
     // 生成“正在使用”marker。思考深度变化只更新 config.thought，不是模型身份变化。
     // Bug 背景：旧实现在 onModelSelected（切换动作时）即落 marker，草稿态预热会话
-    // 切一次模型就会在首条消息上方挂出 [modelChange]。
+    // 切一次消息就会在首条消息上方挂出 [modelChange]。
     const config = this.snapshot.config;
     const hasModel = config.provider !== "" && config.model !== "";
     if (hasModel && this.lastTurnModel.kind === "sourceLess") {
@@ -5416,6 +5440,46 @@ export class ProductProjection {
       },
     };
     return [{ op: "row.appended", row }];
+  }
+
+  // ── worktree marker（受管 worktree 创建结果，docs/git/worktree.md §6.6.4）──
+
+  private onWorktreeCreated(event: SessionEvent): ConversationDelta[] {
+    const payload = event.payload as WorktreeCreatedPayload;
+    if (this.worktreeCreatedRowIdsByPath.has(payload.path)) return [];
+    if (this.pendingWorktreeCreated?.payload.path === payload.path) return [];
+    if (this.turnHeaderRowIdByTurnId.size === 0) {
+      this.pendingWorktreeCreated = { event, payload };
+      return [];
+    }
+    return [
+      {
+        op: "row.appended",
+        row: this.worktreeCreatedRow(event, this.turnIdOf(event), payload, "turnTailBoundary"),
+      },
+    ];
+  }
+
+  private worktreeCreatedRow(
+    event: SessionEvent,
+    turnId: string,
+    payload: WorktreeCreatedPayload,
+    lane: "lightBoundary" | "turnTailBoundary",
+  ): TimelineMarkerRow {
+    const base = this.rowBase(event, turnId, `worktree-created:${payload.path}`);
+    this.worktreeCreatedRowIdsByPath.set(payload.path, base.rowId);
+    return {
+      ...base,
+      kind: "timelineMarker",
+      lane,
+      marker: {
+        type: "worktreeCreated",
+        path: payload.path,
+        sha: payload.sha,
+        ref: payload.ref,
+        output: payload.output,
+      },
+    };
   }
 
   // ── 内部工具 ──

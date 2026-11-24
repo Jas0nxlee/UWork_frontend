@@ -43,6 +43,15 @@ import {
 } from "@/v4/usePaneSessionPersistence.js";
 import { requestV4ComposerDraftWorkspaceTransfer } from "@/v4/composer/composerDraftWorkspaceTransfer.js";
 import { ProjectComposerMenu, ProjectDirectoryProvider } from "@/project-sidebar/index.js";
+import {
+  ManagedWorktreeCreationView,
+  WorktreeBranchPicker,
+  WorktreeToggle,
+  useManagedWorktreeCreations,
+  useManagedWorktreeSettlements,
+  useWorktreeSupport,
+} from "@/managed-worktrees/index.js";
+import type { ManagedWorktreeCreationSettlement } from "@zcode/shared";
 import { DesktopTopOverlay } from "@/DesktopTopOverlay.js";
 import { DesktopWindowFrame } from "@/DesktopWindowFrame.js";
 import { WorkspacePluginPreview } from "@/workspace-plugin-preview/index.js";
@@ -88,7 +97,7 @@ import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable.js";
 import { toast } from "@/components/ui/toast.js";
-import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
+import { getGitDirtyFileCount, resolveGitBranchTriggerLabel } from "@/git-branch-switcher/display.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useBaseWorkspaceServices } from "@/hooks/useWorkspaceServices.js";
 import { getPathLeaf, toFileUrl } from "@/lib/path.js";
@@ -115,6 +124,7 @@ import type { WorkspaceShellLayoutProps } from "@/app-shell/types.js";
 import { isWorkspaceTab } from "@/store/tabStore.js";
 import { useTabStore, useTabStoreApi } from "@/store/TabStoreProvider.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
+import type { ZCodeSessionStoreState } from "@/store/zcodeSessionStoreTypes.js";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 
 const WEB_REMOTE_CONTROL_MOBILE_QUERY = "(max-width: 767px)";
@@ -143,6 +153,19 @@ const CONVERSATION_AUTO_COLLAPSE_RESIZE_IDLE_MS = 300;
 // 会跟随 chat streaming render 重算布局上下文；固定数组语义上不会随消息变化。
 const WORKSPACE_BODY_PANEL_IDS = ["conversation-column", "browser"];
 const WORKSPACE_CONVERSATION_PANEL_IDS = ["conversation", "terminal"];
+
+/** 草稿 worktree 复选框/分支选择的稳定回调（docs/git/worktree.md §3.2）。 */
+function createDraftWorktreeCallbacks(
+  setDraftWorktree: ZCodeSessionStoreState["setDraftWorktree"],
+  workspacePath: string,
+  workspaceIdentity: string | undefined,
+) {
+  return {
+    onSelect: (ref: string | null) => setDraftWorktree(workspacePath, { ref }, workspaceIdentity),
+    onCheckedChange: (checked: boolean) =>
+      setDraftWorktree(workspacePath, checked ? { ref: null } : null, workspaceIdentity),
+  };
+}
 
 type WebRemoteNavigationDragSession = {
   pointerId: number;
@@ -1550,44 +1573,157 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
   );
   // 草稿头部保留项目菜单与 Git 分支；项目目录由共享 Provider 提供。
   // Shell 只连接既有导航回调，pane 不持有另一份项目列表或 cwd 归属推断。
+  const draftProjectId = useZCodeSessionStore(
+    (state) => state.getWorkspaceState(workspaceAbsPath, workspaceIdentity).draftProjectId ?? null,
+  );
+  // worktree 复选框只对本地桌面的 Git 项目草稿开放（docs/git/worktree.md §3.1）。
+  const worktreeEligible =
+    activeWorkspacePurpose === "project" &&
+    !isOfficeMode &&
+    !isWebRemoteControlShell &&
+    !workspaceIdentity &&
+    !workspaceRemoteSessionId &&
+    gitState.summary.isRepository &&
+    Boolean(draftProjectId);
+  const worktreeSupport = useWorktreeSupport(workspaceAbsPath, workspaceIdentity, worktreeEligible);
+  const draftWorktree = useZCodeSessionStore(
+    (state) => state.getWorkspaceState(workspaceAbsPath, workspaceIdentity).draftWorktree ?? null,
+  );
+  const setDraftWorktree = useZCodeSessionStore((state) => state.setDraftWorktree);
+  const draftWorktreeCallbacks = useMemo(
+    () => createDraftWorktreeCallbacks(setDraftWorktree, workspaceAbsPath, workspaceIdentity),
+    [setDraftWorktree, workspaceAbsPath, workspaceIdentity],
+  );
+  const viewWorktreeCreation = useZCodeSessionStore((state) => state.viewWorktreeCreation);
+  const viewedCreationId = useZCodeSessionStore(
+    (state) =>
+      state.getWorkspaceState(workspaceAbsPath, workspaceIdentity).draftWorktreeCreationId ?? null,
+  );
+  const worktreeCreations = useManagedWorktreeCreations();
+  // 结束事件先于记录列表推送到达（§3.3），此时列表里仍有这条记录；用 ref 在回调中读取最新列表。
+  const worktreeCreationsRef = useRef(worktreeCreations);
+  worktreeCreationsRef.current = worktreeCreations;
+  const beginWorktreeHandoff = useZCodeSessionStore((state) => state.beginWorktreeHandoff);
+  const worktreeHandoff = useZCodeSessionStore(
+    (state) => state.getWorkspaceState(workspaceAbsPath, workspaceIdentity).worktreeHandoff ?? null,
+  );
+  const viewedCreation =
+    activeTaskId === null && viewedCreationId
+      ? (worktreeCreations.find((creation) => creation.id === viewedCreationId) ?? null)
+      : null;
+  // 会话首个快照到达前，创建视图盖在已挂载的会话上（§3.3）。
+  const handoffCreation =
+    worktreeHandoff && worktreeHandoff.sessionId === activeTaskId ? worktreeHandoff.creation : null;
+  // 创建结束：会话已启动则打开它；放弃则把首条消息放回新草稿（§3.5）。只处理当前展示的记录。
+  const handleWorktreeSettlement = useCallback(
+    (settlement: ManagedWorktreeCreationSettlement) => {
+      const state = useZCodeSessionStore
+        .getState()
+        .getWorkspaceState(settlement.workspacePath, workspaceIdentity);
+      if (state.draftWorktreeCreationId !== settlement.creationId) return;
+      const creation = worktreeCreationsRef.current.find(
+        (entry) => entry.id === settlement.creationId,
+      );
+      // Bug 原因：曾在结束事件时直接卸载创建视图并打开会话，会话首个快照要几百毫秒后才到，
+      // 中间主区一片空白。现在保留最后一份记录，盖在会话上，直到时间线出现内容（§3.3）。
+      if (settlement.outcome === "session-started" && creation)
+        beginWorktreeHandoff(
+          settlement.workspacePath,
+          { sessionId: settlement.sessionId, creation },
+          workspaceIdentity,
+        );
+      viewWorktreeCreation(settlement.workspacePath, null, workspaceIdentity);
+      if (settlement.outcome === "session-started") {
+        handleSelectTaskInChat(settlement.workspacePath, settlement.sessionId);
+        return;
+      }
+      handleCreateTaskInChat({
+        ...(state.draftProjectId !== undefined ? { projectId: state.draftProjectId } : {}),
+        ...(settlement.promptText ? { initialPrompt: settlement.promptText } : {}),
+      });
+    },
+    [
+      beginWorktreeHandoff,
+      handleCreateTaskInChat,
+      handleSelectTaskInChat,
+      viewWorktreeCreation,
+      workspaceIdentity,
+    ],
+  );
+  useManagedWorktreeSettlements(handleWorktreeSettlement);
+  // 草稿头部保留项目菜单与 Git 分支；项目目录由共享 Provider 提供。
+  // Shell 只连接既有导航回调，pane 不持有另一份项目列表或 cwd 归属推断。
   const draftComposerHeader = useMemo(
     () => (
-      <ProjectComposerMenu
-        showEditProject
-        workspacePath={workspaceAbsPath}
-        workspaceIdentity={workspaceIdentity}
-        compactForRemoteControl={isWebRemoteControlShell}
-        onCreateTask={handleCreateTaskInChat}
-        onSelectConversationWorkspace={handleSelectConversationWorkspace}
-        allowRemoteWorkspace={allowRemoteWorkspace}
-        onOpenRemoteWorkspace={onOpenRemoteWorkspace}
-        onConnectRemote={onConnectRemote}
-        onCancelRemote={onCancelRemoteProject}
-      >
-        {isOfficeMode && !isWebRemoteControlShell ? (
-          <WorkspacePluginPreview
-            onOpen={handleOpenPluginStore}
-            onSelectPlugin={handleSelectComposerPlugin}
-            workspacePath={workspaceAbsPath}
-            workspaceIdentity={workspaceIdentity}
-            remoteSessionId={workspaceRemoteSessionId ?? undefined}
-          />
-        ) : !isOfficeMode && activeWorkspacePurpose === "project" ? (
-          <GitBranchSwitcher
-            workspacePath={workspaceAbsPath}
-            gitSummary={gitState.summary}
-            dirtyFileCount={gitDirtyFileCount}
-            onRefreshGit={handleRefreshGit}
-            compactForRemoteControl={isWebRemoteControlShell}
-            className="px-0 pt-0"
-            popoverClassName="w-72"
-            branchListClassName="max-h-48"
-            // Bugfix（旧注释保真）：输入框区域在底部，Radix 碰撞避让会把分支菜单翻到下方。
-            // 这里锁定上方弹出，避免菜单遮挡输入区并保持操作方向稳定。
-            avoidPopoverCollisions={false}
+      <>
+        <ProjectComposerMenu
+          showEditProject
+          workspacePath={workspaceAbsPath}
+          workspaceIdentity={workspaceIdentity}
+          compactForRemoteControl={isWebRemoteControlShell}
+          onCreateTask={handleCreateTaskInChat}
+          onSelectConversationWorkspace={handleSelectConversationWorkspace}
+          allowRemoteWorkspace={allowRemoteWorkspace}
+          onOpenRemoteWorkspace={onOpenRemoteWorkspace}
+          onConnectRemote={onConnectRemote}
+          onCancelRemote={onCancelRemoteProject}
+        >
+          {isOfficeMode && !isWebRemoteControlShell ? (
+            <WorkspacePluginPreview
+              onOpen={handleOpenPluginStore}
+              onSelectPlugin={handleSelectComposerPlugin}
+              workspacePath={workspaceAbsPath}
+              workspaceIdentity={workspaceIdentity}
+              remoteSessionId={workspaceRemoteSessionId ?? undefined}
+            />
+          ) : !isOfficeMode &&
+            activeWorkspacePurpose === "project" &&
+            draftWorktree &&
+            draftProjectId ? (
+            // worktree 模式：分支只决定新 worktree 的起点，不切换主目录（§3.2）。
+            <WorktreeBranchPicker
+              projectId={draftProjectId}
+              selectedRef={draftWorktree.ref}
+              // Bug 原因：这里曾用 branchName ?? "HEAD"，GitBranchSwitcher 用 resolveGitBranchTriggerLabel；
+              // 游离 HEAD 时一个显示"HEAD"、一个显示"游离 HEAD"，勾选 worktree 时胶囊文字和宽度跳变（WT-34）。
+              currentBranchLabel={resolveGitBranchTriggerLabel({
+                headRefType: gitState.summary.headRefType,
+                currentBranchName: gitState.summary.branchName ?? null,
+                detachedLabel: intl.formatMessage({ id: "git.head.detached" }),
+                fallbackLabel: intl.formatMessage({ id: "git.branchSwitcher.label" }),
+              })}
+              onSelect={draftWorktreeCallbacks.onSelect}
+              // Bug 原因：两个分支胶囊的外层间距不同（px-1 pt-2 与 px-0 pt-0），勾选 worktree 时
+              // composer 头部变高 4px、复选框右移 8px，看起来抖动。两者使用同一外层间距。
+              className="px-0 pt-0"
+            />
+          ) : !isOfficeMode && activeWorkspacePurpose === "project" ? (
+            <GitBranchSwitcher
+              workspacePath={workspaceAbsPath}
+              gitSummary={gitState.summary}
+              dirtyFileCount={gitDirtyFileCount}
+              onRefreshGit={handleRefreshGit}
+              compactForRemoteControl={isWebRemoteControlShell}
+              className="px-0 pt-0"
+              popoverClassName="w-72"
+              branchListClassName="max-h-48"
+              // Bugfix（旧注释保真）：输入框区域在底部，Radix 碰撞避让会把分支菜单翻到下方。
+              // 这里锁定上方弹出，避免菜单遮挡输入区并保持操作方向稳定。
+              avoidPopoverCollisions={false}
+            />
+          ) : null}
+        </ProjectComposerMenu>
+        {/* worktree 复选框固定贴在头部最右端（docs/git/worktree.md §3.2）：渲染在项目菜单之后，
+            ml-auto 吃掉中间剩余空间。高度跟随其他胶囊的 h-7，避免三个 hover 容器高度不一致。 */}
+        {worktreeEligible && worktreeSupport.visible ? (
+          <WorktreeToggle
+            className="ml-auto"
+            checked={Boolean(draftWorktree)}
+            disabled={!worktreeSupport.available}
+            onCheckedChange={draftWorktreeCallbacks.onCheckedChange}
           />
         ) : null}
-      </ProjectComposerMenu>
+      </>
     ),
     [
       isOfficeMode,
@@ -1607,6 +1743,13 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
       onCancelRemoteProject,
       workspaceAbsPath,
       workspaceIdentity,
+      intl,
+      worktreeEligible,
+      worktreeSupport.available,
+      worktreeSupport.visible,
+      draftWorktree,
+      draftProjectId,
+      draftWorktreeCallbacks,
     ],
   );
   const handleV4SessionDeleted = useCallback(() => {
@@ -2631,6 +2774,14 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                                   永远停在 draft。v4 语义下 sessionId ≡ taskId，meta 只服务 Header 显示。
                                   M5⑤：桌面主区升级为分屏宿主（Layout/Focus 两层）；primary pane
                                   绑定语义与 testid 契约（paneId=workspace-main）不变。 */}
+                              {handoffCreation ? (
+                                <div className="absolute inset-0 z-10 flex flex-col bg-background">
+                                  <ManagedWorktreeCreationView creation={handoffCreation} />
+                                </div>
+                              ) : null}
+                              {viewedCreation ? (
+                                <ManagedWorktreeCreationView creation={viewedCreation} />
+                              ) : (
                               <V4WorkspaceChatArea
                                 allowEscapeStopOutsidePane={
                                   isWorkspaceVisible && !isSidePaneOpen && !isSidePaneVisible
@@ -2694,6 +2845,7 @@ const WorkspaceShellLayoutContent = memo(function WorkspaceShellLayoutComponent(
                                 searchResultHighlightRequest={activeSearchResultHighlightRequest}
                                 onSearchResultHighlightDone={onSearchResultHighlightDone}
                               />
+                              )}
                             </ScopedErrorBoundary>
                           </main>
                         )}

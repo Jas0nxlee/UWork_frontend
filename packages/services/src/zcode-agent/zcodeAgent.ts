@@ -496,10 +496,18 @@ export interface ZCodeAgentConversationFileRewindPreviewParams extends ZCodeAgen
   baseLogEpoch: string;
 }
 
+/**
+ * Host 进程内的受管 worktree 服务发送命令时设置的标记。只有带此标记的命令可以携带
+ * createSession.cwd / worktreeCreation 与 forkAssistant.targetCwd；Symbol 键无法经 RPC 序列化伪造。
+ */
+export const HOST_WORKTREE_COMMAND: unique symbol = Symbol("zcode.hostWorktreeCommand");
+
 export interface ZCodeAgentConversationCommandParams extends ZCodeAgentWorkspaceTarget {
   /** 仅 Host 消费；显式 NULL 表示全局任务，不向 CLI 发送项目概念。 */
   projectId?: string | null;
   envelope: CommandEnvelope;
+  /** 只有 Host 进程内的受管 worktree 服务设置（见 HOST_WORKTREE_COMMAND）。 */
+  [HOST_WORKTREE_COMMAND]?: true;
   /** 仅 host 内部用于 Browser Use runtime 边界，不进入 v4 wire envelope。 */
   clientMode?: ZCodeTaskClientMode;
 }
@@ -832,6 +840,22 @@ export interface IZCodeAgentService {
   closeSession(
     params: ZCodeAgentSessionTarget & { expectedPersistence?: "deferred" | "immediate" },
   ): Promise<boolean>;
+  /**
+   * 卸载 cwd 位于 directory 内的全部驻留会话（session/releaseUnderDirectory，docs/git/worktree.md §8.3）。
+   * 会话选择与忙闲由 CLI 判断，任一会话忙时全部不卸载。只使用已存在的进程；没有进程时没有驻留会话。
+   */
+  releaseSessionsUnderDirectory?(
+    params: ZCodeAgentWorkspaceTarget & { directory: string },
+  ): Promise<{ released: string[]; busy: string[] }>;
+  /**
+   * 按 commandId 查询 CLI 对一条命令的裁决（commands/query）；Host 内部用于确认失败的会话命令
+   * 是否实际执行（docs/git/worktree.md §3.5）。CLI 没有记录时返回 "unknown"。
+   */
+  queryCommandResult?(
+    params: ZCodeAgentWorkspaceTarget & { key: CommandKey },
+  ): Promise<CommandAck | "unknown">;
+  /** 该 workspace 的 CLI 是否在 runtime/capabilities 中声明 worktreeCwd（只供 Host 进程内调用）。 */
+  supportsWorktreeCwd?(target: ZCodeAgentWorkspaceTarget): Promise<boolean>;
   setModel(params: ZCodeAgentSetModelParams): Promise<ZCodeSessionStateSnapshot>;
   setThoughtLevel(params: ZCodeAgentSetThoughtLevelParams): Promise<ZCodeSessionStateSnapshot>;
   setMode(params: ZCodeAgentSetModeParams): Promise<ZCodeSessionStateSnapshot>;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { basename, isAbsolute, relative } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import {
   generateTraceId,
@@ -81,6 +81,32 @@ function readTask(db: DatabaseSync, task: ProjectTaskRef) {
     .get(resolveWorkspaceKey(task), task.taskId);
 }
 
+function tableExists(db: DatabaseSync, name: string): boolean {
+  return (
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name) !== undefined
+  );
+}
+
+/**
+ * worktree 任务的放置：workspace 是项目，cwd 位于受管 worktree 内（docs/git/worktree.md §6.6.1）。
+ * 只允许本地、有项目归属、cwd 在 worktree 根内的组合；其他组合说明调用方装配错误，直接拒绝。
+ */
+function resolveWorktreePlacement(input: {
+  task: { workspaceIdentity?: string };
+  projectId: string | null;
+  cwd?: string;
+  worktreeRoot?: string;
+}): { cwd: string; worktreeRoot: string } | null {
+  if (input.cwd === undefined && input.worktreeRoot === undefined) return null;
+  if (!input.cwd || !input.worktreeRoot) throw new Error("project.worktree-placement-incomplete");
+  if (input.task.workspaceIdentity?.trim()) throw new Error("project.worktree-local-only");
+  if (!input.projectId) throw new Error("project.worktree-requires-project");
+  const relativeCwd = relative(input.worktreeRoot, input.cwd);
+  if (relativeCwd.startsWith("..") || isAbsolute(relativeCwd))
+    throw new Error("project.worktree-cwd-outside-root");
+  return { cwd: input.cwd, worktreeRoot: input.worktreeRoot };
+}
+
 function resolveDirectories(
   db: DatabaseSync,
   task: ProjectTaskRef,
@@ -89,25 +115,34 @@ function resolveDirectories(
   const row = readTask(db, task);
   // 旧远端影子行仍可能保留；行与项目一致不代表当前 Host 有权加载其目录。
   if (row && row.host_id !== ownerHostId) throw new Error("project.host-mismatch");
-  const workspacePath = row ? String(row.root_path) : task.workspacePath;
+  // root_path 是 cwd；worktree 任务的 workspace 是 workspace_path（项目主目录），两者分开返回，
+  // 导航等调用方打开的是 workspace，执行目录只给需要 cwd 的调用方（§6.6.1）。
+  const cwd = row ? String(row.root_path) : task.workspacePath;
+  const workspacePath =
+    row && typeof row.worktree_root === "string" ? String(row.workspace_path) : cwd;
   const project = row?.project_id ? requireProject(db, String(row.project_id)) : null;
   if (project && row?.host_id !== project.hostId) throw new Error("project.host-mismatch");
   assertRemoteTaskDirectories(
     ownerHostId,
     project,
-    workspacePath,
+    cwd,
     typeof row?.execution_directories === "string"
       ? executionDirectoriesSchema.parse(JSON.parse(row.execution_directories))
       : [],
   );
   return {
     workspacePath,
+    ...(workspacePath !== cwd ? { cwd } : {}),
+    ...(typeof row?.workspace_identity === "string"
+      ? { workspaceIdentity: row.workspace_identity }
+      : task.workspaceIdentity
+        ? { workspaceIdentity: task.workspaceIdentity }
+        : {}),
     projectId: project?.id ?? null,
     additionalDirectories:
       typeof row?.execution_directories === "string"
         ? executionDirectoriesSchema.parse(JSON.parse(row.execution_directories))
-        : (project?.roots.map((root) => root.rootPath).filter((path) => path !== workspacePath) ??
-          []),
+        : (project?.roots.map((root) => root.rootPath).filter((path) => path !== cwd) ?? []),
   };
 }
 
@@ -124,7 +159,13 @@ function readTasks(db: DatabaseSync): ProjectTask[] {
         ...meta,
         taskId: String(row.task_id),
         traceId: meta.traceId ?? generateTraceId(String(row.task_id)),
-        workspacePath: String(row.root_path),
+        // workspacePath 是任务所属 workspace；worktree 任务的 cwd 另由 cwd 给出
+        // （docs/git/worktree.md §6.6.1）。普通任务两列相同，行为不变。
+        workspacePath: String(row.workspace_path),
+        ...(typeof row.worktree_root === "string" ? { worktreeRoot: row.worktree_root } : {}),
+        ...(row.root_path && row.root_path !== row.workspace_path
+          ? { cwd: String(row.root_path) }
+          : {}),
         workspaceIdentity:
           row.workspace_identity === row.workspace_key
             ? String(row.workspace_identity)
@@ -332,6 +373,9 @@ export class ProjectRepository implements ProjectRepositoryContract {
       if (!task) throw new Error("project.task-not-found");
       if (project.hostId !== (this.ownerHostId ?? "local") || task.host_id !== project.hostId)
         throw new Error("project.cross-host-move");
+      // worktree 任务的 cwd 在受管根目录下，移动会把 worktree 路径变成别的项目的 root（§7.1）。
+      if (typeof task.worktree_root === "string")
+        throw new Error("project.worktree-task-immovable");
       assertRemoteTaskDirectories(this.ownerHostId, project, String(task.root_path));
       if (!project.roots.some((root) => root.rootPath === task.root_path)) {
         if (!input.addMissingRoot) throw new Error("project.root-confirmation-required");
@@ -373,16 +417,19 @@ export class ProjectRepository implements ProjectRepositoryContract {
     task: ProjectTaskRef;
     projectId: string | null;
     additionalDirectories?: string[];
+    cwd?: string;
+    worktreeRoot?: string;
   }): ProjectDirectories {
     return transaction(this.db, () => {
       const key = resolveWorkspaceKey(input.task);
       const host = ensureHost(this.db, key, this.ownerHostId);
       if (host !== (this.ownerHostId ?? "local")) throw new Error("project.cross-host-move");
+      const placement = resolveWorktreePlacement(input);
       if (!readTask(this.db, input.task)) {
         assertRemoteTaskDirectories(
           this.ownerHostId,
           input.projectId ? requireProject(this.db, input.projectId) : null,
-          input.task.workspacePath,
+          placement?.cwd ?? input.task.workspacePath,
           input.additionalDirectories,
         );
         if (input.projectId) {
@@ -392,29 +439,76 @@ export class ProjectRepository implements ProjectRepositoryContract {
           if (project.hostId !== host) throw new Error("project.cross-host-move");
           if (
             input.additionalDirectories === undefined &&
+            !placement &&
             !project.roots.some((root) => root.rootPath === input.task.workspacePath)
           )
             throw new Error("project.cwd-not-in-roots");
         }
         // 创建归属必须先于 CLI 首发；空事实不是假会话，列表只读取已有 CLI 事实的行。
         this.db
-          .prepare(`INSERT INTO tasks(workspace_key,workspace_path,workspace_identity,task_id,created_at,updated_at,host_id,root_path,project_id,handoff_pending,execution_directories)
-          VALUES(?,?,?,?,0,0,?,?,?,?,?)`)
+          .prepare(`INSERT INTO tasks(workspace_key,workspace_path,workspace_identity,task_id,created_at,updated_at,host_id,root_path,project_id,handoff_pending,execution_directories,worktree_root)
+          VALUES(?,?,?,?,0,0,?,?,?,?,?,?)`)
           .run(
             key,
             input.task.workspacePath,
             input.task.workspaceIdentity ?? null,
             input.task.taskId,
             host,
-            input.task.workspacePath,
+            placement?.cwd ?? input.task.workspacePath,
             input.projectId,
             OWNERSHIP_DECIDED,
             input.additionalDirectories === undefined
               ? null
               : JSON.stringify(executionDirectoriesSchema.parse(input.additionalDirectories)),
+            placement?.worktreeRoot ?? null,
           );
       }
       return resolveDirectories(this.db, input.task, this.ownerHostId);
     });
+  }
+
+  releaseReservedTask(
+    input: Parameters<ProjectRepositoryContract["releaseReservedTask"]>[0],
+  ): "released" | "absent" | "kept" {
+    // 修复原因：曾只返回"是否删除了行"，行不存在（从未预留或已撤销过）与"行已有 CLI 事实"都返回
+    // false，调用方把前者误判为会话已存在。三种结果分开返回，只有 kept 表示真实任务。
+    return transaction(this.db, () => {
+      const key = resolveWorkspaceKey(input.task);
+      const row = readTask(this.db, input.task);
+      if (row && (row.host_id !== (this.ownerHostId ?? "local") || row.cli_created_at != null))
+        return "kept";
+      if (row)
+        this.db
+          .prepare("DELETE FROM tasks WHERE workspace_key=? AND task_id=?")
+          .run(key, input.task.taskId);
+      // 创建回执随预留一起撤销，避免回执指向不存在的行，让同一命令以后报 creation-task-missing。
+      if (tableExists(this.db, "session_creation_commands"))
+        this.db
+          .prepare("DELETE FROM session_creation_commands WHERE workspace_key=? AND session_id=?")
+          .run(key, input.task.taskId);
+      return row ? "released" : "absent";
+    });
+  }
+
+  listTasksByWorktree(
+    input: Parameters<ProjectRepositoryContract["listTasksByWorktree"]>[0],
+  ): ReturnType<ProjectRepositoryContract["listTasksByWorktree"]> {
+    // 精确匹配 worktree_root（部分索引 idx_tasks_host_worktree）；包含尚无 CLI 事实的预留行，
+    // 删除检查必须把正在创建的任务也算作"使用中"。
+    return this.db
+      .prepare(
+        "SELECT task_id,workspace_path,workspace_identity,project_id,cli_title,title,archived FROM tasks WHERE host_id=? AND worktree_root=? AND deleted=0 AND coalesce(cli_deleted,0)=0 ORDER BY cli_updated_at DESC,task_id",
+      )
+      .all(this.ownerHostId ?? "local", input.worktreeRoot)
+      .map((row) => ({
+        taskId: String(row.task_id),
+        workspacePath: String(row.workspace_path),
+        ...(typeof row.workspace_identity === "string"
+          ? { workspaceIdentity: row.workspace_identity }
+          : {}),
+        projectId: typeof row.project_id === "string" ? row.project_id : null,
+        title: String(row.cli_title || row.title || ""),
+        archived: Number(row.archived) === 1,
+      }));
   }
 }

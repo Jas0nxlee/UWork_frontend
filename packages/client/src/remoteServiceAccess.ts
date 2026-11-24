@@ -15,6 +15,7 @@ import {
   IZCodeAgentService,
   IZCodeSessionService,
   IProjectService,
+  IManagedWorktreeService,
   ITaskGroupService,
   IRemoteProjectService,
   ICuaPermissionService,
@@ -86,6 +87,8 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly zcodeSessionService: IZCodeSessionService;
   readonly taskGroupService: ITaskGroupService;
   readonly projectService: IProjectService;
+  /** 仅桌面 base attachment 注册；其他 scope 必须按可选能力消费。 */
+  readonly managedWorktreeService?: IManagedWorktreeService;
   readonly remoteProjectService: IRemoteProjectService;
   // cuaPermissionService 在 IServiceAccessor 上是可选（远端/bots host 不提供），但桌面 renderer
   // 经 RPC 一定能拿到（main host 始终注册此 descriptor；非 macOS / 未启用时方法返回 available:false）。
@@ -135,7 +138,11 @@ export class RemoteServiceAccess implements IServiceAccessor {
 
   constructor(
     channelClient: IChannelClient,
-    options: { sourceServerManagementService?: boolean; windowProjectDirectory?: boolean } = {},
+    options: {
+      sourceServerManagementService?: boolean;
+      managedWorktreeService?: boolean;
+      windowProjectDirectory?: boolean;
+    } = {},
   ) {
     this.enterpriseIdentityService = ProxyChannel.toService<IEnterpriseIdentityService>(
       channelClient.getChannel(IEnterpriseIdentityService.channelName),
@@ -210,6 +217,12 @@ export class RemoteServiceAccess implements IServiceAccessor {
     this.projectService = ProxyChannel.toService<IProjectService>(
       channelClient.getChannel(IProjectService.channelName),
     );
+    // 代理对象不能证明远端注册了频道；只在桌面 base 明确提供能力时创建，避免远程/手机误订阅。
+    this.managedWorktreeService = options.managedWorktreeService
+      ? ProxyChannel.toService<IManagedWorktreeService>(
+          channelClient.getChannel(IManagedWorktreeService.channelName),
+        )
+      : undefined;
     this.zcodeSessionService = ProxyChannel.toService<IZCodeSessionService>(
       channelClient.getChannel(IZCodeSessionService.channelName),
     );

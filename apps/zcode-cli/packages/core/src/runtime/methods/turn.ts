@@ -460,6 +460,8 @@ export async function executeTurnCommand(
       turnMachine = new TurnMachineImpl(turnMachine.start());
       phaseStartedAt = startTurnPhase("session_persistence");
       await this.ensureSessionPersisted(displayInput, turnTraceContext);
+      // 受管 worktree 的 "已创建" 必须早于本轮输入投影（docs/git/worktree.md §6.6.4）。
+      await this.persistPendingWorktreeCreationTimeline(turnTraceContext);
       await ensureGroupTaskPermissionScope(this.sessionStore, this.sessionId, options?.intent);
       // execution-scoped 临时 Provider（例如闲时任务）拥有本轮自己的模型，不改写
       // Session Selection；普通 Submission 才在真正开跑时应用其原子选择。
