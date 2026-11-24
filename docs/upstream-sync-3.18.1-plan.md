@@ -171,3 +171,90 @@ P0 核心契约（阻塞一切）
 
 统一做法：`node /tmp/apply-delta.mjs <名称> '@/tmp/up4-delta-<名称>.txt' refs/upstream-3.18.1 refs/upstream-4.0.0`，
 冲突按「UWork 定制优先、上游功能改动照收、需要新子系统就跳过并记录」处理；每条分支绿了再合。
+
+### 集成结果（`integration/upstream-4.0.0`，2026-11-24）
+
+基线 `cf6dc444`（core 契约），四条特性分支用 `git merge --no-ff` 按
+session → worktree → design → browser 叠放，每次合并一个提交、每合完一条清 `*.tsbuildinfo` 再跑
+`pnpm typecheck`。四条合在一起无结构性冲突：**1 处文本冲突在 worktree 的 core `runtime/types.ts`，
+1 处在 design 的根 `package.json`；browser 与 design 在 `UnifiedBrowserView.tsx` 上落在不同 hunk，
+自动合并后逐行核对为并集**。
+
+**四条分支各自取了什么 / 舍弃了什么**
+
+- **Session 管理**（`feat/upstream-session-control`，+178 文件）：取 session-control + app-control +
+  extension-host 契约、core 工具面注册与执行装配、`ReadSession` 的冷会话 forward 分页、
+  standalone CLI app 工厂 / protocol 物化 / TUI 审批；舍弃 4.0.0 里依赖未移植子系统的实现
+  （远端遥测、MCP catalog registry、content profile、plugin host）。
+- **Worktree 并行任务**（`feat/upstream-worktree`，+116 文件）：取受管 worktree 全栈（shared 布局与
+  Hook Trust identity、services git 子进程加固 + 编排服务、UI 创建视图 / composer 开关 / fork 目的地 /
+  侧栏创建行、CLI `createSession.cwd` / `forkAssistant.targetCwd` / `releaseUnderDirectory` / 时间线落盘）
+  与 4.0.0 的 CR-01 远程 identity 修复；舍弃依赖未移植导航的 WT-41 审核入口与 `hookWorkspacePath`。
+- **Design**（`feat/upstream-design`，+536 文件）：取 design-runtime 页面运行时、design-plugin 0.8.0
+  （含 4.0.0 的 audit 脚本与夹具，按上游字节保真）、内置浏览器设计模式（点选 / 属性面板 / 源码写回 /
+  live reload / undo 快捷键）；舍弃预装文档工具子系统、文档插件版本跳跃（0.2.10/0.2.11）、
+  voice-input / 快捷键内核 / 草稿模型迁移。
+- **浏览器导出**（`feat/upstream-browser-export`，+17 文件）：取 main 侧 `captureBrowserGuestPage`
+  与 PNG/PDF 导出全链路（shared 契约 + 通道 + preload/bridge + UI hook 与工具栏菜单）；舍弃 renderer 侧
+  `capturePage`（V8 FATAL，只能由 main 取帧）。
+
+刻意取舍在四条分支间一致、未被合并带回来：**无 `#preinstalled-*` 导入**、无 GLM-5.4 注册表、
+无地区化插件商店、无 MCP 会话重做、无 credential-cipher；**zod 4.6.6 单实例**（各 workspace 均解析到
+根 `node_modules/zod`）。
+
+**门禁（集成分支实测）**
+
+| 门禁 | 结果 |
+| --- | --- |
+| `pnpm typecheck`（先清 `*.tsbuildinfo`） | 0 error |
+| `pnpm architecture:check` | 0 违规（baseline 0 / new 0） |
+| `pnpm lint` | 0 error / **351 warning**（基线 336 + design 字节保真脚本 15：`audit-page.js` 11、`audit.mjs` 3、`probe.js` 1） |
+| `pnpm db:schema:check` | 通过（8/8 契约例 + 两份 schema baseline 兼容） |
+| `pnpm test:architecture` | 43/43 |
+| CLI 子工作区 typecheck（contracts / core / bootstrap / tui / cli） | 全部 0 error（worktree 单独时的 4 个 bootstrap `TurnInputSourceMetadata` 错误被 session 的装配修掉，合并后不再出现） |
+
+**回归（四条分支绿过的集合并集，去重后 1,302 例）**
+
+> 去重口径：browser 行与 design 的 UI 行重叠 `UnifiedBrowserView` 81 + `BrowserUseSidePaneContent` 8
+> 共 89 例，已扣掉。各分支自己的口径：session 376、worktree 571、design 277、browser 167。
+
+| 来源 | 例数 | 结果 |
+| --- | --- | --- |
+| session：`@zcode/session-control` 包 | 103 | 全绿 |
+| session：core `tests/session-control` | 24 | 全绿 |
+| session：core `tests/tool-search` + `tests/session-control` | 212 | 全绿 |
+| session：bootstrap `tests/cli-session-control` 配置 | 15 | 全绿 |
+| session：bootstrap `tests/session-control`（app-client 5 / protocol-binding 14 / standalone-process e2e 1 / standalone-tui-approval e2e 2） | 22 | 全绿 |
+| worktree：`v4-worktree-cwd` 8 + `workspace-hook-trust-managed-worktree` 6 + `worktree-creation-timeline` 2 + `pre-push-worktree` 6 | 22 | 全绿 |
+| worktree：UI SessionPane/Shell/worktree 引用集（39 文件） | 549 | 全绿 |
+| design：design-runtime contract 6 + design-plugin 4 文件 58 | 64 | 全绿 |
+| design：UI（UnifiedBrowserView 81 / BrowserUseSidePaneContent 8 / useWorkspaceServices 52 / useComposerAttachmentsAddToChatGate 3 / composerSubmissionSettlement 5） | 149 | 全绿 |
+| design：services `fileService` | 64 | 全绿 |
+| browser：browser 一族 12 文件（含 `embeddedBrowserHelpers` 11、`UnifiedBrowserView` 81、`BrowserUseSidePaneContent` 8） | 167 | 全绿 |
+
+既有失败（与本轮无关，逐项与基线对照一致）：`tool-input-validation-error.test.ts` 2 例、
+`runtime-hooks.test.ts` 1 例、`projectSidebarExpansion` + `projectSidebarHomeOnlyWorkspaces` 共 11 例
+（`storage?.getItem is not a function`，Node 25 localStorage 环境）、
+`packages/desktop/test/desktopMainIpcPlatform.test.ts` 1 例。除此之外无新增失败。
+`design-plugin/test/audit.test.ts`（45 例，需本机 Chrome，约 17 分钟）**默认未跑**。
+
+**仍然挂着的缺口**
+
+1. `design-plugin/test/audit.test.ts` 45 例需本机 Chrome，未纳入本轮回归；CI 上要单独一条带浏览器的作业。
+2. browser 分支的 `packages/ui/test/browser/manual-review/**`（`.test.mjs`，浏览器验收夹具）不在根
+   vitest 的 `unit` include 内，本轮未跑。
+3. 4.0.0 里依赖未移植子系统的能力（远端遥测、context-composition、plugin-host-queries、
+   credential-cipher、workspace-plugin-trust、预装文档工具、GLM-5.4 注册表、地区化插件商店）
+   仍是有意留空，集成分支不改变这个边界。
+4. 集成只保证「四条特性 + 4.0.0 基线」自洽；`main`（0.1.9）与这条集成分支之间没有可自动判定的等价关系，
+   落地时需要按下一节的交付方式决定顺序。
+
+**交付方式（三选一）**
+
+1. **core 单独一个 PR + 四条特性各一个 PR**（推荐）：`chore/upstream-core-contracts` 先合，四条特性按
+   session → worktree → design → browser 的叠放顺序逐个 PR。每条 PR 的 diff 已经天然是「本特性 + 与前面
+   特性的并集」，review 面最小；代价是四次 rebase 与四次门禁，但每次都能独立回滚。
+2. **整体一个 PR**：`integration/upstream-4.0.0` 一次性合入。review 面 800+ 文件，冲突解法集中在两个合并
+   提交里可读，但只能整体回滚。
+3. **core + 一个「特性批次」PR**：core 单独合，四条特性合成一个 PR。折中方案；适合只想让 review 看到
+   「契约」与「特性」两层的情况，代价是特性之间无法单独回滚。
