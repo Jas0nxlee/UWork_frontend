@@ -751,6 +751,29 @@ const zhCN: Record<string, string> = {
   "conversationShare.issue.invalidServiceResponse": "分享服务返回了无法识别的响应，请稍后重试。",
   "conversationShare.issue.unknown":
     "分享未能完成，暂时无法确定原因。请重试；若仍失败，请提供错误详情。",
+  "conversationShare.issue.unsupportedContent":
+    "第 {turnOrdinal} 轮的部分内容格式与分享服务不兼容，请更新 UWork，或取消该轮后分享。",
+  "conversationShare.issue.artifactTypeRejected":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName}（{artifactType}）暂不支持分享，请取消该轮后重试。",
+  "conversationShare.issue.artifactFormatMismatch":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 扩展名与实际格式不符，请改成正确的扩展名或重新导出，或取消该轮。",
+  "conversationShare.issue.artifactDimensionsExceeded":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 尺寸过大（单边不超过 8192 像素），请缩小后重试，或取消该轮。",
+  "conversationShare.issue.artifactCorrupted":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 已损坏或格式不完整，请重新导出后重试，或取消该轮。",
+  "conversationShare.issue.artifactEncodingInvalid":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 不是 UTF-8 编码，请转换编码后重试，或取消该轮。",
+  "conversationShare.issue.artifactUploadRejected":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 无法上传，请取消该轮后重试；仍然失败请在错误详情中复制 request-id 反馈。",
+  "conversationShare.issue.artifactUploadMissing": "{artifactDisplayName} 未上传完成，请重试。",
+  "conversationShare.issue.artifactUploadMissingAny": "部分文件未上传完成，请重试。",
+  "conversationShare.issue.contentBlocksLimit":
+    "所选内容包含 {actual} 个内容块，超过上限 {limit}，请减少所选轮次。",
+  "conversationShare.issue.preparationStale": "本次分享的状态已变化，请重新生成链接。",
+  "conversationShare.issue.conversationSafetyRejected":
+    "所选对话的文字内容未通过安全检查，请减少或调整所选轮次后重试。",
+  "conversationShare.issue.artifactSafetyRejected":
+    "第 {turnOrdinal} 轮的 {artifactDisplayName} 未通过安全检查，请取消该轮或移除该文件后重试。",
   "conversationShare.issue.details": "错误详情",
   "conversationShare.issue.requestIdLabel": "服务端请求 ID",
   "conversationShare.issue.requestId": "服务端请求 ID：{requestId}",

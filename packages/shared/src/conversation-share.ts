@@ -1,3 +1,4 @@
+/* oxlint-disable eslint(max-lines) -- 分享的线格式（capabilities/拒绝坐标/发布与预检载荷）必须与 UWork 自有扩展同处一个 schema 文件，拆分会让两端校验漂移。 */
 import { z } from "zod";
 import {
   conversationShareContentBlockSchema,
@@ -491,6 +492,13 @@ const rejectionCoordinateSchema = z
   .min(1)
   .max(65)
   .regex(/^[A-Za-z0-9_.[\]~-]+$/u);
+// artifact_id 的协议上限是 128；服务端清洗后可能再追加一个 `~`。不能沿用 65 的坐标上限，
+// 否则长 ID 会被整段丢弃，客户端反查不到是哪个文件。
+const rejectionArtifactIdSchema = z
+  .string()
+  .min(1)
+  .max(129)
+  .regex(/^[A-Za-z0-9_.[\]~-]+$/u);
 export const conversationShareRejectionSchema = z.object({
   rule: z
     .string()
@@ -501,6 +509,11 @@ export const conversationShareRejectionSchema = z.object({
   field: rejectionCoordinateSchema.optional().catch(undefined),
   row_index: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional().catch(undefined),
   row_kind: rejectionCoordinateSchema.optional().catch(undefined),
+  /** 服务端拒绝涉及的产物（发布方自定的 artifact_id），客户端据此反查文件名与所属轮次。 */
+  artifact_id: rejectionArtifactIdSchema.optional().catch(undefined),
+  /** 超限类规则的实际值与上限。 */
+  actual: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional().catch(undefined),
+  limit: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional().catch(undefined),
 });
 export type ConversationShareRejection = z.infer<typeof conversationShareRejectionSchema>;
 

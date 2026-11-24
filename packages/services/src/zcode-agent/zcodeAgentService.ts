@@ -1,4 +1,8 @@
-import { isAuxiliarySessionKind } from "@zcode/shared";
+import {
+  isAuxiliarySessionKind,
+  ProjectAccessTokenTransientError,
+  ZCODE_PROVIDER_PROJECT_TOKEN_NETWORK_ERROR,
+} from "@zcode/shared";
 import {
   pluginUiToolResultNotificationSchema,
   type PluginUiToolResultNotification,
@@ -54,6 +58,7 @@ import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPl
 import {
   subagentRuntimeConfigSchema,
   zcodeSubagentsReadRuntimeConfigParamsSchema,
+  zcodeSessionReadReplyLanguageParamsSchema,
   type SubagentRuntimeConfig,
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
   formatLogPrefix,
@@ -1003,6 +1008,11 @@ interface CreateZCodeAgentServiceOptions extends Omit<
     workspacePath: string;
     workspaceIdentity?: string;
   }) => Promise<SubagentRuntimeConfig>;
+  /**
+   * Agent 回复语言（同步、只读内存，null 为未设置），应答 CLI 的 session/readReplyLanguage。
+   * 只有 Desktop Host 注入（值由 Main 持有并推送）；未注入的 Host（远端、Web）回答 null。
+   */
+  resolveReplyLanguage?: () => string | null;
   sessionRuntimePreferencesAuthority?: "local" | "external";
   prepareProjectExecution?: (
     projectId: string,
@@ -1480,17 +1490,30 @@ export function createZCodeAgentService(
       });
     } catch (error) {
       if (pendingProviderRuntimeHeaders.get(params.key) !== params.pending) return;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(undefined, "UWork provider runtime headers 应用失败", {
         modelId: params.pending.request.modelSelection.modelId,
         providerId: params.pending.request.providerId,
         requestId: params.pending.request.requestId,
         sessionId: params.pending.request.sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         workspaceKey: resolveWorkspaceKey(params.pending.request.workspace),
       });
+      // Bug 原因（ZCT-2122890271808978944 等）：冷缓存换证遇到断网/超时，原先与其它失败一样回
+      // headersApplied:false，Agent 视为不可重试，整轮在首次模型尝试前结束。
+      // UWork 的换证缓存把请求未拿到 HTTP 响应的故障收窄为 ProjectAccessTokenTransientError
+      // （报文只含 project_token_transient_failure，不带原始响应）；这里只把该类故障改用结构化
+      // RPC 错误码，交给 Agent 的 network_error 预算；鉴权拒绝等其它失败与应答形态保持不变。
+      if (error instanceof ProjectAccessTokenTransientError) {
+        await params.pending.client.respondError(params.pending.protocolRequestId, {
+          code: ZCODE_PROVIDER_PROJECT_TOKEN_NETWORK_ERROR,
+          message: errorMessage,
+        });
+        return;
+      }
       await params.pending.client.respond(params.pending.protocolRequestId, {
         headersApplied: false,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
       });
     } finally {
       if (pendingProviderRuntimeHeaders.get(params.key) === params.pending) {
@@ -2396,6 +2419,23 @@ export function createZCodeAgentService(
         }
       }),
       client.onRequest((request) => {
+        // 回复语言是 Host 级的值，不按 workspace 路由；从内存同步应答，不做 IO
+        // （docs/i18n/agent-reply-language.md）。UWork 侧由 Desktop Host 注入。
+        if (request.method === zcodeProtocolMethods.sessionReadReplyLanguage) {
+          if (!zcodeSessionReadReplyLanguageParamsSchema.safeParse(request.params).success) {
+            void client
+              .respondError(request.id, {
+                code: -32602,
+                message: "Invalid reply language request",
+              })
+              .catch(() => {});
+            return;
+          }
+          void client
+            .respond(request.id, { language: options?.resolveReplyLanguage?.() ?? null })
+            .catch(() => {});
+          return;
+        }
         if (request.method === zcodeProtocolMethods.subagentsReadRuntimeConfig) {
           void (async () => {
             const parsed = zcodeSubagentsReadRuntimeConfigParamsSchema.safeParse(request.params);
@@ -3664,6 +3704,8 @@ export function createZCodeAgentService(
    *   2. 读取失败 fail-closed 且不再重试，避免离线时每条 create 都赔上一次请求超时；
    *   3. 服务端翻转灰度按设计在下一个 Host 进程生效（provider 侧另有 1h 快照与 forceRefresh）。
    * 与 Off-Peak 不同：远程 workspace 同样可用，所以这里不看 workspaceIdentity / remoteSessionId。
+   * UWork 决策：上游 4.0.0 把「请求失败」改为按需加载（onDemand），从而离线启动也有工作流入口；
+   * 本产品线保持 fail-closed（UWork 自己的策略契约，见 zcodeAgentService.dynamicWorkflowPolicy 测试）。
    */
   function resolveDynamicWorkflowOffer(): Promise<DynamicWorkflowClientConfig | undefined> {
     const resolve = options?.resolveDynamicWorkflowClientConfig;

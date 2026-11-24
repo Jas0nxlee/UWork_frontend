@@ -105,3 +105,69 @@ P0 核心契约（阻塞一切）
 - 上游 3.17/3.18 是大重构；任何一条特性如果"补模块"超过 30 个文件，**立即停**、回到 A 轨先把契约做全；
 - 全量路线（`chore/upstream-3.18.1-sync`）始终保留，作为"产品线愿意整体重新验收"时的现成起点；
 - 每条分支只在**自己绿了**之后才合并；不绿的分支只做 WIP 提交，不推 PR。
+
+## 4.0.0 增量（2026-11-24）
+
+### 上游变化概述
+
+- 上游在这条分支的基线（3.18.1 `c5904686`）之后又走了两版：
+  - **3.18.2** `fec97590`：补丁版，46 文件（+1971/−171），以修复与测试为主；
+  - **4.0.0** `a4b44451`（= `refs/upstream-main`）：2209 文件（+149753/−24801）。
+- 4.0.0 的主体是**新增「预装文档工具」子系统**（`packages/desktop/src/preinstalled-tools` 等 17 个新源文件、
+  `docs/issues/preinstalled-tools` 与 `docs/issues/document-tool-preinstall` 规格与评审记录），
+  以及 **GLM-5.4 预置（模型注册表）**；其余是若干修复：
+  会话删除批量预检、动态工作流灰度读取失败时的提供值、项目换证传输故障的 RPC 错误码、
+  分享被服务端拒绝时的结构化坐标、`turn.started` 兼容字段、回复语言读取、插件商店按区域展示等。
+
+### 对我方的影响面（已量）
+
+- 五条分支合计 **883 个文件**（我方相对 3.18.1 改动过的文件），其中 **125 个被 4.0.0 再改**；
+- 125 个里：**41 个可直接取**上游、**71 个自动三方合并**、**51 个有冲突**（需人判）、**2 个上游已删**；
+- 本分支（核心契约 A 轨）落点 20 个文件，实际冲突 6 个文件 / 16 块。
+
+### 本分支这一波做了什么
+
+- 以 3.18.1 为 base 叠 4.0.0 增量（`/tmp/apply-delta.mjs`，清单 `/tmp/up4-delta-core.txt`）：
+  直接取 8 个、三方自动合并 6 个、冲突 6 个（16 块）。
+- **取上游的功能性改动**：protocol-v4 契约（`delta`/`snapshot`/`telemetry`/`transport`/`sessions-index`/
+  `session-data`）；分享被服务端拒绝的结构化映射（rule → issue code + 坐标 + `artifact_id`/`actual`/`limit`，
+  含 UI 文案与两份语言表）；`session/readReplyLanguage` 与 `artifact_id` 反查；项目换证传输故障改用
+  `-32033` 结构化错误码；`turn.started.isFirstMessage` 兼容字段；`workspace_hook_script_unavailable`。
+- **保留 UWork 定制**：品牌文案（`UWork provider runtime headers …`）、`toZhOrEnLocale` 的五语言收窄、
+  我方 `ProjectAccessToken*` 契约（用 `ProjectAccessTokenTransientError` 判定传输故障，不引上游的
+  `isProjectTokenTransportFailureCode`）、精简后的 `ModelProviderSection` / `ProviderTemplatePicker`
+  （不恢复官方模板分区）、`V4InteractionDialogs` 的既有交互形态。
+- **刻意没取**：
+  - 预装文档工具子系统（连带 `shared/package.json` 的 `./preinstalled-tools*` exports）、GLM-5.4 注册表、
+    插件商店区域化 UI；
+  - 需要新子系统的 4.0.0 特性：远端会话遥测引擎（`@zcode/shared/conversation-telemetry` 整目录未移植）、
+    context-composition 客户端、plugin-host-queries 客户端、credential-cipher RPC（`credential-security`
+    只有契约导出目标、实现未移植）、会话删除/项目数据清理 RPC 与 workspace-plugin-trust RPC
+    （它们的实现会撑大我方刻意收窄的 `IZCodeAgentService`）、插件推荐埋点 mapper；
+  - 与 UWork 自有契约/测试冲突的两处行为变更：动态工作流「读取失败按 onDemand」、runtime 偏好新增
+    `totalTokensReminderEnabled`/`agentAlwaysBackgroundEnabled`（UWork 测试固化了 fail-closed 与原线格式）。
+  - 协议层保留上游线格式（`workspaceTrust`、`plugins/workspaceTrust`、`regions` 等）以容忍 `.strict()`
+    schema 下的新载荷，但**不实现**对应功能。
+- 为编译必需而补的 5 个非清单文件：`services/.../conversationShare.ts`（拒绝码与 `rejection` 字段）、
+  `ui/src/lib/conversationShareError.ts`（issue 文案映射与 retry 判定）、`ui` 的 `zh-CN`/`en-US` 词表、
+  `shared/src/validationAppSettings.ts`（`replyLanguageSchema`）。
+- 门禁：typecheck 0 错、architecture 0 违规、lint 0 error（336 warning，与基线一致）；
+  定向回归（conversation-share 37 文件 466 例、local-ttft、officialMcp*、feedback、v4InteractionDialogs、
+  taskNotification、about）全过；另跑 zcodeAgent/providerRuntime/conversationTelemetry 28 文件 466 例全过。
+  基线自带的 5 文件 8 例红（`zcodeProtocolV4Command`、`zcodeProtocolV4DisplayTolerance`、
+  `modelProviderDraftSave`、`modelProviderRestart*`）经 `git stash` 对照确认为既有失败，非本次引入。
+- 依赖与锁文件：零变化（唯一 `package.json` 改动是上游 exports，已按“不移植”裁掉；`pnpm install` 无 diff）。
+
+### 后续四条特性分支（rebase 到本分支，再叠各自增量）
+
+顺序按依赖由弱到强；每条分支先 rebase 到 `chore/upstream-core-contracts`，再跑各自的 `apply-delta`：
+
+| 轨道 | 分支 | 需叠 4.0.0 增量文件数 | 备注 |
+| --- | --- | --- | --- |
+| C 特性批次 1 | `feat/upstream-browser-export` | 7 | 弱依赖；可先起 |
+| E 特性批次 3 | `feat/upstream-design` | 28 | 中依赖 |
+| F Session 管理 | `feat/upstream-session-control` | 37 | 强依赖，等本分支合入 |
+| D Worktree | `feat/upstream-worktree` | 32 | 中依赖 |
+
+统一做法：`node /tmp/apply-delta.mjs <名称> '@/tmp/up4-delta-<名称>.txt' refs/upstream-3.18.1 refs/upstream-4.0.0`，
+冲突按「UWork 定制优先、上游功能改动照收、需要新子系统就跳过并记录」处理；每条分支绿了再合。

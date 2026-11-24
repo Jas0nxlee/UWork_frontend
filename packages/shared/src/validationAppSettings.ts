@@ -49,6 +49,9 @@ const nonEmptyStringSchema = z.string().trim().min(1);
 
 export const localeSchema = z.enum(["zh-CN", "en-US"]);
 export const localePreferenceSchema = z.enum(["system", "zh-CN", "en-US"]);
+/** Agent 回复语言：用户自由输入的语言名（docs/i18n/agent-reply-language.md）。 */
+export const REPLY_LANGUAGE_MAX_LENGTH = 256;
+export const replyLanguageSchema = z.string().trim().min(1).max(REPLY_LANGUAGE_MAX_LENGTH);
 const zcodeInteractionBehaviorSchema = z.enum(["queue", "guide"]);
 // launch.md「The user's choice」：读文件时未知取值（降级后读到新版本写的值）按「跟随」处理，
 // 不能让一个偏好字段把整份设置读坏。

@@ -366,6 +366,8 @@ export interface AppSettings {
   toolSearchMode?: AppToolSearchMode;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
+  /** Agent 回复语言（自由文本，未设置时跟随对话语言）；只由 Main 写入，见 docs/i18n/agent-reply-language.md。 */
+  replyLanguage?: string;
   onboardingOccupation?:
     | "office"
     | "developer"

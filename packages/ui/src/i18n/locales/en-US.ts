@@ -826,6 +826,32 @@ const enUS: Record<string, string> = {
     "The share service returned an unreadable response. Try again later.",
   "conversationShare.issue.unknown":
     "Sharing failed; the cause could not be determined. Retry, and provide the error details if it persists.",
+  "conversationShare.issue.unsupportedContent":
+    "Some content in turn {turnOrdinal} is in a format the share service does not support. Update UWork, or deselect the turn and share again.",
+  "conversationShare.issue.artifactTypeRejected":
+    "{artifactDisplayName} ({artifactType}) in turn {turnOrdinal} cannot be shared. Deselect the turn and try again.",
+  "conversationShare.issue.artifactFormatMismatch":
+    "The extension of {artifactDisplayName} in turn {turnOrdinal} does not match its actual format. Fix the extension or export the file again, or deselect the turn.",
+  "conversationShare.issue.artifactDimensionsExceeded":
+    "{artifactDisplayName} in turn {turnOrdinal} is too large (max 8192 pixels per side). Resize it and try again, or deselect the turn.",
+  "conversationShare.issue.artifactCorrupted":
+    "{artifactDisplayName} in turn {turnOrdinal} is damaged or incomplete. Export it again and retry, or deselect the turn.",
+  "conversationShare.issue.artifactEncodingInvalid":
+    "{artifactDisplayName} in turn {turnOrdinal} is not UTF-8 encoded. Convert it and try again, or deselect the turn.",
+  "conversationShare.issue.artifactUploadRejected":
+    "{artifactDisplayName} in turn {turnOrdinal} cannot be uploaded. Deselect the turn and try again. If it still fails, copy the request ID from the error details and report it.",
+  "conversationShare.issue.artifactUploadMissing":
+    "{artifactDisplayName} was not fully uploaded. Try again.",
+  "conversationShare.issue.artifactUploadMissingAny":
+    "Some files were not fully uploaded. Try again.",
+  "conversationShare.issue.contentBlocksLimit":
+    "The selection contains {actual} content blocks, above the limit of {limit}. Select fewer turns.",
+  "conversationShare.issue.preparationStale":
+    "This share attempt is no longer valid. Generate the link again.",
+  "conversationShare.issue.conversationSafetyRejected":
+    "The conversation text did not pass the safety check. Select fewer turns or adjust the selection, then try again.",
+  "conversationShare.issue.artifactSafetyRejected":
+    "{artifactDisplayName} in turn {turnOrdinal} did not pass the safety check. Deselect the turn or remove the file, then try again.",
   "conversationShare.issue.details": "Error details",
   "conversationShare.issue.requestIdLabel": "Server request ID",
   "conversationShare.issue.requestId": "Server request ID: {requestId}",
