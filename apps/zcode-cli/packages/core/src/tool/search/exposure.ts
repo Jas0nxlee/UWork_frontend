@@ -1,6 +1,7 @@
 import { LOCAL_TOOL_SEARCH_DESCRIPTION } from "./description.js";
 import {
   TOOL_SEARCH_NAME,
+  LOCAL_TOOL_SEARCH_NAME,
   DEFERRED_TOOL_CALL_NAME,
   type ToolSearchMode,
   type ResolvedToolSearchMode,
@@ -124,6 +125,7 @@ export function buildToolExposure(input: ToolExposureInput) {
       if (mode === "local" && tool.name === TOOL_SEARCH_NAME)
         return {
           ...contract,
+          name: LOCAL_TOOL_SEARCH_NAME,
           description: LOCAL_TOOL_SEARCH_DESCRIPTION,
         };
       return mode === "native" && deferred.has(tool.name)

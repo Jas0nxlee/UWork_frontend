@@ -135,7 +135,7 @@ export async function buildSessionSnapshot(input: {
   };
 }
 
-async function mapSnapshotMessages(
+export async function mapSnapshotMessages(
   app: Pick<ZCodeApp, "readToolResultArtifact">,
   messages: readonly MessageWithParts[],
 ) {

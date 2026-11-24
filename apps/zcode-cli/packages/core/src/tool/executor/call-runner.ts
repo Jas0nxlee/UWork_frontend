@@ -24,6 +24,7 @@ import type { ToolExecutionContext, ToolExecutionResult } from "../types.js";
 import type { ToolEntry } from "../types.js";
 import type { BackgroundTaskTracker } from "./background-tasks.js";
 import {
+  annotateUnsettledCall,
   createErrorResult,
   createPermissionErrorResult,
   createToolHandlerFailureError,
@@ -518,6 +519,7 @@ async function executeToolCallImpl(
         workflowSubmitPort: deps.workflowSubmitPort,
         workflowEscalatePort: deps.workflowEscalatePort,
         artifactStore: deps.artifactStore,
+        sessionControl: deps.sessionControl,
         automationPort: deps.automationPort,
         offPeakPort: deps.offPeakPort,
         topicResourcePort: deps.topicResourcePort,
@@ -681,11 +683,15 @@ async function executeToolCallImpl(
         traceContext,
         options?.signal,
       );
-      let result = createErrorResult(
-        canonicalToolCall,
+      // 规格 0.15：超时与执行中取消会在「请求可能已被受理」之后打断 handler，回执送不回来；
+      // 让工具把对账身份追加进同一条错误，否则模型只能另起新请求、重复执行。
+      const failure = annotateUnsettledCall(
         error instanceof Error ? error : new Error(String(error)),
-        durationMs,
+        entry ?? {},
+        executionInput,
+        canonicalToolCall.id,
       );
+      let result = createErrorResult(canonicalToolCall, failure, durationMs);
       const baseModelContent = result.error
         ? isToolHandlerFailureError(error) && typeof result.modelContent === "string"
           ? result.modelContent

@@ -1,4 +1,10 @@
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
+import { isToolSearchName } from "@zcode/contracts";
+import {
+  LOCAL_TOOL_SEARCH_NAME,
+  TOOL_SEARCH_NAME,
+  toolSearchNameForMode,
+} from "@zcode/contracts";
 import type {
   CompactBoundaryPayload,
   ModelMessageContentBlock,
@@ -49,6 +55,13 @@ export function projectToolReferences(
   deferred: ReadonlySet<string> = new Set(),
 ): { entries: RuntimeMessageEntry[]; loadedToolCallIds: ReadonlySet<string> } {
   const catalog = mode === "off" ? undefined : new Map(tools.map((tool) => [tool.name, tool]));
+  // local 模式对外换名为 LocalToolSearch；历史里的引用可能仍是规范名，两个名字都要命中
+  // 同一份（换成 local 文案的）控制工具定义。
+  const searchTool = catalog?.get(toolSearchNameForMode(mode));
+  if (searchTool) {
+    catalog!.set(TOOL_SEARCH_NAME, searchTool);
+    catalog!.set(LOCAL_TOOL_SEARCH_NAME, searchTool);
+  }
   const renderDefinition = mode === "local" ? createLocalToolDefinitionRenderer() : undefined;
   // 同批结果尚未被模型看到：直到下一条 assistant 才合入已交付集合，避免并行搜索互相去重。
   const visible = mode === "local" ? new Set<string>() : undefined;
@@ -74,7 +87,7 @@ export function projectToolReferences(
     let definitions: string[] | undefined;
     let alreadyLoaded: Set<string> | undefined;
     let newlyLoaded: Set<string> | undefined;
-    const successfulSearch = entry.message.toolName === "ToolSearch" && !entry.message.isError;
+    const successfulSearch = isToolSearchName(entry.message.toolName) && !entry.message.isError;
     for (let index = 0; index < original.length; index++) {
       const block = original[index]!;
       if (block.type !== "tool_reference") {

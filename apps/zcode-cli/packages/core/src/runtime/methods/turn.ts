@@ -1149,6 +1149,8 @@ function injectReferencedSessionContextReminderIntoMessageHistory(
   options?: ExecuteTurnOptions,
 ): void {
   if (options?.inputVisibility === "model-only") return;
+  // ReadSession 只在可信绑定了会话工具的根会话注册；子代理等运行时没有它，不提示不存在的工具。
+  if (!this.sessionControlKind) return;
   const reminderBody = buildReferencedSessionContextReminderBody(input);
   if (!reminderBody) return;
   this.messageHistory.addAttachment("referenced_session_context", reminderBody);

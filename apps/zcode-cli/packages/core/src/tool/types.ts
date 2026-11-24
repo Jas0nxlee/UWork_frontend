@@ -1,5 +1,6 @@
 import type { ToolSearchExecutionContext, ModelCallWrapper } from "@zcode/contracts";
 import type { McpToolUiDescriptor } from "@zcode/shared/mcp-apps";
+import type { SessionControlBinding } from "./session-control/contract.js";
 // ============================================================
 // Tool Types - Core tool types for registry and executor
 // ============================================================
@@ -153,6 +154,8 @@ export interface ToolExecutionContext {
   spanId?: string;
   parentSpanId?: string;
   abortSignal: AbortSignal;
+  /** 仅可信根会话装配；子代理不继承此控制权。 */
+  sessionControl?: SessionControlBinding;
   backgroundTaskControlPort?: BackgroundTaskControlPort;
   emitEvent?: (event: SessionEvent) => Promise<void>;
   executionPort?: ExecutionPort;
@@ -327,6 +330,13 @@ export interface ToolEntry extends ToolContractDeclaration {
   executionMode?: ToolExecutionMode;
   providerNative?: ProviderNativeToolSpec;
   handler: ToolHandler;
+  /**
+   * 调用在 handler 返回之前超时或取消时，追加给模型的对账说明（规格 0.15）；返回 undefined 不追加。
+   *
+   * 只服务「请求可能已被受理、但回执没能送回」的写操作：它们靠回执把请求身份交给模型，回执送不回来，
+   * 模型就拿不到身份，只能另起新请求，于是重复执行。执行器只在超时与执行中取消这两种错误上调用它。
+   */
+  describeUnsettledCall?: (input: unknown, toolCallId: string) => string | undefined;
   /** 当前 turn 模型能力对 provider descriptor 与 executor schema 的同源投影。 */
   resolveModelContract?: (context: ToolExecutionModelContext) => {
     description?: string;

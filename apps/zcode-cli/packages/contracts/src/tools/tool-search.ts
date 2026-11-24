@@ -2,9 +2,16 @@ import { z } from "zod";
 import { toToolJsonSchema } from "./json-schema.js";
 
 export const TOOL_SEARCH_NAME = "ToolSearch";
+export const LOCAL_TOOL_SEARCH_NAME = "LocalToolSearch";
 export const ToolSearchModeSchema = z.enum(["auto", "native", "local", "off"]);
 export type ToolSearchMode = z.infer<typeof ToolSearchModeSchema>;
 export type ResolvedToolSearchMode = Exclude<ToolSearchMode, "auto">;
+export function toolSearchNameForMode(mode: ResolvedToolSearchMode): string {
+  return mode === "local" ? LOCAL_TOOL_SEARCH_NAME : TOOL_SEARCH_NAME;
+}
+export function isToolSearchName(name: string | undefined): boolean {
+  return name === TOOL_SEARCH_NAME || name === LOCAL_TOOL_SEARCH_NAME;
+}
 export const TOOL_SEARCH_DEFAULT_RESULTS = 5;
 export const TOOL_SEARCH_BETA = "advanced-tool-use-2025-11-20";
 export const ToolSearchAnnouncementSchema = z

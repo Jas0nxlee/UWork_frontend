@@ -30,6 +30,8 @@ export function refreshBranchAwareBuiltInTools(runtime: AgentRuntimeInternal): v
     includeSkill: Boolean(runtime.skillPort),
     includeAgent: Boolean(runtime.subagentPort),
     embeddedSearchEnabled,
+    // 第二个注册入口同样按可信绑定选同名变体；省略会把 CLI/App 变体选错。
+    sessionControlKind: runtime.sessionControlKind,
     // 本函数是**第二个**
     // 注册入口，且刻意只传一个精简选项集。对「只有 true 才注册」的门（OffPeak / Cron / Workflow…）
     // 省略是安全的；但动态工作流灰度门的极性相反——「缺席即开启」，省略等于把首次装配剃掉的

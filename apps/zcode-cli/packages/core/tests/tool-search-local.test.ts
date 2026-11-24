@@ -84,7 +84,9 @@ const text = (value: unknown) => JSON.stringify(value);
 describe("Local ToolSearch request projection", () => {
   it("exposes one concise calling example that satisfies both wrapper and target schemas", () => {
     const { expose } = fixture();
-    const description = expose().tools.find((tool) => tool.name === "ToolSearch")!.description!;
+    const description = expose().tools.find(
+      (tool) => tool.name === "LocalToolSearch",
+    )!.description!;
     expect(description).toMatch(/^Fetches .* called using DeferredToolCall\./);
     expect(description).toContain("Call resident tools directly using their normal tool calls");
     expect(description).toContain(
@@ -108,7 +110,7 @@ describe("Local ToolSearch request projection", () => {
     const initial = expose();
     const searched = expose(entries);
     expect(initial.tools.map((tool) => tool.name)).toEqual([
-      "ToolSearch",
+      "LocalToolSearch",
       "DeferredToolCall",
       "Resident",
     ]);
@@ -156,7 +158,7 @@ describe("Local ToolSearch request projection", () => {
       content[0].text.split("\n")[1]!.slice("<function>".length, -"</function>".length),
     );
     expect(definition.description).toBe(
-      result.tools.find((tool) => tool.name === "ToolSearch")?.description,
+      result.tools.find((tool) => tool.name === "LocalToolSearch")?.description,
     );
   });
 
