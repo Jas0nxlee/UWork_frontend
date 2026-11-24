@@ -346,6 +346,31 @@ export interface PrintPageToPdfResult {
   error?: string;
 }
 
+/** guest 视口内的裁剪区域，全部是 guest CSS px；视口宽高用于换算实际帧的像素比例。 */
+export interface CaptureBrowserGuestPageClip {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+export interface CaptureBrowserGuestPageRequest {
+  /** 内置浏览器 `<webview>` 的 guest webContents id（renderer 由 `getWebContentsId()` 取得） */
+  webContentsId: number;
+  /** 只要视口内某一块（选元素截图）；不传时返回整个可见视口 */
+  clip?: CaptureBrowserGuestPageClip;
+}
+
+export interface CaptureBrowserGuestPageResult {
+  success: boolean;
+  /** PNG 字节；success 时存在 */
+  data?: ArrayBuffer;
+  /** "guest_not_found" | "guest_not_owned" | "capture_in_progress" | "capture_timeout" | "capture_failed" | "clip_out_of_view" */
+  error?: string;
+}
+
 export function createOpenInEditorRemoteTarget(
   target: RemoteTarget,
 ): OpenInEditorRemoteTarget | undefined {
@@ -754,6 +779,14 @@ export interface IPlatformService {
    * 页面尺寸由 renderer 注入的 @page CSS 决定（preferCSSPageSize）；仅 Desktop 实现。
    */
   printPageToPdf?(): Promise<PrintPageToPdfResult>;
+
+  /**
+   * 在 main 进程截取内置浏览器 guest 当前可见视口为 PNG。renderer 侧 `<webview>.capturePage()`
+   * 会让 renderer 原生崩溃（V8 FATAL），与 Agent 截图一样只能由 main 取帧；仅 Desktop 实现。
+   */
+  captureBrowserGuestPage?(
+    payload: CaptureBrowserGuestPageRequest,
+  ): Promise<CaptureBrowserGuestPageResult>;
 
   /**
    * 从浏览器 File 对象解析宿主本地路径；只有 Desktop preload 能安全实现。

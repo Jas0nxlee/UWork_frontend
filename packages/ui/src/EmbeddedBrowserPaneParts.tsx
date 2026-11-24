@@ -5,7 +5,9 @@ import {
   ChevronRight,
   Ellipsis,
   ExternalLink,
+  FileDown,
   Globe,
+  ImageDown,
   LoaderIcon,
   MonitorSmartphone,
   MousePointerClick,
@@ -17,6 +19,8 @@ import {
   TID_BROWSER_BACK_BUTTON,
   TID_BROWSER_DEVTOOLS_BUTTON,
   TID_BROWSER_ELEMENT_PICKER_BUTTON,
+  TID_BROWSER_EXPORT_PDF_ITEM,
+  TID_BROWSER_EXPORT_PNG_ITEM,
   TID_BROWSER_FORWARD_BUTTON,
   TID_BROWSER_LOAD_ERROR,
   TID_BROWSER_LOAD_ERROR_CERT_HINT,
@@ -57,6 +61,10 @@ export function BrowserToolbar({
   onSubmit,
   isElementPickerActive,
   isResponsiveMode,
+  canExport = false,
+  isExporting = false,
+  onExportPdf,
+  onExportPng,
 }: {
   addressValue: string;
   browserState: BrowserState;
@@ -74,6 +82,11 @@ export function BrowserToolbar({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   isElementPickerActive: boolean;
   isResponsiveMode: boolean;
+  /** 导出 PNG / PDF 的可用条件；未提供导出回调时菜单不出现这两项。 */
+  canExport?: boolean;
+  isExporting?: boolean;
+  onExportPdf?: () => void;
+  onExportPng?: () => void;
 }) {
   return (
     <form
@@ -158,21 +171,30 @@ export function BrowserToolbar({
         formatMessage={formatMessage}
         onOpenExternal={onOpenExternal}
         onOpenDevTools={onOpenDevTools}
+        canExport={canExport && !isExporting}
+        onExportPdf={onExportPdf}
+        onExportPng={onExportPng}
       />
     </form>
   );
 }
 
 function BrowserToolbarMoreMenu({
+  canExport = false,
   canOpenDevTools,
   canOpenExternal,
   formatMessage,
+  onExportPdf,
+  onExportPng,
   onOpenDevTools,
   onOpenExternal,
 }: {
+  canExport?: boolean;
   canOpenDevTools: boolean;
   canOpenExternal: boolean;
   formatMessage: (descriptor: { id: string }) => string;
+  onExportPdf?: () => void;
+  onExportPng?: () => void;
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
 }) {
@@ -201,6 +223,26 @@ function BrowserToolbarMoreMenu({
           <ExternalLink className="size-4" />
           <span>{formatMessage({ id: "browser.openExternal" })}</span>
         </DropdownMenuItem>
+        {onExportPng ? (
+          <DropdownMenuItem
+            data-testid={TID_BROWSER_EXPORT_PNG_ITEM}
+            disabled={!canExport}
+            onSelect={onExportPng}
+          >
+            <ImageDown className="size-4" />
+            <span>{formatMessage({ id: "browser.export.png" })}</span>
+          </DropdownMenuItem>
+        ) : null}
+        {onExportPdf ? (
+          <DropdownMenuItem
+            data-testid={TID_BROWSER_EXPORT_PDF_ITEM}
+            disabled={!canExport}
+            onSelect={onExportPdf}
+          >
+            <FileDown className="size-4" />
+            <span>{formatMessage({ id: "browser.export.pdf" })}</span>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem
           data-testid={TID_BROWSER_DEVTOOLS_BUTTON}
           disabled={!canOpenDevTools}

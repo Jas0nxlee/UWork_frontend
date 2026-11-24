@@ -138,6 +138,10 @@ export const TID_BROWSER_ELEMENT_PICKER_BUTTON = "browser-element-picker-button"
 export const TID_BROWSER_MORE_BUTTON = "browser-more-button";
 /** 浏览器在默认浏览器中打开菜单项 */
 export const TID_BROWSER_OPEN_EXTERNAL_ITEM = "browser-open-external-item";
+/** 浏览器导出为 PNG 菜单项 */
+export const TID_BROWSER_EXPORT_PNG_ITEM = "browser-export-png-item";
+/** 浏览器导出为 PDF 菜单项 */
+export const TID_BROWSER_EXPORT_PDF_ITEM = "browser-export-pdf-item";
 /** 浏览器打开调试工具按钮 */
 export const TID_BROWSER_DEVTOOLS_BUTTON = "browser-devtools-button";
 /** 浏览器设计模式（docs/browser-use/2026-11-03-browser-design-mode-spec.md） */
