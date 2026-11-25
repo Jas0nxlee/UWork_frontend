@@ -1,5 +1,11 @@
+import { resolve } from "node:path";
+import { resolveWorkspaceHookTrustIdentityForWorkspace } from "@zcode/adapters/config";
 import { querySessionDebug } from "./session-debug.js";
-import { offPeakControlParamsSchema, offPeakControlResultSchema } from "@zcode/shared";
+import {
+  offPeakControlParamsSchema,
+  offPeakControlResultSchema,
+  type ZCodeWorkspaceRef,
+} from "@zcode/shared";
 import { createNodeNetworkCapture } from "@zcode/shared/node";
 import { networkCaptureControlSchema, zcodeProtocolNotifications } from "@zcode/shared";
 import {
@@ -41,6 +47,8 @@ import {
   generateWorkspaceText,
   goalSession,
   getTaskTokenUsage,
+  ensureSessionReady,
+  releaseSessionsUnderDirectory,
   getUsageStats,
   listSessions,
   listSessionSubagents,
@@ -159,13 +167,25 @@ type ZCodeProtocolOutboundMessage = ZCodeProtocolNotification | ZCodeProtocolReq
  * 独立导出为纯调度函数（不触网、不发事件），便于回归测试直接构造 sessions Map。
  */
 export async function notifyWorkspaceHookTrustGrantSessions(input: {
-  grantedWorkspaceKey?: string;
+  grantedWorkspace?: ZCodeWorkspaceRef;
   sessions: Map<string, ZCodeProtocolSessionRecord>;
 }): Promise<void> {
-  if (!input.grantedWorkspaceKey) return;
+  if (!input.grantedWorkspace) return;
+  // Trust record 按 Trust identity 共享（D23）：源仓库授予后，同进程内它的受管 worktree
+  // session 也必须重载；按 workspaceKey 过滤会漏掉 worktree。跨进程的通知由 Host 负责。
+  const trustIdentityOf = (workspace: ZCodeWorkspaceRef) =>
+    resolveWorkspaceHookTrustIdentityForWorkspace({
+      workspacePath: resolve(workspace.workspacePath),
+      ...(workspace.workspaceIdentity?.trim()
+        ? { workspaceIdentity: workspace.workspaceIdentity.trim() }
+        : {}),
+    });
+  const granted = await trustIdentityOf(input.grantedWorkspace);
+  const records = [...input.sessions.values()];
+  const identities = await Promise.all(records.map((record) => trustIdentityOf(record.workspace)));
   await Promise.all(
-    [...input.sessions.values()]
-      .filter((record) => record.workspace.workspaceKey === input.grantedWorkspaceKey)
+    records
+      .filter((_record, index) => identities[index] === granted)
       .map((record) => record.app.reloadWorkspaceHookTrust()),
   );
 }
@@ -692,6 +712,10 @@ export class ZCodeProtocolAgentServer {
         return await setMode(this.context, request.params);
       case zcodeProtocolMethods.sessionClose:
         return await closeSession(this.context, request.params);
+      case zcodeProtocolMethods.sessionLifecycleEnsureReady:
+        return await ensureSessionReady(this.context, request.params);
+      case zcodeProtocolMethods.sessionReleaseUnderDirectory:
+        return await releaseSessionsUnderDirectory(this.context, request.params);
       case zcodeProtocolMethods.workspaceReadPresentation:
         return await readWorkspacePresentation(this.context, request.params);
       case zcodeProtocolMethods.workspaceHookTrustGrant: {
@@ -702,11 +726,10 @@ export class ZCodeProtocolAgentServer {
         if (grantResult.accepted) {
           await notifyWorkspaceHookTrustGrantSessions({
             // dispatch 层的 params 是弱类型；grant 内部已用同一 schema parse 过，这里
-            // safeParse 只为取出 workspaceKey 做匹配，失败即跳过通知（防御，正常必成功）。
-            grantedWorkspaceKey: zcodeWorkspaceHookTrustGrantParamsSchema.safeParse(request.params)
+            // safeParse 只为取出 workspace 做 Trust identity 匹配，失败即跳过通知（防御，正常必成功）。
+            grantedWorkspace: zcodeWorkspaceHookTrustGrantParamsSchema.safeParse(request.params)
               .success
               ? zcodeWorkspaceHookTrustGrantParamsSchema.parse(request.params).workspace
-                  .workspaceKey
               : undefined,
             sessions: this.context.sessions,
           });
@@ -808,7 +831,15 @@ export class ZCodeProtocolAgentServer {
       case zcodeProtocolMethods.processChildProcesses:
         return listChildProcesses(this.context.deps.mcpTelemetry?.listProcesses() ?? []);
       case zcodeProtocolMethods.runtimeCapabilities:
-        return { independentPlanState: true, historyFirst: true };
+        return {
+          independentPlanState: true,
+          historyFirst: true,
+          // 受管 worktree：会话 cwd 与 workspace 不同（docs/git/worktree.md §9.3）。
+          // Host 只在看到这一位时才发送 createSession.cwd / forkAssistant.targetCwd。
+          worktreeCwd: true,
+          // 选区批注：引用上的 comment / agent 字段（旧 CLI 会静默剥掉）。
+          conversationQuoteComment: true,
+        };
       case zcodeProtocolMethods.pluginsMarketplaceAdd:
         return await this.withPluginOperationSignal(request, (signal) =>
           addPluginMarketplace(this.context, request.params, signal),

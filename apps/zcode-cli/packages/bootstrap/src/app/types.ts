@@ -1,4 +1,5 @@
 import type { AiSdkModelAdapter } from "@zcode/adapters/model";
+import type { SessionControlBinding } from "@zcode/core/session-control";
 import type {
   AgentTelemetryRuntimeOwner,
   AutomationPort,
@@ -137,8 +138,16 @@ export type ZCodeAppRuntimeConfigInput = AgentRuntimeConfig;
 export interface ZCodeAppOptions {
   /** 独立 CLI 的配置菜单编辑输入默认值；其他装配保留显式 Session 配置语义。 */
   modelSelectionMode?: "cli-default";
+  /** 仅独立 TUI/headless 入口开启；不得由模型或项目配置指定。 */
+  standaloneSessionControl?: boolean;
   /** Host 在运行实例创建时传入，运行中不刷新。 */
   additionalDirectories?: readonly string[];
+  /**
+   * 会话所属 workspace 的对外 key（Hook Trust admission、审核 request 等）。受管 worktree 会话
+   * 属于项目 workspace，key 与工作目录不同（docs/git/worktree.md §7.3）；缺省按远程 identity
+   * 优先、否则工作目录。
+   */
+  workspaceKey?: string;
   sessionId?: SessionId;
   resume?: boolean;
   version?: string;
@@ -206,6 +215,8 @@ export interface ZCodeAppOptions {
   uiDetectedLocale?: string | null;
   uiLocale?: UiLocale;
   onWorkflowEvent?: (event: WorkflowEvent) => void | Promise<void>;
+  /** 可信启动装配，不能从项目配置或模型输入填充。 */
+  sessionControl?: SessionControlBinding;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;

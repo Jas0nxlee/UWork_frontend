@@ -48,6 +48,7 @@ import type {
   MainTurnCacheHitAggregate,
   RuntimeTurnFileChangeMap,
 } from "./types.js";
+import type { WorktreeCreationFact } from "@zcode/contracts";
 import type { RuntimeCommandQueue } from "./command-queue.js";
 import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
 import type { WorkflowBlockedReminderClock } from "../runtime-task/workflow-blocked-reminder.js";
@@ -94,6 +95,8 @@ export interface AgentRuntimeInternal
   /** 工作流工具面是否已注册（launch.md「On demand: activation」）；非 onDemand 会话出生即 true。 */
   dynamicWorkflowToolsActivated: boolean;
   dynamicWorkflowActivationSource?: DynamicWorkflowActivationSource;
+  /** 可信绑定在场时的运行位置；工具注册与提示只看它，不在别处重算。 */
+  sessionControlKind?: "cli" | "app";
   contextBuilder: ContextBuilder | null;
   contextInitialized: boolean;
   contextSourceSnapshot?: ContextSourceSnapshot;
@@ -169,6 +172,7 @@ export interface AgentRuntimeInternal
   backgroundTaskNotificationsSealed: boolean;
   backgroundTaskNotificationSealReason?: BackgroundTaskNotificationSealReason;
   pendingModelChangeTimeline?: PendingModelChangeTimeline;
+  pendingWorktreeCreation?: WorktreeCreationFact;
   sessionStartHookRan: boolean;
   sessionTitleGenerationAttempted: boolean;
   agentTelemetry: RuntimeTelemetryFacade;

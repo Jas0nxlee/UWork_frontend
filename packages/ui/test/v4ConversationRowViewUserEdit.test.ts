@@ -1909,6 +1909,8 @@ describe("ConversationRowView user query editing", () => {
     const webContext: WebElementContextComposerAttachment = {
       capturedAt: 1_700_000_000_000,
       id: "edit-web-element",
+      // 设计模式起 `## Element N` 与截图文件名共用 chip 编号；只有一个元素时就是 1。
+      ordinal: 1,
       pageTitle: "Docs",
       pageUrl: "https://example.test/docs",
       selector: "main",

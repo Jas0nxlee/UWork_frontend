@@ -22,6 +22,7 @@ import {
 import { isStaleBranchRuntimeTaskEvent } from "../methods/runtime-command-generation.js";
 import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
 import { sessionHasLoadedSkill } from "../../agent/loaded-skills.js";
+import { sessionControlForRuntime } from "../../tool/session-control/contract.js";
 
 const DEFAULT_SUBAGENT_BACKGROUND_BASH_MAX_MS = 3_600_000;
 const EMPTY_RUNTIME_HOOK_CONFIG = {
@@ -46,6 +47,11 @@ export function initializeRuntimeTooling(
 
 function registerRuntimeBuiltInTools(runtime: AgentRuntimeInternal, deps: AgentRuntimeDeps): void {
   const nodeReplEnabled = runtime.config.runtimeFeatures?.nodeRepl === true;
+  runtime.sessionControlKind = sessionControlForRuntime(
+    deps.sessionControl,
+    runtime.config.taskType,
+    runtime.sessionId,
+  )?.kind;
   const browserUseEnabled = resolveRuntimeBrowserUseEnabled(runtime, deps);
   registerBuiltInTools(runtime.registry, {
     bashTimeoutPolicy: runtime.config.bashTimeoutPolicy,
@@ -64,6 +70,7 @@ function registerRuntimeBuiltInTools(runtime: AgentRuntimeInternal, deps: AgentR
     // escalate 与 submit_result 同门同理由：端口在场即注册（不做 opt-in：最可能撞墙的 actor 恰是作者没标记的那个）。
     includeEscalate: Boolean(deps.workflowEscalatePort),
     includeWorkflow: Boolean(deps.workflowPort),
+    sessionControlKind: runtime.sessionControlKind,
     includeAutomation: Boolean(deps.automationPort) && runtime.config.taskType !== "subagent_child",
     // offPeakPort 只在 host 下发 offPeakToolEnabled 时注入（灰度/远程门在 host 端），
     // 端口存在即代表曝光允许；subagent 子会话与 automation 同规则不暴露。
@@ -187,6 +194,11 @@ function createRuntimeToolExecutor(
     workflowSubmitPort: deps.workflowSubmitPort,
     workflowEscalatePort: deps.workflowEscalatePort,
     artifactStore: deps.artifactStore,
+    sessionControl: sessionControlForRuntime(
+      deps.sessionControl,
+      runtime.config.taskType,
+      runtime.sessionId,
+    ),
     automationPort: deps.automationPort,
     offPeakPort: deps.offPeakPort,
     topicResourcePort: deps.topicResourcePort,

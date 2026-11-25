@@ -35,7 +35,14 @@ export type {
   PersistedWorkspaceSessionEntry,
 } from "./protocol.js";
 export type { WorkspacePurpose } from "./workspacePurpose.js";
-export { DEFAULT_LOCALE } from "./protocol.js";
+export { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "./protocol.js";
+export {
+  isLocale,
+  isLocalePreference,
+  LOCALE_NATIVE_NAMES,
+  resolveLocaleFromLanguageTag,
+  toZhOrEnLocale,
+} from "./locale.js";
 export { ZCODE_VERSION, ZCODE_COMMIT, ZCODE_BUILD_TIME } from "./version.js";
 export type { HelloMessage, HelloAckMessage } from "./handshake.js";
 export type { ArmsRumEnv, ZCodeEnv, ZCodeProductFlavor } from "./env.js";
@@ -141,8 +148,10 @@ export * from "./plan-identity.js";
 export {
   BROWSER_SCREENSHOT_SURFACE_PREPARE_TIMEOUT_MS,
   BROWSER_VIEW_RESTORE_BOOTSTRAP_URL,
+  BROWSER_LOCAL_PREVIEW_SCHEME,
   LOCAL_MEDIA_PREVIEW_SCHEME,
   DesktopCommandIds,
+  browserPreviewSourceUrl,
   buildLocalMediaPreviewUrl,
   createOpenInEditorRemoteTarget,
 } from "./platform.js";
@@ -225,6 +234,9 @@ export type {
   ApplicationIconRequest,
   BrowserGuestAttachRejectReason,
   BrowserGuestAttachResult,
+  CaptureBrowserGuestPageClip,
+  CaptureBrowserGuestPageRequest,
+  CaptureBrowserGuestPageResult,
   EmbeddedBrowserDataClearResult,
   EmbeddedBrowserOpenUrlRequest,
   EmbeddedBrowserPermissionDeviceOption,
@@ -344,7 +356,7 @@ export * from "./subagent-runtime-config.js";
 export * from "./subagent-profile.js";
 export { parseAgentProfileFromMarkdown } from "./subagent-profile-parser.js";
 
-export * from "./localTtft.js";
+export * from "./local-ttft/contract.js";
 export * from "./pluginStoreOrder.js";
 export * from "./clientConfig.js";
 export * from "./pluginStoreOrdering.js";

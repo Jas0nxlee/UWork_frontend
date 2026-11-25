@@ -15,6 +15,7 @@ import {
   PROJECT_MIGRATION_TABLES,
   PROJECT_SCHEMA_SQL,
   TASK_PROJECT_COLUMNS,
+  TASK_WORKTREE_ROOT_SQL,
 } from "#src/project-storage/schema.js";
 
 export type {
@@ -53,6 +54,22 @@ export const projectStorage: ProjectStorageContract = {
           apply: (database) => {
             database.exec(INITIAL_WORKSPACE_ORDER_SQL);
             if (firstProjectMigration) migrateInitialWorkspaceOrder(database, context);
+          },
+        },
+        {
+          id: "0010_task_worktree_root",
+          appVersion: "3.18.0",
+          touchedTables: ["tasks"],
+          sql: TASK_WORKTREE_ROOT_SQL,
+          // 有些库（远端项目/兼容投影 fixture）根本没有 tasks 表；缺表时没有可加的列，
+          // 与 ensureColumns 的守卫口径一致，不能因此让整次迁移失败。
+          apply: (database) => {
+            if (
+              database
+                .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tasks'")
+                .get() !== undefined
+            )
+              database.exec(TASK_WORKTREE_ROOT_SQL);
           },
         },
       ],

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UCAS_PROVIDER_ID } from "@zcode/provider";
+import { toZhOrEnLocale } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { useConfirmDialog } from "@/hooks/useConfirmDialog.js";
 import { useModelProviders } from "@/hooks/useModelProviders.js";
@@ -121,7 +122,7 @@ export function ModelProviderSection({
   const createProvider = async (input: { templateId?: string; providerName?: string }) => {
     setCreatingProvider(true);
     try {
-      const created = await createPersonalProvider({ ...input, locale });
+      const created = await createPersonalProvider({ ...input, locale: toZhOrEnLocale(locale) });
       // 直接保留 id，快照尚未到达时使用首项投影；快照到达后自动切换，不用定时补偿。
       setSelectedProviderId(created.providerId);
       setTemplatePickerOpen(false);

@@ -1,4 +1,10 @@
-import type { ToolSearchExecutionContext, ToolSearchMode } from "@zcode/contracts";
+import type {
+  ProjectId,
+  ToolSearchExecutionContext,
+  ToolSearchMode,
+  WorktreeCreationFact,
+} from "@zcode/contracts";
+import type { SessionControlBinding } from "../tool/session-control/contract.js";
 import type { RequestVerificationReason } from "@zcode/shared";
 import type { GetAgentDefinitions, LoadAgentDefinitions } from "../subagent/definitions.js";
 import type { RuntimeInputPresentation, TurnExecutionModelFallbackReason } from "@zcode/contracts";
@@ -129,6 +135,13 @@ export interface AgentRuntimeConfig {
   presentationSurface?: PresentationSurface;
   /** Execution Host's output root, independent of the working repository. */
   genUiOutputRoot?: string;
+  /**
+   * 受管 worktree 会话的项目路径（权限 project_id、项目记忆映射回源仓库）；
+   * 缺省按 workspaceRoot 派生（docs/git/worktree.md §6.6.3）。
+   */
+  projectDirectory?: string;
+  /** 会话所属 workspace 的对外 key（受管 worktree 会话 = 项目 workspace，§7.3）。 */
+  workspaceKey?: string;
   mode?: CollaborationMode;
   planEnabled?: boolean;
   modelStreaming?: "off" | "on";
@@ -389,6 +402,7 @@ export interface AgentRuntimeDeps {
   modelCatalogPort?: ModelCatalogPort;
   runtimeTaskRegistry?: RuntimeTaskRegistry;
   artifactStore?: ToolArtifactStorePort;
+  sessionControl?: SessionControlBinding;
   automationPort?: AutomationPort;
   offPeakPort?: OffPeakPort;
   topicResourcePort?: TopicResourcePort;
@@ -687,8 +701,20 @@ export type StableConversationForkGoalBoundary = StableForkGoalBoundaryMetadata;
 
 export type StableConversationForkChildMetadata = ForkChildSessionMetadata;
 
+/** fork 到受管 worktree 时 child 的执行目录与项目身份（docs/git/worktree.md §8.2）。 */
+export interface StableConversationForkTargetCwd {
+  /** 子会话 cwd，同时写入 session.directory / path。workspaceID 沿用父会话（本地为空）。 */
+  directory: string;
+  /** 权限与记忆使用的项目 ID：由 cwd 映射回源仓库路径派生（§6.6.3），映射失败时按 cwd。 */
+  projectID: ProjectId;
+  /** 追加在复制历史之后的 "已创建 worktree" 时间线事实。 */
+  worktreeCreation: WorktreeCreationFact;
+}
+
 export interface StableConversationForkOptions {
   forkedSessionId?: SessionId;
+  /** 缺省 = 父会话 cwd（原行为）。 */
+  targetCwd?: StableConversationForkTargetCwd;
   modelSelection?: ModelSelection;
   goalBoundary: StableConversationForkGoalBoundary;
   sourceCommandId: string;

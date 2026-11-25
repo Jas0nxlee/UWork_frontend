@@ -1,7 +1,8 @@
+/* eslint-disable max-lines -- 终端服务集中持有 PTY 生命周期、平台 shell 解析与受管 worktree 的占用查询；拆分会把同一个终端状态机分成两处，反而更难保证「检查与登记在同一同步段」。*/
 import { accessSync, chmodSync, constants, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, release } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Emitter, type Event } from "@zcode/rpc";
 import type { IPty } from "node-pty";
 import type { ISettingService } from "../setting/setting.js";
@@ -21,6 +22,8 @@ interface TerminalInstance {
   pty: IPty;
   dataEmitter: Emitter<string>;
   exitEmitter: Emitter<number>;
+  /** 启动时的工作目录；shell 内 cd 之后的目录无法追踪（docs/git/worktree.md §12 第 4 项）。 */
+  cwd: string;
 }
 
 let hasEnsuredNodePtyHelper = false;
@@ -372,6 +375,8 @@ function createBufferedTerminalOutputEmitter(): {
 
 export function createTerminalService(dependencies: {
   settingService: ISettingService;
+  /** cwd 位于删除中的受管 worktree 时返回 true（docs/git/worktree.md §8.3）。 */
+  isCwdBlocked?: (cwd: string) => boolean;
 }): ITerminalService {
   const terminals = new Map<string, TerminalInstance>();
   let nextId = 0;
@@ -434,6 +439,8 @@ export function createTerminalService(dependencies: {
       const exitEmitter = new Emitter<number>();
 
       let p: IPty;
+      // 检查、启动与登记在同一段同步代码中：删除方取得租约后列出的终端一定包含已启动的终端。
+      if (dependencies.isCwdBlocked?.(cwd)) throw new Error("worktree.removing");
       try {
         p = spawnTerminalProcess({
           nodePty,
@@ -455,7 +462,7 @@ export function createTerminalService(dependencies: {
         terminals.delete(id);
       });
 
-      terminals.set(id, { pty: p, dataEmitter, exitEmitter });
+      terminals.set(id, { pty: p, dataEmitter, exitEmitter, cwd });
       return {
         id,
         shell,
@@ -477,6 +484,16 @@ export function createTerminalService(dependencies: {
 
     async dispose(params: { id: string }): Promise<void> {
       cleanupTerminal(params.id);
+    },
+
+    async listTerminalIdsUnderPath(params: { path: string }): Promise<string[]> {
+      const root = resolve(params.path);
+      return [...terminals.entries()]
+        .filter(([, terminal]) => {
+          const rel = relative(root, resolve(terminal.cwd));
+          return rel === "" || (!rel.startsWith(`..${sep}`) && rel !== ".." && !isAbsolute(rel));
+        })
+        .map(([id]) => id);
     },
 
     onDynamicData(id: string): Event<string> {

@@ -8,6 +8,7 @@ import {
   TID_MODEL_PROVIDER_TEMPLATE_PICKER,
   testId,
 } from "@zcode/shared/test-ids";
+import { toZhOrEnLocale } from "@zcode/shared";
 import { Button } from "@/components/ui/button.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
@@ -34,6 +35,7 @@ export function ProviderTemplatePicker({
   const { intl, locale } = useZCodeIntl();
   const { dismissFeedback, showFeedback } = useProviderDetailFeedback();
   const customLabel = intl.formatMessage({ id: "settings.modelProvider.newProviderName" });
+  // UWork 不按官方模板分组（无 zhipu 分区），全部模板同列一区。
   const groups = [{ id: "other", templates }] as const;
   const createWithFeedback = async (create: () => Promise<void>) => {
     const feedbackKey = "provider-template-create";
@@ -95,7 +97,11 @@ export function ProviderTemplatePicker({
                 />
               ) : null}
               {group.templates.map((template) => {
-                const label = resolveProviderTemplateName(template.templateId, template, locale);
+                const label = resolveProviderTemplateName(
+                  template.templateId,
+                  template,
+                  toZhOrEnLocale(locale),
+                );
                 return (
                   <ProviderTemplateCard
                     key={template.templateId}

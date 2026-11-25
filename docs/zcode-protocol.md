@@ -70,6 +70,8 @@ epoch、CAS 和 product guard 裁决。
 
 `session/steer`、`session/rewind` 和独立 rewind 命令已经删除。引导输入由 `sendText` + `inputRouting`/follow-up mode 裁决；重试和编辑分别使用 `retryTurn`、`editUserQuery`；workspace 文件撤销使用 `applyFileRewind`，不会隐式截断会话历史。
 
+`editQueueItem` 不要求 `baseRevision`（上游 3.18.1 起移出 CAS——运行中 revision 持续递增，CAS 会误拒编辑提交，并发保护改由队列编辑锁承担）。本仓目前只移植了契约类型（`lockQueueItemEdit` / `releaseQueueItemEdit` 与 `editorId` 字段）：CLI 的编辑锁实现与 Composer 编辑态尚未移植，`editQueueItem` 也还没有锁保护——第一方 UI 已不再调用它；详见 [upstream-sync-3.18.1-plan.md](./upstream-sync-3.18.1-plan.md) 的「新增缺口」。
+
 ACK 状态为 `accepted | rejected | stale | duplicate | noop | failed`。ACK 只表示 command 裁决结果；最终 UI 状态必须以带 `sourceCommandId` 的权威 projection 回流为准。
 
 ## sessions-index 与 workspace-config

@@ -22,6 +22,7 @@ type DesktopBrowserPlatformBridge = Pick<
   | "getPathForFile"
   | "saveFile"
   | "printPageToPdf"
+  | "captureBrowserGuestPage"
 >;
 
 // Rebase 集成：browser bridge 若继续内联在 renderer 入口，会让入口越过 max-lines 门禁。
@@ -32,6 +33,9 @@ export const desktopBrowserPlatformBridge = {
     window.zcode.saveFile?.(payload) ?? Promise.resolve({ success: false, error: "not_supported" }),
   // 条件定义而非兜底返回失败：UI 靠方法是否存在做能力检测，旧 preload 下必须保持 undefined
   printPageToPdf: window.zcode.printPageToPdf ? () => window.zcode.printPageToPdf!() : undefined,
+  captureBrowserGuestPage: window.zcode.captureBrowserGuestPage
+    ? (payload) => window.zcode.captureBrowserGuestPage!(payload)
+    : undefined,
   onBrowserViewReady: (handler) => window.zcode.onBrowserViewReady?.(handler) ?? (() => {}),
   onBrowserViewOperation: (handler) => window.zcode.onBrowserViewOperation?.(handler) ?? (() => {}),
   onBrowserViewViewportChanged: (handler) =>

@@ -138,8 +138,28 @@ export const TID_BROWSER_ELEMENT_PICKER_BUTTON = "browser-element-picker-button"
 export const TID_BROWSER_MORE_BUTTON = "browser-more-button";
 /** 浏览器在默认浏览器中打开菜单项 */
 export const TID_BROWSER_OPEN_EXTERNAL_ITEM = "browser-open-external-item";
+/** 浏览器导出为 PNG 菜单项 */
+export const TID_BROWSER_EXPORT_PNG_ITEM = "browser-export-png-item";
+/** 浏览器导出为 PDF 菜单项 */
+export const TID_BROWSER_EXPORT_PDF_ITEM = "browser-export-pdf-item";
 /** 浏览器打开调试工具按钮 */
 export const TID_BROWSER_DEVTOOLS_BUTTON = "browser-devtools-button";
+/** 浏览器设计模式（docs/browser-use/2026-11-03-browser-design-mode-spec.md） */
+export const TID_BROWSER_DESIGN_TOOLBAR = "browser-design-toolbar";
+export const TID_BROWSER_DESIGN_PANEL_BUTTON = "browser-design-panel-button";
+export const TID_BROWSER_DESIGN_VARIANT_SELECT = "browser-design-variant-select";
+export const TID_BROWSER_DESIGN_VARIANT_OPTION = "browser-design-variant-option";
+export const TID_BROWSER_DESIGN_SLIDE_PREV = "browser-design-slide-prev";
+export const TID_BROWSER_DESIGN_SLIDE_NEXT = "browser-design-slide-next";
+export const TID_BROWSER_DESIGN_SLIDE_COUNTER = "browser-design-slide-counter";
+/** 画布右侧的属性面板；字段带 data-design-field（元素属性）或 data-design-variable（页面变量） */
+export const TID_BROWSER_DESIGN_INSPECTOR = "browser-design-inspector";
+export const TID_BROWSER_DESIGN_INSPECTOR_CLOSE = "browser-design-inspector-close";
+export const TID_BROWSER_DESIGN_SELECT_PARENT = "browser-design-select-parent";
+/** 面板里「写回到哪个文件 / 为什么不能写回」那一行（data-writable） */
+export const TID_BROWSER_DESIGN_SOURCE_STATUS = "browser-design-source-status";
+/** 输入框里的网页元素 chip（data-count 为元素数） */
+export const TID_WEB_ELEMENT_CONTEXT_CHIP = "web-element-context-chip";
 /** 浏览器网页视图 */
 export const TID_BROWSER_WEBVIEW = "browser-webview";
 /** 内置浏览器权限确认条容器 */
@@ -605,6 +625,26 @@ export const TID_V4_ATTACHMENT_UPLOAD_RETRY = "v4-attachment-upload-retry";
 export const TID_V4_STOP = "v4-stop";
 /** v4 assistant 行 fork 按钮（动态后缀为 rowId） */
 export const TID_V4_FORK = "v4-fork";
+/** v4 fork 目的地菜单：在当前目录分叉（动态后缀为 rowId） */
+export const TID_V4_FORK_HERE = "v4-fork-here";
+/** v4 fork 目的地菜单：在新 worktree 中分叉（动态后缀为 rowId） */
+export const TID_V4_FORK_TO_WORKTREE = "v4-fork-to-worktree";
+/** 新建任务 composer 头部的 worktree 复选框 */
+export const TID_WORKTREE_TOGGLE = "composer-worktree-toggle";
+/** worktree 创建视图的进度卡片（data-phase = creating / starting-session / failed） */
+export const TID_WORKTREE_CREATION_CARD = "worktree-creation-card";
+/** 创建失败：重试 */
+export const TID_WORKTREE_CREATION_RETRY = "worktree-creation-retry";
+/** 创建失败：不使用 worktree */
+export const TID_WORKTREE_CREATION_CONTINUE_LOCAL = "worktree-creation-continue-local";
+/** 创建失败：放弃 */
+export const TID_WORKTREE_CREATION_DISMISS = "worktree-creation-dismiss";
+/** 会话历史中的"已创建 worktree"标记 */
+export const TID_WORKTREE_CREATED_MARKER = "worktree-created-marker";
+/** 侧栏中正在创建 worktree 的任务行 */
+export const TID_WORKTREE_CREATING_ROW = "worktree-creating-row";
+/** 侧栏任务行的 worktree 图标 */
+export const TID_TASK_ROW_WORKTREE_ICON = "task-row-worktree-icon";
 /** v4 assistant 行 retry 按钮（动态后缀为 rowId） */
 export const TID_V4_RETRY = "v4-retry";
 /** v4 assistant 行点赞按钮（动态后缀为 rowId） */
@@ -796,3 +836,12 @@ export const TID_START_PLAN_RECOMMENDATION_DIALOG = "start-plan-recommendation-d
 
 /** 用户反馈的诊断日志授权开关 */
 export const TID_FEEDBACK_LOGS_OPT_IN = "feedback-logs-opt-in";
+
+/** 扩展插槽（docs/plugins/extension-host.md §6）：输入框 composer.status 条目与启动页「扩展」分区。 */
+export const TID_EXTENSION_COMPOSER_STATUS = "extension-composer-status";
+export const TID_SIDE_PANE_EXTENSIONS = "side-pane-extensions";
+export const TID_SIDE_PANE_EXTENSIONS_STOPPED = "side-pane-extensions-stopped";
+export const TID_SIDE_PANE_EXTENSION_PROBLEM = "side-pane-extension-problem";
+/** 扩展视图（docs/plugins/extension-host.md §8）：启动页的视图条目与 extension-view 标签页。 */
+export const TID_SIDE_PANE_EXTENSION_VIEW_ITEM = "side-pane-extension-view-item";
+export const TID_EXTENSION_VIEW = "extension-view";

@@ -74,7 +74,8 @@ export interface SystemInfo {
 }
 
 /** 支持的语言 */
-export type Locale = "zh-CN" | "en-US";
+export const SUPPORTED_LOCALES = ["zh-CN", "en-US", "ja-JP", "ru-RU", "ko-KR"] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 /** 界面语言偏好；system 表示跟随当前运行端系统语言。 */
 export type LocalePreference = "system" | Locale;
@@ -365,6 +366,8 @@ export interface AppSettings {
   toolSearchMode?: AppToolSearchMode;
   /** 新建或冷恢复 Session 是否启用 Memory；默认关闭。 */
   memoryEnabled?: boolean;
+  /** Agent 回复语言（自由文本，未设置时跟随对话语言）；只由 Main 写入，见 docs/i18n/agent-reply-language.md。 */
+  replyLanguage?: string;
   onboardingOccupation?:
     | "office"
     | "developer"

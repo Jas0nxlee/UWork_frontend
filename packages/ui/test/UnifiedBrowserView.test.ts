@@ -109,6 +109,18 @@ const h = vi.hoisted(() => {
 vi.mock("@/hooks/usePlatform.js", () => ({
   usePlatform: () => h.platform,
 }));
+// 设计工具在组件里读本机 base services；单测没有真实 Host，也没有 ServiceProvider。
+// 空 accessor 下 fileService/fileWatcherService 为 undefined，自动刷新与写回按不可用处理。
+vi.mock("@/hooks/useWorkspaceServices.js", () => ({
+  useBaseWorkspaceServices: () => ({}),
+  useWorkspaceServicesResolution: () => ({
+    services: {},
+    remoteSessionId: null,
+    isRemoteTarget: false,
+    connectionKind: "local-ready",
+    rpcReady: true,
+  }),
+}));
 vi.mock("@/hooks/useSettingService.js", () => ({
   useSettings: () => ({
     error: null,

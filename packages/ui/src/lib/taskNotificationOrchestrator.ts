@@ -108,6 +108,11 @@ function pendingInteractionPayload(params: {
   if (interaction.payload.kind === "workspaceHookReview") {
     return null;
   }
+  // pluginInstall 属于上游 3.18.1 的插件发现流程；本仓 CLI 尚未产出该交互，
+  // 契约层先接受该 kind，通知侧不产出（与 UI 不渲染保持一致）。
+  if (interaction.payload.kind === "pluginInstall") {
+    return null;
+  }
 
   if (interaction.payload.kind === "permission") {
     return {

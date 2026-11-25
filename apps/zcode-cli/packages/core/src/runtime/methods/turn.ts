@@ -460,6 +460,8 @@ export async function executeTurnCommand(
       turnMachine = new TurnMachineImpl(turnMachine.start());
       phaseStartedAt = startTurnPhase("session_persistence");
       await this.ensureSessionPersisted(displayInput, turnTraceContext);
+      // 受管 worktree 的 "已创建" 必须早于本轮输入投影（docs/git/worktree.md §6.6.4）。
+      await this.persistPendingWorktreeCreationTimeline(turnTraceContext);
       await ensureGroupTaskPermissionScope(this.sessionStore, this.sessionId, options?.intent);
       // execution-scoped 临时 Provider（例如闲时任务）拥有本轮自己的模型，不改写
       // Session Selection；普通 Submission 才在真正开跑时应用其原子选择。
@@ -1149,6 +1151,8 @@ function injectReferencedSessionContextReminderIntoMessageHistory(
   options?: ExecuteTurnOptions,
 ): void {
   if (options?.inputVisibility === "model-only") return;
+  // ReadSession 只在可信绑定了会话工具的根会话注册；子代理等运行时没有它，不提示不存在的工具。
+  if (!this.sessionControlKind) return;
   const reminderBody = buildReferencedSessionContextReminderBody(input);
   if (!reminderBody) return;
   this.messageHistory.addAttachment("referenced_session_context", reminderBody);

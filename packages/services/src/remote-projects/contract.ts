@@ -21,6 +21,8 @@ export interface RemoteProjectCache {
   projectId: string;
   name: string;
   roots: ProjectRoot[];
+  /** 远端项目已软删除；缺省为未删除。显式添加始终视为未删除。 */
+  deleted?: boolean;
 }
 export interface RemoteProjectEntry {
   id: string;
@@ -32,6 +34,8 @@ export interface RemoteProjectEntry {
   lastSyncedAt: number | null;
   /** 从 3.15 首次升级的混排位置；仅用作控制端排序初值。 */
   initialPosition?: number;
+  /** 远端删除态缓存，仅在为 true 时出现；离线回退据此隐藏，不改变入口归属。 */
+  deleted?: true;
 }
 export interface RemoteProjectDirectory {
   hosts: RemoteProjectHost[];

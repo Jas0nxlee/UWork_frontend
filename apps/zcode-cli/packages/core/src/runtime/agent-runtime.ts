@@ -182,6 +182,7 @@ export class AgentRuntime {
   private messageHistory: MessageHistory;
   private readFileState: ReadFileStateMap;
   private cachedTools: ModelToolContract[] | null = null;
+  private sessionControlKind: "cli" | "app" | undefined;
   /** launch.md「On demand: activation」：onDemand 会话出生为 false，`activateDynamicWorkflowTools` 翻为 true。 */
   private dynamicWorkflowToolsActivated: boolean;
   private dynamicWorkflowActivationSource?: DynamicWorkflowActivationSource;
@@ -261,6 +262,7 @@ export class AgentRuntime {
   private backgroundTaskNotificationsSealed = false;
   private backgroundTaskNotificationSealReason?: "subagent_terminal" | "subagent_cancelled";
   private pendingModelChangeTimeline?: PendingModelChangeTimeline;
+  private pendingWorktreeCreation?: import("@zcode/contracts").WorktreeCreationFact;
   private sessionStartHookRan = false;
   private sessionTitleGenerationAttempted = false;
   private agentTelemetry: RuntimeTelemetryFacade;
@@ -446,6 +448,11 @@ export interface AgentRuntime {
     toModel: ModelSelection;
     toModelLabel: string;
   }): void;
+  /**
+   * 受管 worktree 新建会话：记录 "已创建 worktree"，首轮持久化会话后、TurnStarted 之前
+   * 写成 timeline part 并发出 WorktreeCreated（docs/git/worktree.md §6.6.4）。只记录一次。
+   */
+  recordPendingWorktreeCreation(fact: import("@zcode/contracts").WorktreeCreationFact): void;
   getActiveTurnInfo(): ActiveTurnInfo | undefined;
   admitPrompt(
     input: string,

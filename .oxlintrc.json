@@ -16,6 +16,9 @@
         "**/packages/desktop/src/main/desktopWindowLifecycle.ts",
         "**/packages/desktop/src/main/web-remote-relay/hmacTransport.ts",
         "**/packages/desktop/test/e2e/helpers/project-sidebar.ts",
+        // design-runtime 的页面运行时按命令集组织在一个自包含函数里（序列化进 guest 页面后执行），
+        // 拆分只会把同一份页面状态的读写拆散；沿用同一档 800 行上限。
+        "**/packages/design-runtime/src/pageRuntime.ts",
         "**/packages/services/src/conversation-share/conversationShareWorkflowSnapshot.ts",
         "**/packages/shared/src/test-ids.ts",
         "**/packages/ui/scripts/lib/officePptxButtonCases.mjs",
@@ -32,6 +35,12 @@
         "**/packages/ui/src/project-sidebar/grouped/task-row.tsx",
         "**/packages/ui/src/project-sidebar/grouped/view.ts",
         "**/packages/ui/src/side-pane-full-view/ConversationHost.tsx",
+        // 受管 worktree（docs/git/worktree.md）整块从上游取来，职责完整；
+        // git 操作 / 编排服务 / 管理弹窗是长流程，不按行数机械拆分。
+        "**/packages/services/src/git/managed-worktree/gitWorktreeRepo.ts",
+        "**/packages/services/src/project-storage/project-repository.ts",
+        "**/packages/services/src/managed-worktree-tasks/service.ts",
+        "**/packages/ui/src/project-sidebar/ManagedWorktreesDialog.tsx",
         "**/packages/ui/src/store/index.ts",
         "**/packages/ui/src/store/pluginManagementStore.ts",
         "**/packages/ui/src/v4/pendingCommandRegistry.ts",
@@ -43,7 +52,18 @@
         "**/packages/web/src/web-remote-control/app/webRemoteControlEntry.ts",
         "**/packages/web/src/web-remote-control/adapters/hmacTransport.ts",
         "**/packages/web/src/web-remote-control/adapters/webRemoteControlTransport.ts",
-        "**/packages/web/test/e2e/manual-review/pending/remote-login-v2.mjs"
+        "**/packages/web/test/e2e/manual-review/pending/remote-login-v2.mjs",
+        // 上游 3.18.1 / 4.0.0 整表取来的文件不在文件首行写 oxlint-disable：改了首行就不再是原样上游，
+        // 架构只能走路径例外，以后叠上游增量还要多一次三方合并。行数边界按精确路径给到 800，
+        // 与上面受管 worktree 同一做法。
+        "**/packages/desktop/src/extension-host/registry.ts",
+        "**/packages/services/src/app-control/execution.ts",
+        "**/packages/services/src/app-control/observation.ts",
+        "**/packages/services/src/extensions/sessionReads.ts",
+        "**/packages/shared/src/extension-host/capabilities.ts",
+        "**/packages/shared/src/zcode-protocol-v4/command.ts",
+        "**/packages/ui/src/browser-use/BrowserDesignInspector.tsx",
+        "**/packages/ui/src/browser-use/useBrowserDesignMode.ts"
       ],
       "rules": {
         "max-lines": ["error", { "max": 800, "skipBlankLines": true, "skipComments": true }]

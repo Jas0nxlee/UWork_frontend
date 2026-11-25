@@ -242,6 +242,7 @@ export const runPrompt = async (
     browserRuntime = createCliHeadlessBrowserRuntime(options, deps);
     app = await createApp({
       modelSelectionMode: "cli-default",
+      standaloneSessionControl: true,
       browserControlPort: browserRuntime?.browserControlPort,
       env: appEnv,
       // headless 没有交互审批面，core 因此退到 deny broker，于是 CreateWorkflow 的

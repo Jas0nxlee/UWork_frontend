@@ -316,7 +316,11 @@ export interface HighspeedMessageMetadata {
 /** 协议无关的输入 intent metadata；bootstrap v4 在事件边界组装为 ConversationInputIntent。 */
 export type TurnInputSourceMetadata =
   | { kind: "pluginUi"; pluginId: string; toolCallId: string }
-  | { kind: "genUi"; path: string; title?: string };
+  | { kind: "genUi"; path: string; title?: string }
+  // title 只读旧数据（规格 0.13）：标题是会变的派生展示字段，新数据只带身份。
+  | { kind: "session"; sessionId: string; title?: string }
+  // 扩展经 Window Host 代发；只由 Host 注入，模型与工具不能设置。
+  | { kind: "extension"; pluginId: string };
 
 export interface TurnInputIntentMetadata {
   planEnabled?: boolean;

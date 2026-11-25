@@ -1,4 +1,8 @@
-import { isAuxiliarySessionKind } from "@zcode/shared";
+import {
+  isAuxiliarySessionKind,
+  ProjectAccessTokenTransientError,
+  ZCODE_PROVIDER_PROJECT_TOKEN_NETWORK_ERROR,
+} from "@zcode/shared";
 import {
   pluginUiToolResultNotificationSchema,
   type PluginUiToolResultNotification,
@@ -28,6 +32,7 @@ import {
   localTtftFactsSchema,
   sessionDebugSnapshotSchema,
   type LocalTtftFacts,
+  type SessionLifecycleSnapshot,
 } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- UWork Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
@@ -54,6 +59,7 @@ import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPl
 import {
   subagentRuntimeConfigSchema,
   zcodeSubagentsReadRuntimeConfigParamsSchema,
+  zcodeSessionReadReplyLanguageParamsSchema,
   type SubagentRuntimeConfig,
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
   formatLogPrefix,
@@ -127,7 +133,9 @@ import {
   zcodeMcpResourceSamplesSchema,
   zcodeToolExecResourceSchema,
   zcodeProcessResourceSampleSchema,
+  zcodeRuntimeCapabilitiesSchema,
   zcodeSessionCloseResultSchema,
+  zcodeSessionReleaseUnderDirectoryResultSchema,
   zcodeSessionCompactResultSchema,
   zcodeSessionEventsResultSchema,
   zcodeSessionGoalResultSchema,
@@ -141,6 +149,7 @@ import {
   zcodeSessionStateSnapshotSchema,
   zcodeSessionSubscribeResultSchema,
   zcodeStateUpdatedNotificationSchema,
+  sessionLifecycleSnapshotSchema,
   zcodeUserInputRequestParamsSchema,
   zcodeWorkspacePresentationSchema,
   zcodeWorkspaceCancelGenerateTextResultSchema,
@@ -179,7 +188,7 @@ import {
   mergeAutomationMutationToolDenylist,
   mergeOffPeakMutationToolDenylist,
 } from "#src/zcode-agent/automationToolPolicy.js";
-import { ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./zcodeAgent.js";
+import { HOST_WORKTREE_COMMAND, ZCODE_AGENT_RUNTIME_UNAVAILABLE_CODE } from "./zcodeAgent.js";
 import type {
   ZCodeProtocolRequestId,
   ModelSelection,
@@ -1003,6 +1012,11 @@ interface CreateZCodeAgentServiceOptions extends Omit<
     workspacePath: string;
     workspaceIdentity?: string;
   }) => Promise<SubagentRuntimeConfig>;
+  /**
+   * Agent 回复语言（同步、只读内存，null 为未设置），应答 CLI 的 session/readReplyLanguage。
+   * 只有 Desktop Host 注入（值由 Main 持有并推送）；未注入的 Host（远端、Web）回答 null。
+   */
+  resolveReplyLanguage?: () => string | null;
   sessionRuntimePreferencesAuthority?: "local" | "external";
   prepareProjectExecution?: (
     projectId: string,
@@ -1216,6 +1230,20 @@ export function resolveOffPeakToolSelection(
     ? selection
     : { ...selection, options: { reasoningLevel: thoughtLevel } };
 }
+
+function isHostWorktreeCommand(params: ZCodeAgentConversationCommandParams): boolean {
+  return (params as { [HOST_WORKTREE_COMMAND]?: unknown })[HOST_WORKTREE_COMMAND] === true;
+}
+
+function assertNoHostOnlyWorktreeFields(envelope: CommandEnvelope): void {
+  const payload = (envelope.payload ?? {}) as Record<string, unknown>;
+  const forbidden =
+    envelope.type === "createSession"
+      ? payload.cwd !== undefined || payload.worktreeCreation !== undefined
+      : envelope.type === "forkAssistant" && payload.targetCwd !== undefined;
+  if (forbidden) throw new Error("worktree.host-only-field");
+}
+
 export function createZCodeAgentService(
   options?: CreateZCodeAgentServiceOptions,
 ): IZCodeAgentService & { disposeAllAndWait(): Promise<void> } {
@@ -1307,6 +1335,10 @@ export function createZCodeAgentService(
     Emitter<ZCodePluginOperationProgressNotification>
   >();
   // v4 conversation 帧 fan-out：workspace 级 emitter，renderer 侧按 topic 自行路由。
+  const sessionLifecycleEmitter = new Emitter<{
+    workspaceKey: string;
+    snapshot: SessionLifecycleSnapshot;
+  }>();
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
   const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryFact>>();
@@ -1356,6 +1388,14 @@ export function createZCodeAgentService(
   >();
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
   const interactionPreferenceSyncByWorkspaceKey = new Map<string, Promise<void>>();
+  /**
+   * runtime/capabilities 的按连接探测结果（docs/git/worktree.md §9.3）。能力集合属于物理 CLI
+   * 连接：换代后 getClient 返回新连接，缓存随之失效；探测失败不缓存，下次调用重试。
+   */
+  const clientCapabilitiesByClient = new WeakMap<
+    ZCodeProtocolClient,
+    Promise<{ worktreeCwd?: boolean }>
+  >();
   let latestAppRuntimePreferences: ZCodeAgentAppRuntimePreferences | undefined;
   /** 服务端「提供」的进程内单次读取；见 resolveDynamicWorkflowGate 的注释。 */
   let dynamicWorkflowOffer: Promise<DynamicWorkflowClientConfig | undefined> | undefined;
@@ -1480,17 +1520,30 @@ export function createZCodeAgentService(
       });
     } catch (error) {
       if (pendingProviderRuntimeHeaders.get(params.key) !== params.pending) return;
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(undefined, "UWork provider runtime headers 应用失败", {
         modelId: params.pending.request.modelSelection.modelId,
         providerId: params.pending.request.providerId,
         requestId: params.pending.request.requestId,
         sessionId: params.pending.request.sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         workspaceKey: resolveWorkspaceKey(params.pending.request.workspace),
       });
+      // Bug 原因（ZCT-2122890271808978944 等）：冷缓存换证遇到断网/超时，原先与其它失败一样回
+      // headersApplied:false，Agent 视为不可重试，整轮在首次模型尝试前结束。
+      // UWork 的换证缓存把请求未拿到 HTTP 响应的故障收窄为 ProjectAccessTokenTransientError
+      // （报文只含 project_token_transient_failure，不带原始响应）；这里只把该类故障改用结构化
+      // RPC 错误码，交给 Agent 的 network_error 预算；鉴权拒绝等其它失败与应答形态保持不变。
+      if (error instanceof ProjectAccessTokenTransientError) {
+        await params.pending.client.respondError(params.pending.protocolRequestId, {
+          code: ZCODE_PROVIDER_PROJECT_TOKEN_NETWORK_ERROR,
+          message: errorMessage,
+        });
+        return;
+      }
       await params.pending.client.respond(params.pending.protocolRequestId, {
         headersApplied: false,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
       });
     } finally {
       if (pendingProviderRuntimeHeaders.get(params.key) === params.pending) {
@@ -2260,6 +2313,17 @@ export function createZCodeAgentService(
           return;
         }
 
+        if (message.method === zcodeProtocolMethods.sessionLifecycleChanged) {
+          if (activeClientsByWorkspaceKey.get(resolveWorkspaceKey(workspace))?.client !== client)
+            return;
+          const parsed = sessionLifecycleSnapshotSchema.safeParse(message.params);
+          if (parsed.success)
+            sessionLifecycleEmitter.fire({
+              workspaceKey: resolveWorkspaceKey(workspace),
+              snapshot: parsed.data,
+            });
+          return;
+        }
         if (message.method === V4_NOTIFICATIONS.localTtftFacts) {
           const parsed = localTtftFactsSchema.safeParse(message.params);
           if (parsed.success && !workspace.remoteSessionId && !workspace.workspaceIdentity?.trim())
@@ -2396,6 +2460,23 @@ export function createZCodeAgentService(
         }
       }),
       client.onRequest((request) => {
+        // 回复语言是 Host 级的值，不按 workspace 路由；从内存同步应答，不做 IO
+        // （docs/i18n/agent-reply-language.md）。UWork 侧由 Desktop Host 注入。
+        if (request.method === zcodeProtocolMethods.sessionReadReplyLanguage) {
+          if (!zcodeSessionReadReplyLanguageParamsSchema.safeParse(request.params).success) {
+            void client
+              .respondError(request.id, {
+                code: -32602,
+                message: "Invalid reply language request",
+              })
+              .catch(() => {});
+            return;
+          }
+          void client
+            .respond(request.id, { language: options?.resolveReplyLanguage?.() ?? null })
+            .catch(() => {});
+          return;
+        }
         if (request.method === zcodeProtocolMethods.subagentsReadRuntimeConfig) {
           void (async () => {
             const parsed = zcodeSubagentsReadRuntimeConfigParamsSchema.safeParse(request.params);
@@ -2694,6 +2775,9 @@ export function createZCodeAgentService(
             });
             return;
           }
+          // 命令进程（plugin-command）没有 MCP：mcpKey 留空，只用 pluginId 归属；
+          // 可信判定不看这两个字段，只看 targetOrigin。
+          const mcpKey = parsed.data.mcpKey ?? "";
           // host 侧二次校验必须发生在**读取凭据之前**：未命中即返回，resolveHeaders 不被调用，
           // 因此不会有任何凭据被读入内存。
           void (async () => {
@@ -2701,7 +2785,7 @@ export function createZCodeAgentService(
             const trust = trustedOrigins
               ? await trustedOrigins
                   .isTrusted({
-                    mcpKey: parsed.data.mcpKey,
+                    mcpKey,
                     origin: parsed.data.targetOrigin,
                     pluginId: parsed.data.pluginId,
                   })
@@ -2712,7 +2796,7 @@ export function createZCodeAgentService(
               // 只记录非敏感的请求上下文；凭据未被读取，自然也无从泄露。
               logger.warn(request.trace?.traceId, "官方 MCP 身份头请求未通过 host 侧可信校验", {
                 detail: trust.detail ?? "unknown",
-                mcpKey: parsed.data.mcpKey,
+                mcpKey,
                 pluginId: parsed.data.pluginId,
                 requestId: parsed.data.requestId,
                 targetOrigin: parsed.data.targetOrigin,
@@ -2735,7 +2819,7 @@ export function createZCodeAgentService(
             try {
               const resolveStartedAt = Date.now();
               const result = await resolver.resolveHeaders({
-                mcpKey: parsed.data.mcpKey,
+                mcpKey,
                 pluginId: parsed.data.pluginId,
                 targetOrigin: parsed.data.targetOrigin,
                 workspace: parsed.data.workspace,
@@ -2745,14 +2829,14 @@ export function createZCodeAgentService(
               if (result.ok) {
                 const firstIssuance = officialMcpIssuanceAudit.markFirst(
                   parsed.data.pluginId,
-                  parsed.data.mcpKey,
+                  mcpKey,
                   parsed.data.workspace.workspaceKey,
                 );
                 const logIssuance = firstIssuance ? logger.info : logger.debug;
                 logIssuance(request.trace?.traceId, "官方 MCP 身份头已解析", {
                   firstIssuance,
                   ...summarizeOfficialMcpIdentityHeaders(result.headers),
-                  mcpKey: parsed.data.mcpKey,
+                  mcpKey,
                   pluginId: parsed.data.pluginId,
                   requestId: parsed.data.requestId,
                   resolveDurationMs: Date.now() - resolveStartedAt,
@@ -2760,7 +2844,7 @@ export function createZCodeAgentService(
                 });
               } else {
                 logger.info(request.trace?.traceId, "官方 MCP 身份头不可用", {
-                  mcpKey: parsed.data.mcpKey,
+                  mcpKey,
                   pluginId: parsed.data.pluginId,
                   reason: result.reason,
                   requestId: parsed.data.requestId,
@@ -2774,7 +2858,7 @@ export function createZCodeAgentService(
               // 且此处绝不能让 MCP 退化成匿名请求。凭证原文不进日志。
               logger.warn(request.trace?.traceId, "官方 MCP 身份头解析失败", {
                 error: error instanceof Error ? error.message : String(error),
-                mcpKey: parsed.data.mcpKey,
+                mcpKey,
                 pluginId: parsed.data.pluginId,
                 requestId: parsed.data.requestId,
                 targetOrigin: parsed.data.targetOrigin,
@@ -3616,6 +3700,7 @@ export function createZCodeAgentService(
     for (const emitter of offPeakLifecycleEmitters.values()) emitter.dispose();
     offPeakLifecycleEmitters.clear();
     localTtftFactsEmitter.dispose();
+    sessionLifecycleEmitter.dispose();
     cuaPermissionObservationEmitter.dispose();
     pluginUiToolResultEmitter.dispose();
     for (const emitter of workspaceConfigFrameEmitters.values()) {
@@ -3661,6 +3746,8 @@ export function createZCodeAgentService(
    *   2. 读取失败 fail-closed 且不再重试，避免离线时每条 create 都赔上一次请求超时；
    *   3. 服务端翻转灰度按设计在下一个 Host 进程生效（provider 侧另有 1h 快照与 forceRefresh）。
    * 与 Off-Peak 不同：远程 workspace 同样可用，所以这里不看 workspaceIdentity / remoteSessionId。
+   * UWork 决策：上游 4.0.0 把「请求失败」改为按需加载（onDemand），从而离线启动也有工作流入口；
+   * 本产品线保持 fail-closed（UWork 自己的策略契约，见 zcodeAgentService.dynamicWorkflowPolicy 测试）。
    */
   function resolveDynamicWorkflowOffer(): Promise<DynamicWorkflowClientConfig | undefined> {
     const resolve = options?.resolveDynamicWorkflowClientConfig;
@@ -3761,6 +3848,9 @@ export function createZCodeAgentService(
     params: ZCodeAgentConversationCommandParams,
   ): Promise<CommandEnvelope> {
     const envelope = params.envelope;
+    // cwd / worktreeCreation / targetCwd 只允许 Host 的 worktree 服务设置（docs/git/worktree.md §5.1）：
+    // 渲染进程与手机经 RPC 传来的 JSON 无法携带 Symbol 键，因此不能伪造。
+    if (!isHostWorktreeCommand(params)) assertNoHostOnlyWorktreeFields(envelope);
     if (envelope.type === "createSession") {
       const { dynamicWorkflowEnabled, dynamicWorkflowMode } =
         await resolveDynamicWorkflowSessionFlags();
@@ -5503,6 +5593,48 @@ export function createZCodeAgentService(
       return result.closed ?? true;
     },
 
+    async releaseSessionsUnderDirectory(params) {
+      // 绝不为卸载拉起 CLI：没有进程时没有驻留会话。
+      const client = processManager.getExistingClient(params);
+      if (!client || client.isDisposed) return { released: [], busy: [] };
+      return await client.request(
+        zcodeProtocolMethods.sessionReleaseUnderDirectory,
+        { directory: params.directory },
+        zcodeSessionReleaseUnderDirectoryResultSchema,
+      );
+    },
+
+    async queryCommandResult(params) {
+      // 命令结果是 CLI 的事实；进程已退出时以只读方式拉起，读取持久化的命令记录。
+      const client = await getReadOnlyClient(params);
+      const query = commandsQueryParamsSchema.parse({ commands: [params.key] });
+      const result = await client.request(
+        V4_METHODS.commandsQuery,
+        query,
+        commandsQueryResultSchema,
+      );
+      return result.results[0]?.result ?? "unknown";
+    },
+
+    async supportsWorktreeCwd(target) {
+      const client = await getClient(target);
+      let capabilities = clientCapabilitiesByClient.get(client);
+      if (!capabilities) {
+        capabilities = client.request(
+          zcodeProtocolMethods.runtimeCapabilities,
+          {},
+          zcodeRuntimeCapabilitiesSchema,
+        );
+        clientCapabilitiesByClient.set(client, capabilities);
+        capabilities.catch(() => {
+          // 探测失败不缓存：CLI 可能只是启动期暂不可用，下次调用重试。
+          clientCapabilitiesByClient.delete(client);
+        });
+      }
+      // 能力集合属于连接；未声明（旧 CLI）按不支持处理。
+      return (await capabilities).worktreeCwd === true;
+    },
+
     async setModel(params: ZCodeAgentSetModelParams) {
       const startedAt = Date.now();
       const client = await getClient(params);
@@ -6566,6 +6698,12 @@ export function createZCodeAgentService(
       return getConversationFrameEmitter(params).event;
     },
 
+    onDynamicSessionLifecycle(params: ZCodeAgentWorkspaceTarget) {
+      return (listener: (snapshot: SessionLifecycleSnapshot) => void) =>
+        sessionLifecycleEmitter.event((event) => {
+          if (event.workspaceKey === resolveWorkspaceKey(params)) listener(event.snapshot);
+        });
+    },
     onDynamicLocalTtftFacts(params: ZCodeAgentWorkspaceTarget) {
       return (listener: (facts: LocalTtftFacts) => void) =>
         localTtftFactsEmitter.event((event) => {

@@ -1,4 +1,9 @@
 import { subagentProfilesFromSnapshot } from "../runtime-subagents/index.js";
+import {
+  createCliSessionControlRuntime,
+  type CliSessionControlRuntime,
+} from "../cli-session-control/index.js";
+import type { SessionControlBinding } from "@zcode/core/session-control";
 import { CliDefaultSelection } from "./cli-default-selection.js";
 import { isAbsolute, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,7 +12,11 @@ import {
   createNodeToolArtifactStore,
 } from "@zcode/adapters/storage";
 import { createNodeLoggerFactory } from "@zcode/adapters/logging";
-import { createConfig, resolvePath } from "@zcode/adapters/config";
+import {
+  createConfig,
+  resolvePath,
+  resolveWorkspaceHookTrustIdentityForWorkspace,
+} from "@zcode/adapters/config";
 import {
   createNodeExecutionAdapter,
   resolveEffectiveBashShellSelection,
@@ -38,6 +47,7 @@ import {
   createSessionEvent,
   type ExecutionShellSelection,
   type MessageId,
+  type SessionId,
 } from "@zcode/contracts";
 import { isRemoteWorkspaceIdentity, resolveZCodeRuntimeEnv } from "@zcode/shared";
 import {
@@ -169,6 +179,14 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   const sessionId = options.sessionId ?? createSessionId();
   const traceContext = options.traceContext ?? createRootTraceContext({ sessionId });
   const workingDirectory = resolve(options.runtimeConfig?.workingDirectory ?? process.cwd());
+  // Hook Trust identity（D23）：受管 worktree 归一为源仓库路径，snapshot 与 Trust record 共用该键。
+  const workspaceHookTrustIdentity = await resolveWorkspaceHookTrustIdentityForWorkspace({
+    workspacePath: workingDirectory,
+    ...(options.runtimeConfig?.memory?.workspaceIdentity?.trim()
+      ? { workspaceIdentity: options.runtimeConfig.memory.workspaceIdentity.trim() }
+      : {}),
+    ...(options.env ? { env: options.env } : {}),
+  });
   const configResult = resolveEffectiveConfigResult(
     createConfig({
       env: options.env,
@@ -215,6 +233,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   let nodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let ownedNodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let providerModelRuntime: ApiProviderModelRuntime | undefined;
+  let standaloneSessionControl: CliSessionControlRuntime | undefined;
   try {
     const storageRoot = resolvePath(configResult.config.storage.dir);
     const cliStorageRoot = getCliStorageRoot(storageRoot);
@@ -271,8 +290,87 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
     const ownsSessionStore = options.sessionStore === undefined;
     const sessionStore =
       options.sessionStore ?? (await openStartupSessionStore(configResult, startupTimer));
+    let sessionControl = options.sessionControl;
+    let standaloneRootProvenance: "new-independent-root" | "unverified-history" =
+      "unverified-history";
+    if (options.standaloneSessionControl) {
+      if (
+        sessionControl ||
+        options.runtimeConfig?.parentSessionId ||
+        options.runtimeConfig?.workspaceIdentity
+      ) {
+        throw new Error("Standalone session control requires an independent local CLI root");
+      }
+      // borrowed 只说明 app.close 的责任；新建根已有唯一启动 owner，应保留 rename/send 能力。
+      // resume 或复用历史 ID 不证明独立来源，不能因当前进程拿到 runtime 就把历史升级为可写目标。
+      if (options.resume !== true && !(await sessionStore.getSession(sessionId))) {
+        standaloneRootProvenance = "new-independent-root";
+      }
+      const workspace = { kind: "cli" as const, workspacePath: workingDirectory };
+      const bindRoot = (rootId: SessionId): SessionControlBinding => ({
+        kind: "cli",
+        control: standaloneSessionControl!.control,
+        context: () => ({
+          callerId: rootId,
+          rootSession: { ...workspace, sessionId: rootId },
+          allowedScopes: [workspace],
+          // 独立 CLI 的读取不要求 owner：list/read 可访问本机 CLI 会话库，写操作仍只看 allowedScopes。
+          readAnyLocalSession: true,
+        }),
+      });
+      standaloneSessionControl = createCliSessionControlRuntime({
+        workspace,
+        sessionStore,
+        createRootApp: async (request) => {
+          // 新根只借用基础设施和独立 CLI 配置，不展开 actor 的 runtimeConfig、yolo 或审批结果。
+          const target = await createZCodeApp({
+            sessionId: request.sessionId,
+            resume: request.resume,
+            traceContext: request.traceContext,
+            sessionStore,
+            sessionControl: bindRoot(request.sessionId),
+            // Bug 根因：后台根原先不传交互端口，Core 退回拒绝 broker，需要审批的工具被直接拒绝、
+            // 用户看不到询问。改为共用启动方的同一个询问通道（TUI 审批队列 / headless 拒绝）；
+            // 只共用通道，不共用批准结果，权限模式仍固定 build。
+            permissionBroker: options.permissionBroker,
+            providerRegistry: options.providerRegistry,
+            configuredDefaultModelSelection: options.configuredDefaultModelSelection,
+            providerEndpointRoutingPort: options.providerEndpointRoutingPort,
+            providerRuntimeHeadersPort: options.providerRuntimeHeadersPort,
+            modelAdapter: options.modelAdapter,
+            env: options.env,
+            skipUserConfig: options.skipUserConfig,
+            userConfigPath: options.userConfigPath,
+            version: options.version,
+            runtimeConfig: {
+              workingDirectory: request.cwd,
+              taskType: request.resume ? "fork" : "interactive",
+              mode: "build",
+            },
+          });
+          if (request.model) {
+            try {
+              await target.setModel(request.model);
+            } catch (error) {
+              await target.close?.();
+              throw error;
+            }
+          }
+          return target;
+        },
+      });
+      sessionControl = bindRoot(sessionId);
+    }
     const localSettingStore = asLocalSettingStore(sessionStore);
-    const projectID = projectIdFromDirectory(workingDirectory);
+    // 受管 worktree 会话的项目身份（权限 project_id、项目记忆）映射回源仓库路径，与 Hook Trust
+    // 继承同一 resolver（docs/git/worktree.md §6.6.3）。远程 workspace 的 Trust identity 是
+    // 不透明身份而不是目录，保持按工作目录派生；映射失败时 resolver 已退回工作目录。
+    const projectDirectory =
+      !options.runtimeConfig?.memory?.workspaceIdentity?.trim() &&
+      workspaceHookTrustIdentity !== workingDirectory
+        ? workspaceHookTrustIdentity
+        : undefined;
+    const projectID = projectIdFromDirectory(projectDirectory ?? workingDirectory);
     const persistedMode = options.runtimeConfig?.mode
       ? undefined
       : readProjectPermissionMode(localSettingStore, projectID);
@@ -319,6 +417,10 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         ),
       };
     }
+    if (projectDirectory) runtimeConfig.projectDirectory = projectDirectory;
+    // 协议入口给出会话所属 workspace 的 key（受管 worktree 会话 = 项目）；MCP 工具调用与官方 MCP
+    // 授权头以它为身份，不按工作目录重算（docs/git/worktree.md §9.3）。
+    if (options.workspaceKey) runtimeConfig.workspaceKey = options.workspaceKey;
     startupTimer.mark("UWork runtime configuration resolved", {
       context: runtimeConfigLogContext(runtimeConfig, workingDirectory),
       event: "bootstrap.app.startup.runtime_config.completed",
@@ -889,6 +991,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       dynamicWorkflowRunPort,
       dynamicWorkflowSnippetPort,
       modelCatalogPort,
+      sessionControl,
       automationPort: options.automationPort,
       offPeakPort: options.offPeakPort,
       topicResourcePort: options.topicResourcePort,
@@ -1049,7 +1152,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       }
       return { ref, mediaType, ...(artifactUri ? { artifactUri } : {}) };
     };
-    return {
+    const app: ZCodeApp = {
       sessionId,
       traceId: traceContext.traceId,
       runtime,
@@ -1238,7 +1341,12 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       ...sessionFacade,
       close: async () => {
         try {
-          await closeSession?.();
+          // 先关闭 manager 准入并等后台根中断落盘，再让发起会话关闭其拥有的共享存储。
+          try {
+            await standaloneSessionControl?.close();
+          } finally {
+            await closeSession?.();
+          }
         } finally {
           try {
             providerModelRuntime?.dispose();
@@ -1413,7 +1521,10 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       resume: resumeFromStore,
       ...inputFacade,
     };
+    standaloneSessionControl?.attachRoot(app, standaloneRootProvenance);
+    return app;
   } catch (error) {
+    await standaloneSessionControl?.close();
     providerModelRuntime?.dispose();
     void modelTelemetry.shutdown().catch(() => undefined);
     void ownedNodeReplBrowserBroker?.close();

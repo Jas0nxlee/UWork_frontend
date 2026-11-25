@@ -62,6 +62,8 @@ import type {
   SaveFileRequest,
   SaveFileResult,
   PrintPageToPdfResult,
+  CaptureBrowserGuestPageRequest,
+  CaptureBrowserGuestPageResult,
   OpenInEditorOptions,
   PostUpdateReleaseNotesPayload,
   RemoteSessionClosedEvent,
@@ -115,6 +117,8 @@ export const ServiceChannels = {
   /** ZCode session 应用服务 */
   ZCodeSession: "zcode-session",
   Project: "project",
+  /** 受管 worktree 任务管理（列表、删除、起点、fork 到新 worktree），仅本地桌面 Host。 */
+  ManagedWorktrees: "managed-worktrees",
   TaskGroups: "task-groups",
   RemoteProjects: "remote-projects",
   /** 手机远端 attachment 的窗口目录；原 project 继续属于工作区。 */
@@ -228,6 +232,8 @@ export const PlatformChannels = {
   SaveFile: "zcode:save-file",
   /** Renderer → Main：用 Chromium 打印引擎把当前页面 print 媒体版面导出为 PDF */
   PrintToPdf: "zcode:print-to-pdf",
+  /** Renderer → Main：在 main 截取内置浏览器 guest 当前视口为 PNG（renderer 侧 capturePage 会崩溃） */
+  CaptureBrowserGuestPage: "zcode:capture-browser-guest-page",
   /** Main → Renderer：转发远程连接过程日志 */
   RemoteConnectionLog: "zcode:remote-connection-log",
   /** Main → Renderer：远程 workspace session 已关闭 */
@@ -531,6 +537,22 @@ export type PlatformChannelName = (typeof PlatformChannels)[keyof typeof Platfor
 export const EmbeddedBrowserWebviewChannels = {
   /** Guest 无法继续消费某方向的滚动时，把二维 delta 转交自由尺寸画布。 */
   WheelBoundary: "zcode:embedded-browser-wheel-boundary",
+  /**
+   * 设计运行时的页面事件（docs/browser-use/2026-11-03-browser-design-mode-spec.md）：页面主世界
+   * `window.postMessage` 带命名空间的信封，preload 校验后把 `events` 数组转给宿主。
+   */
+  DesignEvents: "zcode:embedded-browser-design-events",
+  /**
+   * 页面上按下 Cmd/Ctrl + Z（Shift 为重做），且按键当下的目标不是可编辑元素：preload 隔离世界只认 isTrusted 的按键，
+   * 页面脚本发不出这条，设计工具据此撤销 / 重做源码写回。
+   */
+  DesignUndoShortcut: "zcode:embedded-browser-design-undo-shortcut",
+} as const;
+
+/** 设计运行时 postMessage 信封：`{ [messageKey]: 1, events: unknown[] }`；events 序列化后超过上限（UTF-8 字节）的消息 preload 直接丢弃。 */
+export const EMBEDDED_BROWSER_DESIGN_BRIDGE = {
+  messageKey: "__zcodeDesign",
+  maxMessageBytes: 256 * 1024,
 } as const;
 
 export interface EmbeddedBrowserWheelBoundaryPayload {
@@ -814,6 +836,10 @@ export interface PlatformChannelMap {
   [PlatformChannels.PrintToPdf]: {
     request: void;
     response: PrintPageToPdfResult;
+  };
+  [PlatformChannels.CaptureBrowserGuestPage]: {
+    request: CaptureBrowserGuestPageRequest;
+    response: CaptureBrowserGuestPageResult;
   };
   [PlatformChannels.RemoteConnectionLog]: {
     request: {

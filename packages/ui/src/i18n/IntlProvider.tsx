@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { Locale, LocalePreference } from "@zcode/shared";
-import { DEFAULT_LOCALE } from "@zcode/shared";
+import { DEFAULT_LOCALE, toZhOrEnLocale } from "@zcode/shared";
 import type { BroadcastMessage, IBroadcastService, ISettingService } from "@zcode/services";
 import {
   readNavigatorLanguage,
@@ -19,8 +19,11 @@ import {
 import zhCN from "./locales/zh-CN.js";
 import enUS from "./locales/en-US.js";
 
-/** 语言 → 翻译消息映射 */
-const MESSAGES: Record<Locale, Record<string, string>> = {
+/**
+ * 语言 → 翻译消息映射。
+ * 桌面端目前只内置中英两套文案；ja-JP/ru-RU/ko-KR 等其它界面语言回退英文。
+ */
+const MESSAGES: Record<"zh-CN" | "en-US", Record<string, string>> = {
   "zh-CN": zhCN,
   "en-US": enUS,
 };
@@ -111,8 +114,8 @@ export function shouldApplyLocaleBroadcastMessage(
 }
 
 function createIntl(locale: Locale): IntlInstance {
-  // noUncheckedIndexedAccess：用 ?? 回退到默认语言的翻译
-  const messages = MESSAGES[locale] ?? MESSAGES[DEFAULT_LOCALE]!;
+  // 只内置中英两套文案；其它界面语言回退英文。
+  const messages = MESSAGES[toZhOrEnLocale(locale)] ?? MESSAGES["en-US"];
   return {
     formatMessage({ id }, values) {
       let msg = messages[id] ?? id;

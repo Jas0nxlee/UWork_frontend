@@ -47,7 +47,7 @@ pnpm audit --prod --audit-level=high --json > dependency-audit.json
 
 三个已踩过的坑：
 
-- **`max-lines`（400）是 error**：新增或扩容的数据表 / 用例表很容易越线（`packages/ui/scripts/lib/officePptxEditCases.mjs` 就因此让 CI 红过）。仓库既有做法是在文件头加 `/* eslint-disable max-lines -- <为什么拆不开> */`（见 `scripts/licenses.mjs`、`scripts/upstream-track.mjs`）。
+- **`max-lines`（400）是 error**：新增或扩容的数据表 / 用例表很容易越线（`packages/ui/scripts/lib/officePptxEditCases.mjs` 就因此让 CI 红过）。仓库既有做法是在文件头加 `/* eslint-disable max-lines -- <为什么拆不开> */`（见 `scripts/licenses.mjs`、`scripts/upstream-track.mjs`）；**原样引入的上游存量大文件不要加行内注释**——那会破坏与上游的逐字节一致（架构按 upstream snapshot 准入、以后叠上游增量靠它），改为把精确路径登记到 `.oxlintrc.json` 的 overrides（800 行档，见该文件首段注释）。
 - **CI 里点名的测试文件允许不存在**：Vitest 的位置参数是过滤器，只要还有一个匹配就不报错（例如 `packages/ui/test/v4ConversationDraftEmptyStateLogo.test.ts` 已随上游 3.16.2 删除，CI 仍然绿）。
 - `pnpm install --frozen-lockfile` 与 `pnpm audit` 需要网络；离线环境跑不了这两步，别把它们当成"已通过"。
 

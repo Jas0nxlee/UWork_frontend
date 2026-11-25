@@ -118,6 +118,25 @@ export interface BrowserViewCloseTabRequest {
 }
 
 export const LOCAL_MEDIA_PREVIEW_SCHEME = "zcode-media";
+export const BROWSER_LOCAL_PREVIEW_SCHEME = "zcode-html";
+
+/** 仅还原展示/外部打开地址；目录授权和签名校验始终由 main 执行。 */
+export function browserPreviewSourceUrl(input: string): string {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== `${BROWSER_LOCAL_PREVIEW_SCHEME}:`) return input;
+    const [, directory, ...segments] = url.pathname.split("/");
+    const root = new URL(decodeURIComponent(directory ?? ""));
+    if (root.protocol !== "file:" || root.host || !root.pathname.endsWith("/")) return input;
+    const source = new URL(segments.join("/"), root);
+    if (!source.href.startsWith(root.href)) return input;
+    source.search = url.search;
+    source.hash = url.hash;
+    return source.href;
+  } catch {
+    return input;
+  }
+}
 
 export function buildLocalMediaPreviewUrl(path: string): string {
   const url = new URL(`${LOCAL_MEDIA_PREVIEW_SCHEME}://local/preview`);
@@ -324,6 +343,31 @@ export interface PrintPageToPdfResult {
   /** PDF 字节；success 时存在 */
   data?: ArrayBuffer;
   /** "print_in_progress" | "print_failed" */
+  error?: string;
+}
+
+/** guest 视口内的裁剪区域，全部是 guest CSS px；视口宽高用于换算实际帧的像素比例。 */
+export interface CaptureBrowserGuestPageClip {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+export interface CaptureBrowserGuestPageRequest {
+  /** 内置浏览器 `<webview>` 的 guest webContents id（renderer 由 `getWebContentsId()` 取得） */
+  webContentsId: number;
+  /** 只要视口内某一块（选元素截图）；不传时返回整个可见视口 */
+  clip?: CaptureBrowserGuestPageClip;
+}
+
+export interface CaptureBrowserGuestPageResult {
+  success: boolean;
+  /** PNG 字节；success 时存在 */
+  data?: ArrayBuffer;
+  /** "guest_not_found" | "guest_not_owned" | "capture_in_progress" | "capture_timeout" | "capture_failed" | "clip_out_of_view" */
   error?: string;
 }
 
@@ -661,6 +705,7 @@ export const DesktopCommandIds = {
   OpenChangelog: "openChangelog",
   CheckForUpdates: "checkForUpdates",
   RelaunchApp: "relaunchApp",
+  RestartAfterCrash: "restartAfterCrash",
   OpenFeedback: "openFeedback",
   OpenCommunity: "openCommunity",
   ExportLogs: "exportLogs",
@@ -734,6 +779,14 @@ export interface IPlatformService {
    * 页面尺寸由 renderer 注入的 @page CSS 决定（preferCSSPageSize）；仅 Desktop 实现。
    */
   printPageToPdf?(): Promise<PrintPageToPdfResult>;
+
+  /**
+   * 在 main 进程截取内置浏览器 guest 当前可见视口为 PNG。renderer 侧 `<webview>.capturePage()`
+   * 会让 renderer 原生崩溃（V8 FATAL），与 Agent 截图一样只能由 main 取帧；仅 Desktop 实现。
+   */
+  captureBrowserGuestPage?(
+    payload: CaptureBrowserGuestPageRequest,
+  ): Promise<CaptureBrowserGuestPageResult>;
 
   /**
    * 从浏览器 File 对象解析宿主本地路径；只有 Desktop preload 能安全实现。
@@ -958,7 +1011,7 @@ export interface IPlatformService {
   ): () => void;
   /** Renderer → Main：发送已结束的 ui_action batch；严格旁路、fire-and-forget。 */
   reportRendererActionTraceBatch?(batch: RendererActionTraceBatchV1): void;
-  reportLocalTtftBatch?(batch: import("./localTtft.js").LocalTtftBatch): void;
+  reportLocalTtftBatch?(batch: import("./local-ttft/contract.js").LocalTtftBatch): void;
 
   /**
    * Renderer → Main：主窗口 renderer 每 60 秒的 heap 读数，进 `renderer_main` 角色事件。单向 send、fire-and-forget；
@@ -1250,6 +1303,12 @@ export interface IPlatformService {
 
   /** 同步应用菜单语言，驱动 main 进程重建原生菜单 */
   setApplicationLocale(locale: Locale): Promise<void>;
+
+  /**
+   * 保存 Agent 回复语言（空串清除）；Main 写盘后推送给各窗口 Host。
+   * 只有桌面端实现：Web 远控不写本机设置，设置页按方法缺失显示本机提示。
+   */
+  setReplyLanguage?(language: string): Promise<void>;
 
   /** 同步桌面标题栏亮/暗色，驱动原生窗口控制按钮配色 */
   setTitleBarTheme(theme: DesktopTitleBarTheme): Promise<void>;

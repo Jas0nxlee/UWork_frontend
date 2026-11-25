@@ -75,6 +75,35 @@ export function createToolHandlerFailureError(
   });
 }
 
+/**
+ * 规格 0.15：给超时与执行中取消的错误追加工具提供的对账说明。
+ *
+ * 只认这两种错误：只有它们会在「请求可能已被受理」之后打断 handler。handler 自己抛出的错误发生在它
+ * 能返回结构化结果的位置，不在此列。生成同类型新错误并复制原错误的字段，不修改原对象（handler
+ * 抛出的错误可能被共享），也不再套一层 cause——那会让错误详情里出现两段重复文本。
+ */
+export function annotateUnsettledCall(
+  error: Error,
+  entry: { describeUnsettledCall?: (input: unknown, toolCallId: string) => string | undefined },
+  input: unknown,
+  toolCallId: string,
+): Error {
+  if (!isCoreError(error)) return error;
+  if (error.type !== CoreErrorType.ToolTimeout && error.type !== CoreErrorType.ToolCancelled) {
+    return error;
+  }
+  const note = entry.describeUnsettledCall?.(input, toolCallId);
+  if (!note) return error;
+  const annotated = createCoreError(error.type, `${error.message} ${note}`, {
+    ...(error.cause instanceof Error ? { cause: error.cause } : {}),
+    ...(error.context ? { context: error.context } : {}),
+    recoverable: error.recoverable,
+    retryable: error.retryable,
+  });
+  annotated.stack = error.stack;
+  return annotated;
+}
+
 export function isToolHandlerFailure(value: unknown): value is ToolHandlerFailure {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const candidate = value as Partial<ToolHandlerFailure>;

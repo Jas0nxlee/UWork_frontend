@@ -826,6 +826,32 @@ const enUS: Record<string, string> = {
     "The share service returned an unreadable response. Try again later.",
   "conversationShare.issue.unknown":
     "Sharing failed; the cause could not be determined. Retry, and provide the error details if it persists.",
+  "conversationShare.issue.unsupportedContent":
+    "Some content in turn {turnOrdinal} is in a format the share service does not support. Update UWork, or deselect the turn and share again.",
+  "conversationShare.issue.artifactTypeRejected":
+    "{artifactDisplayName} ({artifactType}) in turn {turnOrdinal} cannot be shared. Deselect the turn and try again.",
+  "conversationShare.issue.artifactFormatMismatch":
+    "The extension of {artifactDisplayName} in turn {turnOrdinal} does not match its actual format. Fix the extension or export the file again, or deselect the turn.",
+  "conversationShare.issue.artifactDimensionsExceeded":
+    "{artifactDisplayName} in turn {turnOrdinal} is too large (max 8192 pixels per side). Resize it and try again, or deselect the turn.",
+  "conversationShare.issue.artifactCorrupted":
+    "{artifactDisplayName} in turn {turnOrdinal} is damaged or incomplete. Export it again and retry, or deselect the turn.",
+  "conversationShare.issue.artifactEncodingInvalid":
+    "{artifactDisplayName} in turn {turnOrdinal} is not UTF-8 encoded. Convert it and try again, or deselect the turn.",
+  "conversationShare.issue.artifactUploadRejected":
+    "{artifactDisplayName} in turn {turnOrdinal} cannot be uploaded. Deselect the turn and try again. If it still fails, copy the request ID from the error details and report it.",
+  "conversationShare.issue.artifactUploadMissing":
+    "{artifactDisplayName} was not fully uploaded. Try again.",
+  "conversationShare.issue.artifactUploadMissingAny":
+    "Some files were not fully uploaded. Try again.",
+  "conversationShare.issue.contentBlocksLimit":
+    "The selection contains {actual} content blocks, above the limit of {limit}. Select fewer turns.",
+  "conversationShare.issue.preparationStale":
+    "This share attempt is no longer valid. Generate the link again.",
+  "conversationShare.issue.conversationSafetyRejected":
+    "The conversation text did not pass the safety check. Select fewer turns or adjust the selection, then try again.",
+  "conversationShare.issue.artifactSafetyRejected":
+    "{artifactDisplayName} in turn {turnOrdinal} did not pass the safety check. Deselect the turn or remove the file, then try again.",
   "conversationShare.issue.details": "Error details",
   "conversationShare.issue.requestIdLabel": "Server request ID",
   "conversationShare.issue.requestId": "Server request ID: {requestId}",
@@ -1464,6 +1490,10 @@ const enUS: Record<string, string> = {
   "browser.reload": "Refresh",
   "browser.more": "More browser actions",
   "browser.openExternal": "Open in default browser",
+  "browser.export.png": "Export as PNG",
+  "browser.export.pdf": "Export as PDF",
+  "browser.export.success": "Exported to {path}",
+  "browser.export.failed": "Export failed. Try again.",
   "browser.devtools": "Open DevTools",
   "browser.responsive.enter": "Free-size viewport",
   "browser.responsive.exit": "Exit free-size viewport",
@@ -1475,6 +1505,75 @@ const enUS: Record<string, string> = {
   "browser.responsive.zoom": "Browser preview zoom",
   "browser.responsive.fitToWindow": "Fit to window",
   "browser.responsive.dimensionRangeError": "Enter an integer between {min} and {max}",
+  "browser.design.pluginRequired.title": "Design plugin required",
+  "browser.design.pluginRequired.description":
+    "Selecting elements requires the Design plugin to be installed and enabled. Open its plugin page to set it up.",
+  "browser.design.pluginRequired.action": "Open plugin page",
+  "browser.design.pluginCheckFailed": "Could not load the Design plugin status. Please try again.",
+  "browser.design.toolbar": "Design tools",
+  "browser.design.contextUnavailable":
+    "No composer can receive this. Open an editable conversation first.",
+  "browser.design.panel": "Adjust panel",
+  "browser.design.variant": "Version",
+  "browser.design.variant.all": "All versions",
+  "browser.design.slidePrev": "Previous slide",
+  "browser.design.slideNext": "Next slide",
+  "browser.design.inspector.title": "Adjust panel",
+  "browser.design.inspector.layout": "Layout",
+  "browser.design.inspector.empty":
+    "Click an element on the page to inspect and edit it. Shift-click to select more.",
+  "browser.design.inspector.selectedCount": "{count} selected",
+  "browser.design.inspector.close": "Close adjust panel",
+  "browser.design.inspector.width": "W",
+  "browser.design.inspector.height": "H",
+  "browser.design.edit.typography": "Text",
+  "browser.design.edit.content": "Text",
+  "browser.design.edit.fontSize": "Font size",
+  "browser.design.edit.fontWeight": "Weight",
+  "browser.design.edit.weight.300": "Light",
+  "browser.design.edit.weight.400": "Regular",
+  "browser.design.edit.weight.500": "Medium",
+  "browser.design.edit.weight.600": "Semibold",
+  "browser.design.edit.weight.700": "Bold",
+  "browser.design.edit.weight.800": "Extra bold",
+  "browser.design.edit.textAlign": "Alignment",
+  "browser.design.edit.align.left": "Align left",
+  "browser.design.edit.align.center": "Center",
+  "browser.design.edit.align.right": "Align right",
+  "browser.design.edit.color": "Text color",
+  "browser.design.edit.appearance": "Appearance",
+  "browser.design.edit.borderRadius": "Corner radius",
+  "browser.design.edit.opacity": "Opacity",
+  "browser.design.edit.fill": "Fill",
+  "browser.design.edit.background": "Background",
+  "browser.design.edit.padding": "Padding",
+  "browser.design.edit.paddingTop": "Top",
+  "browser.design.edit.paddingRight": "Right",
+  "browser.design.edit.paddingBottom": "Bottom",
+  "browser.design.edit.paddingLeft": "Left",
+  "browser.design.edit.parent": "Select parent",
+  "browser.design.edit.kind.button": "Button",
+  "browser.design.edit.kind.heading": "Heading",
+  "browser.design.edit.kind.text": "Text",
+  "browser.design.edit.kind.link": "Link",
+  "browser.design.edit.kind.image": "Image",
+  "browser.design.edit.kind.container": "Box",
+  "browser.design.edit.pageColors": "Page colors",
+  "browser.design.edit.customColor": "Custom",
+  "browser.design.variables": "Variables",
+  "browser.design.variables.empty": "This page has no adjustable variables",
+  "browser.design.source.pageUnavailable":
+    "View only here. To change it, tell the agent in the composer.",
+  "browser.design.source.notMatched":
+    "This element is generated by the page, so it's view only here. To change it, tell the agent in the composer.",
+  "browser.design.source.notFound": "This element wasn't found in the source. Nothing was written.",
+  "browser.design.source.changed":
+    "The file was just changed by someone else. Nothing was written.",
+  "browser.design.source.undoUnavailable": "The file has changed since. Undo is unavailable.",
+  "browser.design.source.writeFailed":
+    "Couldn't read or write the source file. Nothing was written.",
+  "browser.design.source.unreadable":
+    "To keep this file safe, it's view only here. To change it, tell the agent in the composer.",
   "browser.elementPicker.start": "Select page element for chat",
   "browser.elementPicker.cancel": "Cancel element selection",
   "browser.elementPickerFailed": "Failed to select page element: {message}",
@@ -8588,6 +8687,91 @@ const enUS: Record<string, string> = {
   "im.reportStatusReviewed": "Reviewed",
   "im.reportStatusReturned": "Returned",
   "im.departmentUnknown": "No department",
+  "project.worktrees": "Worktrees",
+  "git.managedWorktree.name": "{repo} · {bucket}",
+  "git.managedWorktree.error.not-repository": "The project folder isn't a Git repository",
+  "git.managedWorktree.error.invalid-start-ref": "The selected starting point doesn't exist",
+  "git.managedWorktree.error.start-ref-missing-subdir":
+    "The selected starting point doesn't contain the project folder",
+  "git.managedWorktree.error.bucket-exhausted": "Couldn't allocate a worktree folder",
+  "git.managedWorktree.error.worktree-dirty": "The worktree has uncommitted changes",
+  "git.managedWorktree.error.worktree-in-use": "A task is using this worktree",
+  "git.managedWorktree.error.not-managed": "This folder isn't a worktree managed by ZCode",
+  "git.managedWorktree.error.local-only": "Worktrees are available only for local projects",
+  "git.managedWorktree.error.git-failed": "The Git operation failed",
+  "git.managedWorktree.error.task-immovable": "Worktree tasks can't be moved to another project",
+  "git.managedWorktree.error.generic": "The worktree operation failed",
+  "git.managedWorktree.toggle.label": "worktree",
+  "git.managedWorktree.toggle.tooltip":
+    "Run in a new worktree: an isolated copy that works in parallel with your local checkout",
+  "git.managedWorktree.ref.title": "Create the new worktree from",
+  "git.managedWorktree.ref.currentHead": "Current HEAD ({ref})",
+  "git.managedWorktree.ref.detached": "detached · {sha}",
+  "git.managedWorktree.ref.localBranches": "Local branches",
+  "git.managedWorktree.ref.remoteBranches": "Remote branches",
+  "git.managedWorktree.ref.note":
+    "The new worktree is created from the selected branch. Your local branch does not change. Uncommitted changes are not included.",
+  "git.managedWorktree.creation.creating": "Creating worktree",
+  "git.managedWorktree.creation.startingSession": "Starting task",
+  "git.managedWorktree.creation.failed": "Worktree setup failed",
+  "git.managedWorktree.creation.forkTitle": "Fork in a new worktree",
+  "git.managedWorktree.creation.retry": "Retry",
+  "git.managedWorktree.creation.continueLocal": "Don't use worktree",
+  "git.managedWorktree.creation.dismiss": "Dismiss",
+  "git.managedWorktree.creation.showOutput": "Show output",
+  "git.managedWorktree.creation.hideOutput": "Hide output",
+  "git.managedWorktree.creation.sidebarRow": "Creating worktree…",
+  "git.managedWorktree.created.title": "Worktree created",
+  "git.managedWorktree.error.slash-unsupported":
+    "The first message of a worktree task can't be a command",
+  "git.managedWorktree.error.copy-failed": "Couldn't copy files listed in .worktreeinclude",
+  "git.managedWorktree.error.session-failed":
+    "The worktree was created, but the task failed to start",
+  "git.managedWorktree.error.unsupported-agent": "This Agent version doesn't support worktrees",
+  "git.managedWorktree.error.carry-failed":
+    "Couldn't carry uncommitted changes into the new worktree",
+  "git.managedWorktree.error.session-close-failed":
+    "Couldn't unload the tasks using this worktree. The worktree was kept.",
+  "git.managedWorktree.error.command-unconfirmed":
+    "Couldn't confirm whether the task started. Nothing was deleted. Try again later.",
+  "git.managedWorktree.error.removing": "This worktree is being deleted. Try again later.",
+  "git.managedWorktree.dialog.title": "Worktrees",
+  "git.managedWorktree.dialog.description": "Worktrees that ZCode manages for {project}",
+  "git.managedWorktree.dialog.loadFailed": "Couldn't load worktrees",
+  "git.managedWorktree.dialog.empty": "No worktrees yet",
+  "git.managedWorktree.dialog.detached": "detached · {sha}",
+  "git.managedWorktree.dialog.dirty": "Modified",
+  "git.managedWorktree.dialog.missing": "Directory missing",
+  "git.managedWorktree.dialog.noTasks": "No tasks",
+  "git.managedWorktree.dialog.openTask": "Open task",
+  "git.managedWorktree.dialog.untitledTask": "Untitled task",
+  "git.managedWorktree.dialog.archived": "Archived",
+  "git.managedWorktree.dialog.delete": "Delete worktree",
+  "git.managedWorktree.dialog.prune": "Remove record",
+  "git.managedWorktree.dialog.pruneFailed": "Couldn't remove the record",
+  "git.managedWorktree.dialog.openInEditorFailed": "Couldn't open in {editor}",
+  "git.managedWorktree.dialog.confirm.title": "Delete worktree {name}?",
+  "git.managedWorktree.dialog.confirm.directory": "The worktree directory will be deleted.",
+  "git.managedWorktree.dialog.confirm.ignored":
+    "Ignored files, such as dependencies and build output, are also deleted.",
+  "git.managedWorktree.dialog.confirm.tasks":
+    "Tasks that use it are kept, but they become read-only.",
+  "git.managedWorktree.dialog.error.dirty": "The worktree has uncommitted changes",
+  "git.managedWorktree.dialog.error.running": "A task is running",
+  "git.managedWorktree.dialog.error.terminal":
+    "Close the terminals running in this directory first",
+  "git.managedWorktree.dialog.confirm.discardChanges":
+    "This worktree has uncommitted changes. They will be discarded.",
+  "git.managedWorktree.dialog.error.creating": "This worktree is still being created",
+  "git.managedWorktree.dialog.error.generic": "Couldn't delete the worktree",
+  "git.managedWorktree.dialog.error.tasks": "A task is using this worktree",
+  "git.managedWorktree.dialog.error.removing": "This worktree is being deleted",
+  "git.managedWorktree.dialog.error.sessionClose":
+    "Couldn't unload the tasks using this worktree. The worktree was kept.",
+  "chat.message.fork.hereWorktree": "Fork in the current worktree",
+  "chat.message.fork.toWorktree": "Fork into a new worktree",
+  "chat.message.fork.toWorktreeHint": "Includes uncommitted changes",
+  "chat.message.fork.worktreeUnsupported": "Not supported by this Agent version",
 };
 
 export default enUS;

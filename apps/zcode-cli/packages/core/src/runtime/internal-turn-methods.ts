@@ -391,6 +391,8 @@ export interface AgentRuntimeTurnMethods {
     toModelLabel: string;
   }): void;
   persistPendingModelChangeTimeline(traceContext: TraceContext): Promise<void>;
+  recordPendingWorktreeCreation(fact: import("@zcode/contracts").WorktreeCreationFact): void;
+  persistPendingWorktreeCreationTimeline(traceContext: TraceContext): Promise<void>;
   persistSyntheticUserNotice(
     messageID: MessageId,
     text: string,
